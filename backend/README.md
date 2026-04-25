@@ -1,105 +1,57 @@
-# thabetha
+# Thabetha Backend
 
- Smart debt tracking with two‑party confirmation, reminders, Trust Score, QR profiles, and invoice OCR.
+FastAPI backend for the Thabetha modular monolith. Dependencies are managed with `uv`.
 
+## Setup
 
----
-
-## Project Overview
-
-
----
-## Environment setup
-
-### Create & sync the environment from the project root
-``` Bash
+```bash
 uv sync
+uv run uvicorn app.main:app --reload
 ```
-This will:
-- Create a virtual environment (managed by uv)
-- Install all dependencies specified in pyproject.toml 
-- Use uv.lock to ensure reproducible versions
 
-### Environment variables & secrets
-Create a .env file (not committed to git)
+## Quality Checks
 
-Example .env:
+```bash
+uv run ruff check .
+uv run pytest
+```
+
+## Environment
+
+Copy `.env.example` to `.env` and fill values as needed.
+
+| Variable | Purpose |
+|---|---|
+| `APP_ENV` | `local`, `staging`, or `production` |
+| `SEED_DEMO_DATA` | Seeds in-memory demo data when `true` |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Supabase anon key for client-compatible calls |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-side service role key |
+| `SUPABASE_JWT_SECRET` | JWT verification secret for Supabase Auth tokens |
+| `OPENAI_API_KEY` | Enables future real speech/chat integration |
+| `WHATSAPP_PROVIDER` | `mock`, `twilio`, or `meta` adapter target |
+
+## Local Auth
+
+In `APP_ENV=local`, API requests can use demo headers instead of a Supabase JWT:
 
 ```text
-OPENAI_API_KEY=sk-...
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_USER=your-username
-DB_PASS=your-password
-DB_NAME=your-database-name
-```
-Make sure .env is in .gitignore.
-
----
-
-
-
-## Adding / removing dependencies with uv
-Always manage dependencies via uv so that both pyproject.toml and uv.lock stay consistent.
-
-1. Add a new dependency
-``` Bash
-# Add a runtime dependency
-uv add package-name
-
-# Add a dev-only dependency (e.g., testing, linting)
-uv add --dev pytest
-```
-This will:
-- Update [project.dependencies] (or [project.optional-dependencies] / dev section)
-- Update uv.lock with the resolved versions
-
-2. Remove a dependency
-``` Bash
-uv remove package-name
+x-demo-user-id: merchant-1
+x-demo-name: Baqala Al Noor
+x-demo-phone: +966500000001
 ```
 
-This will:
-- Remove it from pyproject.toml
-- Update uv.lock accordingly
+In production, use `Authorization: Bearer <supabase-jwt>` and configure `SUPABASE_JWT_SECRET`.
 
-After adding or removing dependencies, you can re-sync to ensure the environment matches:
-``` Bash
-uv sync
-```
+## Module Layout
 
----
+| Path | Responsibility |
+|---|---|
+| `app/api` | FastAPI routers |
+| `app/core` | Settings and auth dependencies |
+| `app/db` | Supabase client boundary |
+| `app/repositories` | Persistence abstraction; local in-memory repository |
+| `app/schemas` | Pydantic request/response contracts |
+| `app/services` | Business helpers such as demo seed data |
+| `tests` | Backend API and policy tests |
 
-
-
-## Running the Application
-
-``` Bash
-# To fine-tune a model (e.g., DistilRoBERTa or MiniLM) using a specific configuration file:
-uv run python src/models/fine_tuning.py --config fine-tuning-config.json
-
-# Run the multi-perspective evaluation (Metrics, Human, LLM-Judge) on the test set:
-python3 src/models/fine_tuning.py --config evaluation-config.json
-```
----
-## Working With JupyterLab
-``` Bash
-uv run jupyter lab
-```
----
-## Development & tooling (optional)
-The project is configured with several tools in pyproject.toml:
-- ruff for linting
-- mypy for static type checking
-- vulture for dead code detection
-You can run them via uvx (after uv sync):
-``` Bash
-# Lint with ruff
-uvx ruff check .
-
-# Type check with mypy
-uvx mypy src
-
-# Find unused code with vulture
-uvx vulture
-```
