@@ -3,7 +3,6 @@ import type { Language } from "./types";
 /** All translation keys used across the app. */
 export type TranslationKey =
   | "appName"
-  | "currentUser"
   | "dashboard"
   | "debts"
   | "profile"
@@ -44,13 +43,28 @@ export type TranslationKey =
   | "acceptInvite"
   | "voiceTranscript"
   | "draft"
-  | "askMerchantBot";
+  | "askMerchantBot"
+  | "signIn"
+  | "signUp"
+  | "email"
+  | "password"
+  | "name"
+  | "phone"
+  | "accountType"
+  | "individual"
+  | "business"
+  | "taxId"
+  | "commercialRegistration"
+  | "signOut"
+  | "createAccount"
+  | "welcomeBack"
+  | "alreadyHaveAccount"
+  | "dontHaveAccount";
 
 type Translations = Record<TranslationKey, string>;
 
 const ar: Translations = {
   appName: "ثبتها",
-  currentUser: "المستخدم الحالي",
   dashboard: "لوحة التحكم",
   debts: "الديون",
   profile: "الملف الشخصي",
@@ -92,11 +106,26 @@ const ar: Translations = {
   voiceTranscript: "النص الصوتي",
   draft: "مسودة",
   askMerchantBot: "اسأل مساعد التاجر",
+  signIn: "تسجيل الدخول",
+  signUp: "إنشاء حساب",
+  email: "البريد الإلكتروني",
+  password: "كلمة المرور",
+  name: "الاسم",
+  phone: "رقم الهاتف",
+  accountType: "نوع الحساب",
+  individual: "فردي",
+  business: "تجاري",
+  taxId: "الرقم الضريبي",
+  commercialRegistration: "السجل التجاري",
+  signOut: "تسجيل الخروج",
+  createAccount: "إنشاء حساب جديد",
+  welcomeBack: "مرحباً بعودتك",
+  alreadyHaveAccount: "لديك حساب بالفعل؟",
+  dontHaveAccount: "ليس لديك حساب؟",
 };
 
 const en: Translations = {
   appName: "Thabetha",
-  currentUser: "Current User",
   dashboard: "Dashboard",
   debts: "Debts",
   profile: "Profile",
@@ -138,6 +167,22 @@ const en: Translations = {
   voiceTranscript: "Voice Transcript",
   draft: "Draft",
   askMerchantBot: "Ask Merchant Bot",
+  signIn: "Sign In",
+  signUp: "Sign Up",
+  email: "Email",
+  password: "Password",
+  name: "Full Name",
+  phone: "Phone Number",
+  accountType: "Account Type",
+  individual: "Individual",
+  business: "Business",
+  taxId: "Tax ID",
+  commercialRegistration: "Commercial Registration",
+  signOut: "Sign Out",
+  createAccount: "Create Account",
+  welcomeBack: "Welcome Back",
+  alreadyHaveAccount: "Already have an account?",
+  dontHaveAccount: "Don't have an account?",
 };
 
 const translations: Record<Language, Translations> = { ar, en };

@@ -1,23 +1,21 @@
-import type { DemoUser } from "./types";
+import { getStoredToken } from "./auth";
 
 const API_BASE = "/api/v1";
 
 /**
  * Thin wrapper around `fetch` that:
  *  - prepends the API base path
- *  - injects demo-user headers so the backend knows who is calling
+ *  - injects the Bearer token from localStorage
  *  - sets JSON content-type for requests with a body
  *  - throws on non-2xx responses
  */
-export async function apiRequest<T>(
-  path: string,
-  user: DemoUser,
-  init?: RequestInit
-): Promise<T> {
+export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
-  headers.set("X-Demo-User-Id", user.id);
-  headers.set("X-Demo-User-Name", user.name);
-  headers.set("X-Demo-User-Phone", user.phone);
+
+  const token = getStoredToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
 
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -33,7 +31,6 @@ export async function apiRequest<T>(
     throw new Error(`${response.status}: ${text}`);
   }
 
-  // Handle 204 No Content
   if (response.status === 204) {
     return undefined as unknown as T;
   }

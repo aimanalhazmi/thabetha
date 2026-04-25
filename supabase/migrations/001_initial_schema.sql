@@ -5,8 +5,18 @@ create type debt_status as enum ('pending_confirmation', 'active', 'overdue', 'p
 create type attachment_type as enum ('invoice', 'voice_note', 'other');
 create type group_member_status as enum ('pending', 'accepted');
 
+-- Credential store (replaces GoTrue / auth.users)
+create table public.users (
+  id uuid primary key default gen_random_uuid(),
+  email text not null unique,
+  password_hash text not null,
+  name text not null default '',
+  phone text not null default '',
+  created_at timestamptz not null default now()
+);
+
 create table public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
+  id uuid primary key references public.users(id) on delete cascade,
   name text not null,
   phone text not null,
   email text,
@@ -154,55 +164,3 @@ create index debts_debtor_id_idx on public.debts (debtor_id);
 create index debts_status_due_date_idx on public.debts (status, due_date);
 create index notifications_user_id_idx on public.notifications (user_id, read_at);
 create index group_members_user_id_idx on public.group_members (user_id, status);
-
-alter table public.profiles enable row level security;
-alter table public.business_profiles enable row level security;
-alter table public.qr_tokens enable row level security;
-alter table public.debts enable row level security;
-alter table public.debt_events enable row level security;
-alter table public.payment_confirmations enable row level security;
-alter table public.attachments enable row level security;
-alter table public.notifications enable row level security;
-alter table public.merchant_notification_preferences enable row level security;
-alter table public.trust_score_events enable row level security;
-alter table public.groups enable row level security;
-alter table public.group_members enable row level security;
-alter table public.group_settlements enable row level security;
-
-create policy "profiles own read" on public.profiles for select using (auth.uid() = id);
-create policy "profiles own update" on public.profiles for update using (auth.uid() = id);
-
-create policy "business owner access" on public.business_profiles for all using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
-create policy "qr owner access" on public.qr_tokens for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-
-create policy "debt participant or accepted group member read" on public.debts
-for select using (
-  auth.uid() = creditor_id
-  or auth.uid() = debtor_id
-  or exists (
-    select 1 from public.group_members gm
-    where gm.group_id = debts.group_id and gm.user_id = auth.uid() and gm.status = 'accepted'
-  )
-);
-
-create policy "creditor creates debts" on public.debts for insert with check (auth.uid() = creditor_id);
-create policy "participant updates debts" on public.debts for update using (auth.uid() = creditor_id or auth.uid() = debtor_id);
-
-create policy "debt events participant read" on public.debt_events
-for select using (exists (select 1 from public.debts d where d.id = debt_events.debt_id and (d.creditor_id = auth.uid() or d.debtor_id = auth.uid())));
-
-create policy "attachments participant read" on public.attachments
-for select using (exists (select 1 from public.debts d where d.id = attachments.debt_id and (d.creditor_id = auth.uid() or d.debtor_id = auth.uid())));
-
-create policy "notifications own access" on public.notifications for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "trust score own read" on public.trust_score_events for select using (auth.uid() = user_id);
-
-create policy "groups member read" on public.groups
-for select using (exists (select 1 from public.group_members gm where gm.group_id = groups.id and gm.user_id = auth.uid() and gm.status = 'accepted'));
-
-create policy "groups owner write" on public.groups for all using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
-create policy "group members visible to members" on public.group_members
-for select using (exists (select 1 from public.group_members gm where gm.group_id = group_members.group_id and gm.user_id = auth.uid()));
-create policy "settlements member read" on public.group_settlements
-for select using (exists (select 1 from public.group_members gm where gm.group_id = group_settlements.group_id and gm.user_id = auth.uid() and gm.status = 'accepted'));
-

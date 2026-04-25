@@ -23,8 +23,7 @@ class Settings(BaseSettings):
     whatsapp_from_number: str | None = None
 
     database_url: str | None = None
-    gotrue_url: str | None = None
-    repository_type: str = "memory"
+    repository_type: str = "memory"  # or postgres
 
     frontend_dist: Path | None = None
     seed_demo_data: bool = False

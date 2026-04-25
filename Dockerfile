@@ -17,6 +17,7 @@ WORKDIR /app
 COPY backend/pyproject.toml backend/uv.lock backend/README.md ./
 RUN uv sync --frozen --no-dev
 COPY backend/app ./app
+COPY supabase/migrations /supabase/migrations
 COPY --from=frontend /frontend/dist ./static
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

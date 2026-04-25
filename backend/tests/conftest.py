@@ -1,8 +1,13 @@
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import create_app
-from app.repositories.memory import repository
+# Force in-memory repository for all tests regardless of environment
+os.environ.setdefault("REPOSITORY_TYPE", "memory")
+
+from app.main import create_app  # noqa: E402
+from app.repositories.memory import repository  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -21,4 +26,3 @@ def auth_headers(user_id: str, name: str | None = None, phone: str | None = None
         "x-demo-name": name or user_id,
         "x-demo-phone": phone or "+966500000000",
     }
-

@@ -1,19 +1,14 @@
 /** Shared type definitions for the Thabetha frontend. */
 
-export interface DemoUser {
-  id: string;
-  name: string;
-  phone: string;
-}
-
 export interface Profile {
   id: string;
   name: string;
   phone: string;
+  email?: string;
+  account_type: "individual" | "business";
   trust_score: number;
   ai_enabled: boolean;
   whatsapp_enabled: boolean;
-  language: string;
 }
 
 export interface QRToken {
@@ -38,13 +33,20 @@ export interface Debt {
 export interface DebtorDashboard {
   total_current_debt: string;
   overdue_count: number;
-  upcoming_count: number;
+  due_soon_count: number;
+  creditors: string[];
+  trust_score: number;
+  debts: Debt[];
 }
 
 export interface CreditorDashboard {
   total_receivable: string;
   overdue_count: number;
-  pending_count: number;
+  active_count: number;
+  debtor_count: number;
+  paid_count: number;
+  alerts: string[];
+  debts: Debt[];
 }
 
 export interface NotificationItem {
@@ -58,7 +60,9 @@ export interface NotificationItem {
 export interface Group {
   id: string;
   name: string;
-  members: string[];
+  description?: string;
+  owner_id: string;
+  created_at: string;
 }
 
 export interface VoiceDraft {
