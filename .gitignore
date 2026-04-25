@@ -5,8 +5,6 @@
 
 # ── Secrets & environment ─────────────────────────────────────────────────────
 .env
-.env.*
-!.env.example        # keep the example template
 .envrc
 
 # ── macOS ─────────────────────────────────────────────────────────────────────
