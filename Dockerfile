@@ -14,7 +14,7 @@ ENV UV_COMPILE_BYTECODE=1 \
     APP_ENV=production \
     FRONTEND_DIST=/app/static
 WORKDIR /app
-COPY backend/pyproject.toml backend/uv.lock ./
+COPY backend/pyproject.toml backend/uv.lock backend/README.md ./
 RUN uv sync --frozen --no-dev
 COPY backend/app ./app
 COPY --from=frontend /frontend/dist ./static

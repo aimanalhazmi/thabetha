@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import HTTPException, UploadFile, status
 
 from app.core.security import AuthenticatedUser
+from app.repositories.base import Repository
 from app.schemas.domain import (
     AccountType,
     AttachmentOut,
@@ -41,7 +42,7 @@ from app.schemas.domain import (
 )
 
 
-class InMemoryRepository:
+class InMemoryRepository(Repository):
     """A local repository for demo/test use.
 
     Supabase is the production persistence target. This repository keeps the API

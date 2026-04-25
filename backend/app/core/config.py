@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     whatsapp_access_token: str | None = None
     whatsapp_from_number: str | None = None
 
+    database_url: str | None = None
+    gotrue_url: str | None = None
+    repository_type: str = "memory"
+
     frontend_dist: Path | None = None
     seed_demo_data: bool = False
 

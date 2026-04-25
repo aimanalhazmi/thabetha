@@ -8,7 +8,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
 from app.core.config import get_settings
-from app.repositories.memory import repository
+from app.repositories import get_repository
+from app.repositories.memory import InMemoryRepository
 from app.services.demo_data import seed_demo_data
 
 
@@ -24,9 +25,17 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Apply Postgres migrations if using postgres repository
+    if settings.repository_type == "postgres" and settings.database_url:
+        from app.db.migrate import apply_migrations
+
+        apply_migrations(settings.database_url)
+
     app.include_router(api_router, prefix=settings.api_prefix)
-    if settings.seed_demo_data:
-        seed_demo_data(repository)
+
+    repo = get_repository()
+    if settings.seed_demo_data and isinstance(repo, InMemoryRepository):
+        seed_demo_data(repo)
 
     frontend_dist = settings.frontend_dist or Path(__file__).resolve().parents[2] / "static"
     index_html = frontend_dist / "index.html"

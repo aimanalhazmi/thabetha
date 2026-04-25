@@ -301,6 +301,25 @@ class MerchantChatOut(BaseModel):
     facts: dict[str, Any]
 
 
+class SignUpRequest(BaseModel):
+    name: str = Field(min_length=1)
+    phone: str = Field(min_length=5)
+    email: str = Field(min_length=5)
+    password: str = Field(min_length=6)
+    account_type: AccountType = AccountType.individual
+    tax_id: str | None = None
+    commercial_registration: str | None = None
+
+
+class SignInRequest(BaseModel):
+    email: str
+    password: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
 class MessageOut(BaseModel):
     message: str
 
@@ -309,5 +328,6 @@ class HealthOut(BaseModel):
     status: str
     service: str
     environment: str
+    supabase_connected: bool
 
     model_config = ConfigDict(extra="forbid")

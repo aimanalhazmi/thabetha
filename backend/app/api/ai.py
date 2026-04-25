@@ -6,13 +6,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.security import AuthenticatedUser, get_current_user
-from app.repositories.memory import InMemoryRepository, get_repository
+from app.repositories import Repository, get_repository
 from app.schemas.domain import MerchantChatOut, MerchantChatRequest, VoiceDebtDraftOut, VoiceDebtDraftRequest
 
 router = APIRouter()
 
 
-def _require_ai_enabled(user: AuthenticatedUser, repo: InMemoryRepository) -> None:
+def _require_ai_enabled(user: AuthenticatedUser, repo: Repository) -> None:
     profile = repo.ensure_profile(user)
     if not profile.ai_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="AI features require an active AI subscription")
@@ -22,7 +22,7 @@ def _require_ai_enabled(user: AuthenticatedUser, repo: InMemoryRepository) -> No
 def draft_debt_from_voice(
     payload: VoiceDebtDraftRequest,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    repo: Annotated[InMemoryRepository, Depends(get_repository)],
+    repo: Annotated[Repository, Depends(get_repository)],
 ) -> VoiceDebtDraftOut:
     _require_ai_enabled(user, repo)
     transcript = payload.transcript.strip()
@@ -48,7 +48,7 @@ def draft_debt_from_voice(
 def merchant_chat(
     payload: MerchantChatRequest,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    repo: Annotated[InMemoryRepository, Depends(get_repository)],
+    repo: Annotated[Repository, Depends(get_repository)],
 ) -> MerchantChatOut:
     _require_ai_enabled(user, repo)
     facts = repo.merchant_facts(user.id)

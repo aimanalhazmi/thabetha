@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 
 from app.core.security import AuthenticatedUser, get_current_user
-from app.repositories.memory import InMemoryRepository, get_repository
+from app.repositories import Repository, get_repository
 from app.schemas.domain import (
     ActionMessageIn,
     AttachmentOut,
@@ -23,7 +23,7 @@ router = APIRouter()
 def create_debt(
     payload: DebtCreate,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    repo: Annotated[InMemoryRepository, Depends(get_repository)],
+    repo: Annotated[Repository, Depends(get_repository)],
 ) -> DebtOut:
     repo.ensure_profile(user)
     return repo.create_debt(user.id, payload)
@@ -32,7 +32,7 @@ def create_debt(
 @router.get("", response_model=list[DebtOut])
 def list_debts(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    repo: Annotated[InMemoryRepository, Depends(get_repository)],
+    repo: Annotated[Repository, Depends(get_repository)],
 ) -> list[DebtOut]:
     repo.ensure_profile(user)
     return repo.list_debts_for_user(user.id)
@@ -42,7 +42,7 @@ def list_debts(
 def get_debt(
     debt_id: str,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    repo: Annotated[InMemoryRepository, Depends(get_repository)],
+    repo: Annotated[Repository, Depends(get_repository)],
 ) -> DebtOut:
     repo.ensure_profile(user)
     return repo.get_authorized_debt(user.id, debt_id)
@@ -52,7 +52,7 @@ def get_debt(
 def get_debt_events(
     debt_id: str,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    repo: Annotated[InMemoryRepository, Depends(get_repository)],
+    repo: Annotated[Repository, Depends(get_repository)],
 ) -> list[DebtEventOut]:
     repo.ensure_profile(user)
     return repo.list_events(user.id, debt_id)
@@ -62,7 +62,7 @@ def get_debt_events(
 def accept_debt(
     debt_id: str,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    repo: Annotated[InMemoryRepository, Depends(get_repository)],
+    repo: Annotated[Repository, Depends(get_repository)],
 ) -> DebtOut:
     repo.ensure_profile(user)
     return repo.accept_debt(user.id, debt_id)
@@ -73,7 +73,7 @@ def reject_debt(
     debt_id: str,
     payload: ActionMessageIn,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    repo: Annotated[InMemoryRepository, Depends(get_repository)],
+    repo: Annotated[Repository, Depends(get_repository)],
 ) -> DebtOut:
     repo.ensure_profile(user)
     return repo.reject_debt(user.id, debt_id, payload.message)
@@ -84,7 +84,7 @@ def request_change(
     debt_id: str,
     payload: DebtChangeRequest,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    repo: Annotated[InMemoryRepository, Depends(get_repository)],
+    repo: Annotated[Repository, Depends(get_repository)],
 ) -> DebtOut:
     repo.ensure_profile(user)
     return repo.request_debt_change(user.id, debt_id, payload)
@@ -95,7 +95,7 @@ def mark_paid(
     debt_id: str,
     payload: PaymentRequest,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    repo: Annotated[InMemoryRepository, Depends(get_repository)],
+    repo: Annotated[Repository, Depends(get_repository)],
 ) -> PaymentConfirmationOut:
     repo.ensure_profile(user)
     return repo.mark_paid(user.id, debt_id, payload)
@@ -105,7 +105,7 @@ def mark_paid(
 def confirm_payment(
     debt_id: str,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    repo: Annotated[InMemoryRepository, Depends(get_repository)],
+    repo: Annotated[Repository, Depends(get_repository)],
 ) -> DebtOut:
     repo.ensure_profile(user)
     return repo.confirm_payment(user.id, debt_id)
@@ -115,7 +115,7 @@ def confirm_payment(
 async def upload_attachment(
     debt_id: str,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    repo: Annotated[InMemoryRepository, Depends(get_repository)],
+    repo: Annotated[Repository, Depends(get_repository)],
     file: Annotated[UploadFile, File()],
     attachment_type: Annotated[AttachmentType, Query()] = AttachmentType.other,
 ) -> AttachmentOut:
@@ -127,7 +127,7 @@ async def upload_attachment(
 def list_attachments(
     debt_id: str,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    repo: Annotated[InMemoryRepository, Depends(get_repository)],
+    repo: Annotated[Repository, Depends(get_repository)],
 ) -> list[AttachmentOut]:
     repo.ensure_profile(user)
     return repo.list_attachments(user.id, debt_id)
