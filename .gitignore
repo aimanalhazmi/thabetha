@@ -1,13 +1,8 @@
-# =============================================================================
-# Thabetha – .gitignore
-# Stack: Python 3.12 / FastAPI / uv  +  React / TypeScript / Vite  +  Docker
-# =============================================================================
-
-# ── Secrets & environment ─────────────────────────────────────────────────────
+# Secrets & environment
 .env
 .envrc
 
-# ── macOS ─────────────────────────────────────────────────────────────────────
+#  macOS
 .DS_Store
 .DS_Store?
 ._*
@@ -15,8 +10,7 @@
 .Trashes
 Icon?
 
-# ── Editor / IDE ──────────────────────────────────────────────────────────────
-# VS Code (workspace-level settings are personal; commit only .code-workspace if desired)
+#  Editor / IDE
 .vscode/
 # JetBrains / PyCharm / IntelliJ / Cursor
 .idea/
@@ -26,7 +20,7 @@ Icon?
 *.swo
 *~
 
-# ── Python ────────────────────────────────────────────────────────────────────
+#  Python
 __pycache__/
 *.py[codz]
 *$py.class
@@ -37,9 +31,6 @@ __pycache__/
 venv/
 env/
 ENV/
-
-# uv – keep uv.lock committed (ensures reproducible CI/Docker builds)
-# uv.lock  ← do NOT ignore
 
 # Build / packaging artefacts
 build/
@@ -75,7 +66,7 @@ pip-log.txt
 tempCodeRunnerFile.py
 .pypirc
 
-# ── Node / Frontend ───────────────────────────────────────────────────────────
+# Node / Frontend
 node_modules/
 
 # Vite build output (generated; never commit)
@@ -91,18 +82,15 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# ── Docker ────────────────────────────────────────────────────────────────────
-# Don't ignore docker-compose.yml – it's source.
-# Ignore any locally overridden compose files that may hold credentials.
+# Docker
 docker-compose.override.yml
 docker-compose.local.yml
 
-# ── Supabase local CLI ────────────────────────────────────────────────────────
+# Supabase local CLI
 supabase/.branches/
 supabase/.temp/
 
-# ── Misc ──────────────────────────────────────────────────────────────────────
-# Byte-order mark artefacts, OS thumbnails, etc.
+#  Misc
 Thumbs.db
 ehthumbs.db
 Desktop.ini
