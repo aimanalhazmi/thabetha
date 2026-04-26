@@ -1,9 +1,9 @@
-import { Mail, Store } from 'lucide-react';
+import { Mail, Store, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { t } from '../lib/i18n';
-import type { Language } from '../lib/types';
+import type { AccountType, Language } from '../lib/types';
 
 interface Props {
   language: Language;
@@ -11,13 +11,14 @@ interface Props {
 }
 
 export function AuthPage({ language, onToggleLanguage }: Props) {
-  const [mode, setMode] = useState<'signin' | 'signup' | 'verify'>('signin');
+  const [mode, setMode] = useState<'signin' | 'signup-type' | 'signup-form' | 'verify'>('signin');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
 
   // Fields
+  const [accountType, setAccountType] = useState<AccountType | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -43,6 +44,7 @@ export function AuthPage({ language, onToggleLanguage }: Props) {
 
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
+    if (!accountType) return;
     setError('');
     setLoading(true);
     try {
@@ -51,8 +53,9 @@ export function AuthPage({ language, onToggleLanguage }: Props) {
         phone,
         email,
         password,
-        tax_id: taxId || undefined,
-        commercial_registration: commercialReg || undefined,
+        account_type: accountType,
+        tax_id: accountType === 'creditor' && taxId ? taxId : undefined,
+        commercial_registration: accountType === 'creditor' && commercialReg ? commercialReg : undefined,
       });
       if (result.needsVerification) {
         setMode('verify');
@@ -62,6 +65,13 @@ export function AuthPage({ language, onToggleLanguage }: Props) {
     } finally {
       setLoading(false);
     }
+  }
+
+  function resetSignup() {
+    setAccountType(null);
+    setName(''); setPhone(''); setEmail(''); setPassword('');
+    setTaxId(''); setCommercialReg('');
+    setError('');
   }
 
   return (
@@ -93,9 +103,62 @@ export function AuthPage({ language, onToggleLanguage }: Props) {
               {tr('backToSignIn')}
             </button>
           </div>
+        ) : mode === 'signup-type' ? (
+          <>
+            <h2>{tr('selectAccountType')}</h2>
+            <p style={{ color: '#64748b', marginTop: '-0.25rem' }}>{tr('selectAccountTypeDesc')}</p>
+
+            {error && <div className="message error">{error}</div>}
+
+            <div className="account-type-grid">
+              <button
+                type="button"
+                className={`account-type-card${accountType === 'creditor' ? ' selected' : ''}`}
+                onClick={() => setAccountType('creditor')}
+              >
+                <Store size={28} />
+                <strong>{tr('shopOwner')}</strong>
+                <span>{tr('shopOwnerDesc')}</span>
+              </button>
+              <button
+                type="button"
+                className={`account-type-card${accountType === 'debtor' ? ' selected' : ''}`}
+                onClick={() => setAccountType('debtor')}
+              >
+                <UserRound size={28} />
+                <strong>{tr('customer')}</strong>
+                <span>{tr('customerDesc')}</span>
+              </button>
+            </div>
+
+            <button
+              className="primary-button"
+              disabled={!accountType}
+              onClick={() => { setError(''); setMode('signup-form'); }}
+            >
+              {tr('continueAction')}
+            </button>
+
+            <p className="auth-toggle">
+              {tr('alreadyHaveAccount')}{' '}
+              <button
+                className="link-button"
+                onClick={() => { setMode('signin'); resetSignup(); }}
+              >
+                {tr('signIn')}
+              </button>
+            </p>
+          </>
         ) : (
           <>
             <h2>{mode === 'signin' ? tr('welcomeBack') : tr('createAccount')}</h2>
+            {mode === 'signup-form' && accountType && (
+              <p style={{ color: '#64748b', marginTop: '-0.25rem' }}>
+                {accountType === 'creditor' ? tr('shopOwner') : tr('customer')}
+                {' · '}
+                <button className="link-button" onClick={() => setMode('signup-type')}>{tr('back')}</button>
+              </p>
+            )}
 
             {error && <div className="message error">{error}</div>}
 
@@ -132,16 +195,17 @@ export function AuthPage({ language, onToggleLanguage }: Props) {
                   <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
                 </label>
 
-                <label className="field">
-                  <span>{tr('taxId')} ({language === 'ar' ? 'اختياري — يجعلك دائن' : 'optional — makes you a creditor'})</span>
-                  <input type="text" value={taxId} onChange={(e) => setTaxId(e.target.value)} />
-                </label>
-
-                {taxId && (
-                  <label className="field">
-                    <span>{tr('commercialRegistration')}</span>
-                    <input type="text" value={commercialReg} onChange={(e) => setCommercialReg(e.target.value)} />
-                  </label>
+                {accountType === 'creditor' && (
+                  <>
+                    <label className="field">
+                      <span>{tr('taxId')} ({language === 'ar' ? 'اختياري' : 'optional'})</span>
+                      <input type="text" value={taxId} onChange={(e) => setTaxId(e.target.value)} />
+                    </label>
+                    <label className="field">
+                      <span>{tr('commercialRegistration')} ({language === 'ar' ? 'اختياري' : 'optional'})</span>
+                      <input type="text" value={commercialReg} onChange={(e) => setCommercialReg(e.target.value)} />
+                    </label>
+                  </>
                 )}
 
                 <button type="submit" className="primary-button" disabled={loading}>
@@ -155,7 +219,10 @@ export function AuthPage({ language, onToggleLanguage }: Props) {
               {' '}
               <button
                 className="link-button"
-                onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); }}
+                onClick={() => {
+                  if (mode === 'signin') { setMode('signup-type'); setError(''); }
+                  else { setMode('signin'); resetSignup(); }
+                }}
               >
                 {mode === 'signin' ? tr('signUp') : tr('signIn')}
               </button>

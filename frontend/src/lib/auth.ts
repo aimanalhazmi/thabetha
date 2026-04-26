@@ -14,18 +14,12 @@ export interface SignUpData {
   phone: string;
   email: string;
   password: string;
+  account_type: AccountType;
   tax_id?: string;
   commercial_registration?: string;
 }
 
-/**
- * Sign up a new user via Supabase Auth.
- * If tax_id is provided, account_type = 'creditor', otherwise 'debtor'.
- * Email confirmation is required — user must verify email before sign-in.
- */
 export async function signUp(data: SignUpData): Promise<{ needsVerification: boolean }> {
-  const account_type: AccountType = data.tax_id ? 'creditor' : 'debtor';
-
   const { error } = await supabase.auth.signUp({
     email: data.email,
     password: data.password,
@@ -33,7 +27,7 @@ export async function signUp(data: SignUpData): Promise<{ needsVerification: boo
       data: {
         name: data.name,
         phone: data.phone,
-        account_type,
+        account_type: data.account_type,
         tax_id: data.tax_id || null,
         commercial_registration: data.commercial_registration || null,
       },

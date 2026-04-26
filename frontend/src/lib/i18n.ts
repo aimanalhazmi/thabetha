@@ -76,7 +76,26 @@ export type TranslationKey =
   | 'recentDebts'
   | 'allStatuses'
   | 'noDebtsYet'
-  | 'loading';
+  | 'loading'
+  | 'selectAccountType'
+  | 'selectAccountTypeDesc'
+  | 'shopOwner'
+  | 'shopOwnerDesc'
+  | 'customer'
+  | 'customerDesc'
+  | 'continueAction'
+  | 'back'
+  | 'upgradeToAi'
+  | 'upgradeToAiDesc'
+  | 'upgradeNow'
+  | 'aiActive'
+  | 'scanCustomerQr'
+  | 'scanCustomerQrDesc'
+  | 'enterToken'
+  | 'lookup'
+  | 'customerProfile'
+  | 'unpaidDebts'
+  | 'myDebtStatus';
 
 type Translations = Record<TranslationKey, string>;
 
@@ -156,6 +175,25 @@ const ar: Translations = {
   allStatuses: 'جميع الحالات',
   noDebtsYet: 'لا توجد ديون حتى الآن',
   loading: 'جاري التحميل...',
+  selectAccountType: 'اختر نوع الحساب',
+  selectAccountTypeDesc: 'كيف ستستخدم ثبتها؟',
+  shopOwner: 'صاحب متجر',
+  shopOwnerDesc: 'أدير ديون عملائي وأصدر فواتير ومسح QR',
+  customer: 'عميل',
+  customerDesc: 'أتابع ديوني وأؤكد عمليات الدفع',
+  continueAction: 'متابعة',
+  back: 'رجوع',
+  upgradeToAi: 'ترقية لخطة الذكاء الاصطناعي',
+  upgradeToAiDesc: 'إنشاء الديون بالصوت، تلخيصات ذكية، وتوصيات للعملاء.',
+  upgradeNow: 'ترقية الآن',
+  aiActive: 'الذكاء الاصطناعي مفعّل',
+  scanCustomerQr: 'مسح رمز العميل',
+  scanCustomerQrDesc: 'أدخل رمز QR الخاص بالعميل لفتح ملفه وإنشاء دين له.',
+  enterToken: 'أدخل الرمز',
+  lookup: 'بحث',
+  customerProfile: 'ملف العميل',
+  unpaidDebts: 'الديون غير المدفوعة',
+  myDebtStatus: 'حالة ديوني',
 };
 
 const en: Translations = {
@@ -234,6 +272,25 @@ const en: Translations = {
   allStatuses: 'All Statuses',
   noDebtsYet: 'No debts yet',
   loading: 'Loading...',
+  selectAccountType: 'Select Account Type',
+  selectAccountTypeDesc: 'How will you use Thabetha?',
+  shopOwner: 'Shop Owner',
+  shopOwnerDesc: 'Manage customer debts, issue invoices, scan QR codes',
+  customer: 'Customer',
+  customerDesc: 'Track my debts and confirm payments',
+  continueAction: 'Continue',
+  back: 'Back',
+  upgradeToAi: 'Upgrade to AI Plan',
+  upgradeToAiDesc: 'Voice-to-debt entry, smart summaries, and customer recommendations.',
+  upgradeNow: 'Upgrade Now',
+  aiActive: 'AI Active',
+  scanCustomerQr: 'Scan Customer QR',
+  scanCustomerQrDesc: "Enter a customer's QR token to open their profile and create a debt.",
+  enterToken: 'Enter token',
+  lookup: 'Lookup',
+  customerProfile: 'Customer Profile',
+  unpaidDebts: 'Unpaid Debts',
+  myDebtStatus: 'My Debt Status',
 };
 
 const translations: Record<Language, Translations> = { ar, en };

@@ -1,6 +1,7 @@
 import { Check, CreditCard, WalletCards, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Input, Panel } from '../components/Layout';
+import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../lib/api';
 import { t } from '../lib/i18n';
 import type { Debt, DebtStatus, Language } from '../lib/types';
@@ -11,6 +12,8 @@ const statusKeys: (DebtStatus | 'all')[] = ['all', 'waiting_for_confirmation', '
 
 export function DebtsPage({ language }: Props) {
   const tr = (key: Parameters<typeof t>[1]) => t(language, key);
+  const { user } = useAuth();
+  const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both';
   const [debts, setDebts] = useState<Debt[]>([]);
   const [message, setMessage] = useState('');
   const [filter, setFilter] = useState<DebtStatus | 'all'>('all');
@@ -66,25 +69,29 @@ export function DebtsPage({ language }: Props) {
   }
 
   return (
-    <section className="split">
-      <Panel title={tr('createDebt')}>
-        {message && <div className="message">{message}</div>}
-        <Input label={tr('debtorName')} value={debtForm.debtor_name} onChange={(v) => setDebtForm({ ...debtForm, debtor_name: v })} />
-        <Input label={tr('debtorId')} value={debtForm.debtor_id} onChange={(v) => setDebtForm({ ...debtForm, debtor_id: v })} placeholder={language === 'ar' ? 'معرف المدين (اختياري)' : 'Debtor user ID (optional)'} />
-        <Input label={tr('amount')} value={debtForm.amount} onChange={(v) => setDebtForm({ ...debtForm, amount: v })} />
-        <Input label={tr('currency')} value={debtForm.currency} onChange={(v) => setDebtForm({ ...debtForm, currency: v })} />
-        <Input label={tr('description')} value={debtForm.description} onChange={(v) => setDebtForm({ ...debtForm, description: v })} />
-        <Input label={tr('dueDate')} type="date" value={debtForm.due_date} onChange={(v) => setDebtForm({ ...debtForm, due_date: v })} />
-        <button
-          className="primary-button"
-          onClick={() => void runAction(() => apiRequest<Debt>('/debts', { method: 'POST', body: JSON.stringify(debtForm) }), language === 'ar' ? 'تم إنشاء الدين' : 'Debt created')}
-        >
-          <CreditCard size={18} />
-          <span>{tr('create')}</span>
-        </button>
-      </Panel>
+    <section className={isCreditor ? 'split' : ''}>
+      {isCreditor && (
+        <Panel title={tr('createDebt')}>
+          {message && <div className="message">{message}</div>}
+          <Input label={tr('debtorName')} value={debtForm.debtor_name} onChange={(v) => setDebtForm({ ...debtForm, debtor_name: v })} />
+          <Input label={tr('debtorId')} value={debtForm.debtor_id} onChange={(v) => setDebtForm({ ...debtForm, debtor_id: v })} placeholder={language === 'ar' ? 'معرف المدين (اختياري)' : 'Debtor user ID (optional)'} />
+          <Input label={tr('amount')} value={debtForm.amount} onChange={(v) => setDebtForm({ ...debtForm, amount: v })} />
+          <Input label={tr('currency')} value={debtForm.currency} onChange={(v) => setDebtForm({ ...debtForm, currency: v })} />
+          <Input label={tr('description')} value={debtForm.description} onChange={(v) => setDebtForm({ ...debtForm, description: v })} />
+          <Input label={tr('dueDate')} type="date" value={debtForm.due_date} onChange={(v) => setDebtForm({ ...debtForm, due_date: v })} />
+          <button
+            className="primary-button"
+            onClick={() => void runAction(() => apiRequest<Debt>('/debts', { method: 'POST', body: JSON.stringify(debtForm) }), language === 'ar' ? 'تم إنشاء الدين' : 'Debt created')}
+          >
+            <CreditCard size={18} />
+            <span>{tr('create')}</span>
+          </button>
+        </Panel>
+      )}
 
-      <Panel title={`${tr('debts')} (${debts.length})`}>
+      {!isCreditor && message && <div className="message">{message}</div>}
+
+      <Panel title={isCreditor ? `${tr('debts')} (${debts.length})` : `${tr('myDebtStatus')} (${debts.length})`}>
         {/* Filter tabs */}
         <div className="filter-tabs">
           {statusKeys.map(s => (

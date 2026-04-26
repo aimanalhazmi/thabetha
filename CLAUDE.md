@@ -6,6 +6,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A web-based debt confirmation and settlement system for local merchants and customers. Debts require bilateral confirmation — a creditor creates a debt, the debtor must accept/reject before it becomes "active". Features include QR identity tokens, trust scoring, groups, notifications, and AI stubs (voice draft, merchant chatbot).
 
+## Product Concept & Use Cases
+
+Replaces the paper "debt notebook" used in Arab local markets. Digitizes informal credit between shops and customers (and between friends/family) with bilateral confirmation, reminders, and a trust score.
+
+**Actors**
+- **Creditor**: shop/business (grocer, barber, café, restaurant) or individual lender.
+- **Debtor**: customer, friend, relative, neighbor.
+
+**Debt lifecycle**: `pending_confirmation` → `active` → (`overdue` if past due) → `paid`. State only advances via bilateral action.
+
+**Core use cases**
+- **UC1 — Sign up / profile**: name, phone (WhatsApp), password, user type required; email + tax/CR number optional. Business accounts add a sub-profile: shop name, activity type, location, description.
+- **UC2 — Create debt** (creditor): amount, currency, debtor name, description, due date required; invoice photo, voice note, notes optional. AI-subscribed creditors can dictate; AI extracts fields and asks for confirmation.
+- **UC3 — Bilateral confirm**: debtor receives request and may **accept / reject / request edit**. Debt is binding only after accept.
+- **UC4 — QR identification**: every user has a rotating, time-limited QR + ID. Creditor scans debtor's QR to open profile, see trust score, and attach the new debt to the right person.
+- **UC5 — Payment**: debtor taps "paid" → creditor confirms receipt → state = `paid` → trust score updated.
+- **UC6 — Notifications**: in-app + WhatsApp on create, confirm, due-soon, overdue, closed. Debtor can disable WhatsApp per-merchant in settings.
+- **UC7 — Trust score**: starts 50/100. ↑ on on-time/early payment and repeated compliance; ↓ on lateness/ignored debts. Visible only in the bilateral context between two parties — never public.
+- **UC8 — Dashboards**:
+  - Debtor: total owed, due-soon, overdue, per-creditor list, own trust score.
+  - Creditor: total receivable, debtor count, active/overdue/paid breakdowns, top-compliant customers, overdue alerts, simple stats. AI-subscribed creditors get a chatbot for summaries / stats / recommendations.
+- **UC9 — Groups (friends/family, optional)**: shared multi-party group with **no internal privacy** — members see each other's debts so they can settle on each other's behalf. System auto-nets cross-debts (e.g. B pays A's barber bill, system offsets A↔B).
+- **UC10 — AI (creditor-only, paid tier)**: voice → debt fields extraction; chatbot for ledger summaries, stats, and recommendations. Future: behavior analysis, payment-likelihood prediction, fraud detection, repayment-plan suggestions.
+
+**Non-functional must-haves**
+- Bilingual AR/EN with runtime RTL/LTR toggle (Arabic-first).
+- Encrypted passwords; strict per-user data isolation — a user only sees their own debts (plus group debts if enrolled). No public debtor list.
+- Full audit trail per debt: created-at + by, confirmed-at + by, paid-at + by, current state.
+- Simple, fast UX usable by non-technical shop owners.
+
 ## Development Commands
 
 ### Backend (FastAPI + Python 3.12, managed with `uv`)

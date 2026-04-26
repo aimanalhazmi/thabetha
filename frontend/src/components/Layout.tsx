@@ -5,13 +5,15 @@ import { useAuth } from '../contexts/AuthContext';
 import { t, type TranslationKey } from '../lib/i18n';
 import type { Language } from '../lib/types';
 
-const navItems: Array<{ path: string; icon: typeof LayoutDashboard; label: TranslationKey }> = [
+type NavItem = { path: string; icon: typeof LayoutDashboard; label: TranslationKey; roles?: Array<'creditor' | 'debtor' | 'both'> };
+
+const navItems: NavItem[] = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'dashboard' },
   { path: '/debts', icon: CreditCard, label: 'debts' },
   { path: '/profile', icon: UserRound, label: 'profile' },
-  { path: '/qr', icon: QrCode, label: 'qr' },
+  { path: '/qr', icon: QrCode, label: 'qr', roles: ['creditor', 'both'] },
   { path: '/groups', icon: Users, label: 'groups' },
-  { path: '/ai', icon: Bot, label: 'ai' },
+  { path: '/ai', icon: Bot, label: 'ai', roles: ['creditor', 'both'] },
   { path: '/notifications', icon: Bell, label: 'notifications' },
 ];
 
@@ -74,7 +76,9 @@ export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel
         <nav className="nav-section">
           <div className="nav-label">{language === 'ar' ? 'القائمة' : 'Menu'}</div>
           <div className="nav-list">
-            {navItems.map((item) => {
+            {navItems
+              .filter((item) => !item.roles || (user && item.roles.includes(user.account_type)))
+              .map((item) => {
               const Icon = item.icon;
               return (
                 <NavLink

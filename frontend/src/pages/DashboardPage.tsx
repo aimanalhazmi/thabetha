@@ -46,6 +46,20 @@ export function DashboardPage({ language, message }: Props) {
     <section className="content-grid">
       {message && <div className="message" style={{ gridColumn: '1 / -1' }}>{message}</div>}
 
+      {isCreditor && (
+        <section className="wide-panel ai-upgrade-card">
+          <div>
+            <h2>{profile?.ai_enabled ? `✨ ${tr('aiActive')}` : `🤖 ${tr('upgradeToAi')}`}</h2>
+            <p style={{ color: '#64748b', margin: '0.25rem 0 0' }}>{tr('upgradeToAiDesc')}</p>
+          </div>
+          {!profile?.ai_enabled && (
+            <a href="/ai" className="primary-button" style={{ textDecoration: 'none' }}>
+              {tr('upgradeNow')}
+            </a>
+          )}
+        </section>
+      )}
+
       <Stat label={isCreditor ? tr('receivable') : tr('totalDebt')} value={`${totalAmount.toFixed(2)} SAR`} />
       <Stat label={tr('active')} value={String(activeDebts.length)} />
       <Stat label={tr('waitingForConfirmation')} value={String(waitingDebts.length)} />
