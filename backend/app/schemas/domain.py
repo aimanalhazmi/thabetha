@@ -17,10 +17,19 @@ class AccountType(StrEnum):
 
 
 class DebtStatus(StrEnum):
-    waiting_for_confirmation = "waiting_for_confirmation"
+    """Canonical debt lifecycle states.
+
+    See `docs/debt-lifecycle.md` for the full transition table.
+    """
+
+    pending_confirmation = "pending_confirmation"
     active = "active"
+    edit_requested = "edit_requested"
+    rejected = "rejected"
+    overdue = "overdue"
+    payment_pending_confirmation = "payment_pending_confirmation"
     paid = "paid"
-    delay = "delay"
+    cancelled = "cancelled"
 
 
 class AttachmentType(StrEnum):
@@ -33,6 +42,8 @@ class NotificationType(StrEnum):
     debt_created = "debt_created"
     debt_confirmed = "debt_confirmed"
     debt_rejected = "debt_rejected"
+    debt_edit_requested = "debt_edit_requested"
+    debt_cancelled = "debt_cancelled"
     due_soon = "due_soon"
     overdue = "overdue"
     payment_requested = "payment_requested"
@@ -73,7 +84,7 @@ class ProfileOut(BaseModel):
     shop_description: str | None = None
     whatsapp_enabled: bool = True
     ai_enabled: bool = False
-    trust_score: int = Field(default=50, ge=0, le=100)
+    commitment_score: int = Field(default=50, ge=0, le=100)
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -116,10 +127,16 @@ class DebtCreate(BaseModel):
         return value.upper()
 
 
-class DebtChangeRequest(BaseModel):
+class DebtEditRequest(BaseModel):
+    """Debtor-initiated request for the creditor to amend a pending debt."""
+
     message: str = Field(min_length=1)
     requested_amount: Decimal | None = Field(default=None, gt=Decimal("0"))
     requested_due_date: date | None = None
+
+
+# Back-compat alias — old import name still resolves.
+DebtChangeRequest = DebtEditRequest
 
 
 class ActionMessageIn(BaseModel):
@@ -203,7 +220,7 @@ class NotificationPreferenceOut(NotificationPreferenceIn):
     updated_at: datetime
 
 
-class TrustScoreEventOut(BaseModel):
+class CommitmentScoreEventOut(BaseModel):
     id: str
     user_id: str
     delta: int
@@ -213,12 +230,16 @@ class TrustScoreEventOut(BaseModel):
     created_at: datetime
 
 
+# Back-compat alias.
+TrustScoreEventOut = CommitmentScoreEventOut
+
+
 class DebtorDashboardOut(BaseModel):
     total_current_debt: Decimal
     due_soon_count: int
     overdue_count: int
     creditors: list[str]
-    trust_score: int
+    commitment_score: int
     debts: list[DebtOut]
 
 

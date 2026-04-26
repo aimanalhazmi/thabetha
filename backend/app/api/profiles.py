@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from app.core.security import AuthenticatedUser, get_current_user
 from app.repositories import Repository, get_repository
-from app.schemas.domain import BusinessProfileIn, BusinessProfileOut, ProfileOut, ProfileUpdate, TrustScoreEventOut
+from app.schemas.domain import BusinessProfileIn, BusinessProfileOut, CommitmentScoreEventOut, ProfileOut, ProfileUpdate
 
 router = APIRouter()
 
@@ -45,11 +45,11 @@ def get_business_profile(
     return repo.current_business_profile(user.id)
 
 
-@router.get("/me/trust-score-events", response_model=list[TrustScoreEventOut])
-def list_trust_score_events(
+@router.get("/me/commitment-score-events", response_model=list[CommitmentScoreEventOut])
+def list_commitment_score_events(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     repo: Annotated[Repository, Depends(get_repository)],
-) -> list[TrustScoreEventOut]:
+) -> list[CommitmentScoreEventOut]:
     repo.ensure_profile(user)
-    return repo.list_trust_score_events(user.id)
+    return repo.list_commitment_score_events(user.id)
 

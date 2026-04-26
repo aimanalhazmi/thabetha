@@ -1,7 +1,21 @@
 /** Shared type definitions for the Thabetha frontend. */
 
 export type AccountType = 'creditor' | 'debtor' | 'both';
-export type DebtStatus = 'waiting_for_confirmation' | 'active' | 'paid' | 'delay';
+
+/**
+ * Canonical 8-state debt lifecycle. Mirrors `DebtStatus` in
+ * `backend/app/schemas/domain.py`. See `docs/debt-lifecycle.md`.
+ */
+export type DebtStatus =
+  | 'pending_confirmation'
+  | 'active'
+  | 'edit_requested'
+  | 'rejected'
+  | 'overdue'
+  | 'payment_pending_confirmation'
+  | 'paid'
+  | 'cancelled';
+
 export type Language = 'ar' | 'en';
 
 export interface Profile {
@@ -16,7 +30,8 @@ export interface Profile {
   activity_type?: string;
   shop_location?: string;
   shop_description?: string;
-  trust_score: number;
+  /** Internal commitment indicator / مؤشر الالتزام (0–100). Not a credit score. */
+  commitment_score: number;
   ai_enabled: boolean;
   whatsapp_enabled: boolean;
 }
@@ -48,7 +63,7 @@ export interface DebtorDashboard {
   overdue_count: number;
   due_soon_count: number;
   creditors: string[];
-  trust_score: number;
+  commitment_score: number;
   debts: Debt[];
 }
 

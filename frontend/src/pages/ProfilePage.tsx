@@ -41,10 +41,10 @@ export function ProfilePage({ language }: Props) {
         <Input label={tr('phone')} value={profile.phone} onChange={(v) => setProfile({ ...profile, phone: v })} />
 
         <div className="trust-score">
-          <span>{tr('trustScore')}</span>
-          <strong>{profile.trust_score} / 100</strong>
+          <span>{tr('commitmentIndicator')}</span>
+          <strong>{profile.commitment_score} / 100</strong>
         </div>
-        <p className="trust-disclaimer">{tr('trustScoreDisclaimer')}</p>
+        <p className="trust-disclaimer">{tr('commitmentDisclaimer')}</p>
 
         <label className="check-row">
           <input type="checkbox" checked={profile.ai_enabled} onChange={(e) => setProfile({ ...profile, ai_enabled: e.target.checked })} />

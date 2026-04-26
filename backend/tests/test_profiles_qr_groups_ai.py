@@ -12,7 +12,7 @@ def test_profile_business_and_qr_resolution(client: TestClient) -> None:
     profile = client.patch(
         "/api/v1/profiles/me",
         headers=merchant_headers,
-        json={"name": "Baqala Al Noor", "phone": "+966500000001", "account_type": "business"},
+        json={"name": "Baqala Al Noor", "phone": "+966500000001", "account_type": "creditor"},
     )
     assert profile.status_code == 200
 

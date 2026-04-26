@@ -8,7 +8,17 @@ import type { Debt, DebtStatus, Language } from '../lib/types';
 
 interface Props { language: Language }
 
-const statusKeys: (DebtStatus | 'all')[] = ['all', 'waiting_for_confirmation', 'active', 'paid', 'delay'];
+const statusKeys: (DebtStatus | 'all')[] = [
+  'all',
+  'pending_confirmation',
+  'active',
+  'edit_requested',
+  'rejected',
+  'overdue',
+  'payment_pending_confirmation',
+  'paid',
+  'cancelled',
+];
 
 export function DebtsPage({ language }: Props) {
   const tr = (key: Parameters<typeof t>[1]) => t(language, key);
@@ -60,10 +70,14 @@ export function DebtsPage({ language }: Props) {
 
   function statusLabel(s: string): string {
     switch (s) {
-      case 'waiting_for_confirmation': return tr('waitingForConfirmation');
+      case 'pending_confirmation': return tr('pendingConfirmation');
       case 'active': return tr('active');
+      case 'edit_requested': return tr('editRequested');
+      case 'rejected': return tr('rejected');
+      case 'overdue': return tr('overdue');
+      case 'payment_pending_confirmation': return tr('paymentPendingConfirmation');
       case 'paid': return tr('paid');
-      case 'delay': return tr('delay');
+      case 'cancelled': return tr('cancelled');
       default: return s;
     }
   }
@@ -118,24 +132,31 @@ export function DebtsPage({ language }: Props) {
                 {statusLabel(debt.status)}
               </span>
               <div className="actions">
-                {debt.status === 'waiting_for_confirmation' && (
+                {!isCreditor && (debt.status === 'pending_confirmation' || debt.status === 'edit_requested') && (
                   <>
                     <button onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/accept`, { method: 'POST' }), language === 'ar' ? 'تم قبول الدين' : 'Debt accepted')}>
                       <Check size={16} /><span>{tr('accept')}</span>
                     </button>
-                    <button onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/reject`, { method: 'POST', body: JSON.stringify({ message: 'Rejected' }) }), language === 'ar' ? 'تم رفض الدين' : 'Debt rejected')}>
-                      <X size={16} /><span>{tr('reject')}</span>
-                    </button>
+                    {debt.status === 'pending_confirmation' && (
+                      <button onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/reject`, { method: 'POST', body: JSON.stringify({ message: 'Rejected' }) }), language === 'ar' ? 'تم رفض الدين' : 'Debt rejected')}>
+                        <X size={16} /><span>{tr('reject')}</span>
+                      </button>
+                    )}
                   </>
                 )}
-                {(debt.status === 'active' || debt.status === 'delay') && (
+                {!isCreditor && (debt.status === 'active' || debt.status === 'overdue') && (
                   <button onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/mark-paid`, { method: 'POST', body: JSON.stringify({ note: 'Paid' }) }), language === 'ar' ? 'تم طلب تأكيد الدفع' : 'Payment requested')}>
                     <WalletCards size={16} /><span>{tr('markPaid')}</span>
                   </button>
                 )}
-                {debt.status === 'active' && (
+                {isCreditor && debt.status === 'payment_pending_confirmation' && (
                   <button onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/confirm-payment`, { method: 'POST' }), language === 'ar' ? 'تم تأكيد الدفع' : 'Payment confirmed')}>
                     <Check size={16} /><span>{tr('confirmPayment')}</span>
+                  </button>
+                )}
+                {isCreditor && (debt.status === 'pending_confirmation' || debt.status === 'edit_requested' || debt.status === 'rejected') && (
+                  <button onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/cancel`, { method: 'POST', body: JSON.stringify({ message: 'Cancelled' }) }), language === 'ar' ? 'تم إلغاء الدين' : 'Debt cancelled')}>
+                    <X size={16} /><span>{tr('cancel')}</span>
                   </button>
                 )}
               </div>

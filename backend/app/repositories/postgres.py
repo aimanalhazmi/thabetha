@@ -18,6 +18,7 @@ from app.schemas.domain import (
     AttachmentType,
     BusinessProfileIn,
     BusinessProfileOut,
+    CommitmentScoreEventOut,
     CreditorDashboardOut,
     DebtChangeRequest,
     DebtCreate,
@@ -37,7 +38,6 @@ from app.schemas.domain import (
     ProfileUpdate,
     SettlementCreate,
     SettlementOut,
-    TrustScoreEventOut,
     utcnow,
 )
 
@@ -57,7 +57,7 @@ def _profile_from_row(row: dict) -> ProfileOut:
         shop_description=row.get("shop_description"),
         whatsapp_enabled=row["whatsapp_enabled"],
         ai_enabled=row["ai_enabled"],
-        trust_score=row["trust_score"],
+        commitment_score=row["commitment_score"],
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
     )
@@ -94,7 +94,7 @@ class PostgresRepository(Repository):
         """Move active debts past due_date to delay status."""
         cur = conn.execute(
             """
-            UPDATE debts SET status = 'delay', updated_at = now()
+            UPDATE debts SET status = 'overdue', updated_at = now()
             WHERE status = 'active' AND due_date < CURRENT_DATE
             RETURNING id, debtor_id, amount, currency, creditor_id
             """,
@@ -103,9 +103,9 @@ class PostgresRepository(Repository):
             debt_id = str(row[0])
             debtor_id = str(row[1]) if row[1] else None
             amount, currency, creditor_id = row[2], row[3].strip(), str(row[4])
-            self._add_event_raw(conn, debt_id, "system", "debt_delay", "Debt moved to delay")
+            self._add_event_raw(conn, debt_id, "system", "debt_overdue", "Debt moved to delay")
             if debtor_id:
-                self._change_trust_score_raw(conn, debtor_id, -5, "debt_delay", debt_id)
+                self._change_commitment_score_raw(conn, debtor_id, -5, "debt_overdue", debt_id)
                 self._notify_raw(conn, debtor_id, "overdue", "Debt delayed", f"{amount} {currency} is delayed", debt_id, merchant_id=creditor_id)
 
     def _add_event_raw(self, conn, debt_id: str, actor_id: str, event_type: str, message: str | None = None, metadata: dict | None = None) -> str:
@@ -139,16 +139,16 @@ class PostgresRepository(Repository):
         )
         return nid
 
-    def _change_trust_score_raw(self, conn, user_id: str, delta: int, reason: str, debt_id: str | None = None) -> None:
-        row = conn.execute("SELECT trust_score FROM profiles WHERE id = %s", (user_id,)).fetchone()
+    def _change_commitment_score_raw(self, conn, user_id: str, delta: int, reason: str, debt_id: str | None = None) -> None:
+        row = conn.execute("SELECT commitment_score FROM profiles WHERE id = %s", (user_id,)).fetchone()
         if not row:
             return
         old_score = row[0]
         new_score = min(100, max(0, old_score + delta))
-        conn.execute("UPDATE profiles SET trust_score = %s, updated_at = now() WHERE id = %s", (new_score, user_id))
+        conn.execute("UPDATE profiles SET commitment_score = %s, updated_at = now() WHERE id = %s", (new_score, user_id))
         conn.execute(
             """
-            INSERT INTO trust_score_events (id, user_id, delta, score_after, reason, debt_id, created_at)
+            INSERT INTO commitment_score_events (id, user_id, delta, score_after, reason, debt_id, created_at)
             VALUES (%s, %s, %s, %s, %s, %s, now())
             """,
             (str(uuid4()), user_id, delta, new_score, reason, debt_id),
@@ -309,7 +309,7 @@ class PostgresRepository(Repository):
                 """
                 INSERT INTO debts (id, creditor_id, debtor_id, debtor_name, amount, currency, description, due_date,
                                    status, invoice_url, notes, group_id, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'waiting_for_confirmation', %s, %s, %s, now(), now())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending_confirmation', %s, %s, %s, now(), now())
                 """,
                 (debt_id, creditor_id, payload.debtor_id, payload.debtor_name, payload.amount, payload.currency,
                  payload.description, payload.due_date, payload.invoice_url, payload.notes, payload.group_id),
@@ -367,7 +367,7 @@ class PostgresRepository(Repository):
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
             if str(row["debtor_id"]) != user_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the debtor can accept this debt")
-            if row["status"] != "waiting_for_confirmation":
+            if row["status"] != "pending_confirmation":
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt cannot be accepted from its current state")
             conn.execute("UPDATE debts SET status = 'active', confirmed_at = now(), updated_at = now() WHERE id = %s", (debt_id,))
             self._add_event_raw(conn, debt_id, user_id, "debt_confirmed", "Debtor accepted the debt")
@@ -385,7 +385,7 @@ class PostgresRepository(Repository):
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
             if str(row["debtor_id"]) != user_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the debtor can reject this debt")
-            if row["status"] != "waiting_for_confirmation":
+            if row["status"] != "pending_confirmation":
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt cannot be rejected from its current state")
             # Delete the debt since we don't have a rejected status
             conn.execute("DELETE FROM debts WHERE id = %s", (debt_id,))
@@ -406,9 +406,9 @@ class PostgresRepository(Repository):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the debtor can request changes")
             if row["status"] != "pending_confirmation":
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only pending debts can be changed")
-            conn.execute("UPDATE debts SET status = 'change_requested', updated_at = now() WHERE id = %s", (debt_id,))
-            self._add_event_raw(conn, debt_id, user_id, "debt_change_requested", payload.message, payload.model_dump(exclude_none=True))
-            self._notify_raw(conn, str(row["creditor_id"]), "debt_change_requested", "Debt change requested", payload.message, debt_id)
+            conn.execute("UPDATE debts SET status = 'edit_requested', updated_at = now() WHERE id = %s", (debt_id,))
+            self._add_event_raw(conn, debt_id, user_id, "debt_edit_requested", payload.message, payload.model_dump(exclude_none=True))
+            self._notify_raw(conn, str(row["creditor_id"]), "debt_edit_requested", "Debt edit requested", payload.message, debt_id)
             conn.commit()
             updated = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
             return _debt_from_row(updated)
@@ -421,10 +421,12 @@ class PostgresRepository(Repository):
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
             if str(row["debtor_id"]) != user_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the debtor can mark the debt paid")
-            if row["status"] not in ("active", "delay"):
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt must be active or delayed")
-            # Keep the status as-is until creditor confirms
-            pass
+            if row["status"] not in ("active", "overdue"):
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt must be active or overdue")
+            conn.execute(
+                "UPDATE debts SET status = 'payment_pending_confirmation', updated_at = now() WHERE id = %s",
+                (debt_id,),
+            )
             confirmation_id = str(uuid4())
             conn.execute(
                 """
@@ -452,8 +454,8 @@ class PostgresRepository(Repository):
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
             if str(row["creditor_id"]) != user_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the creditor can confirm payment")
-            if row["status"] not in ("active", "delay"):
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt must be active or delayed")
+            if row["status"] != "payment_pending_confirmation":
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment is not awaiting confirmation")
             conn.execute("UPDATE debts SET status = 'paid', paid_at = now(), updated_at = now() WHERE id = %s", (debt_id,))
             conn.execute("UPDATE payment_confirmations SET status = 'confirmed', confirmed_at = now() WHERE debt_id = %s", (debt_id,))
             self._add_event_raw(conn, debt_id, user_id, "payment_confirmed", "Creditor confirmed receiving payment")
@@ -461,9 +463,29 @@ class PostgresRepository(Repository):
             if debtor_id:
                 now = utcnow()
                 delta = 5 if now.date() <= row["due_date"] else -2
-                self._change_trust_score_raw(conn, debtor_id, delta, "payment_confirmed", debt_id)
+                self._change_commitment_score_raw(conn, debtor_id, delta, "payment_confirmed", debt_id)
                 self._notify_raw(conn, debtor_id, "payment_confirmed", "Payment confirmed",
                                  f"{row['amount']} {row['currency'].strip()} was confirmed as paid", debt_id)
+            conn.commit()
+            updated = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
+            return _debt_from_row(updated)
+
+    def cancel_debt(self, user_id: str, debt_id: str, message: str | None = None) -> DebtOut:
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            row = self._can_view_debt(conn, user_id, debt_id)
+            if not row:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
+            if str(row["creditor_id"]) != user_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the creditor can cancel this debt")
+            if row["status"] not in ("pending_confirmation", "edit_requested", "rejected"):
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Active or paid debts cannot be cancelled")
+            conn.execute("UPDATE debts SET status = 'cancelled', updated_at = now() WHERE id = %s", (debt_id,))
+            self._add_event_raw(conn, debt_id, user_id, "debt_cancelled", message)
+            debtor_id = str(row["debtor_id"]) if row.get("debtor_id") else None
+            if debtor_id:
+                self._notify_raw(conn, debtor_id, "debt_cancelled", "Debt cancelled",
+                                 message or f"{row['amount']} {row['currency'].strip()} cancelled by creditor", debt_id)
             conn.commit()
             updated = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
             return _debt_from_row(updated)
@@ -534,8 +556,8 @@ class PostgresRepository(Repository):
             self._refresh_overdue(conn)
             conn.commit()
 
-            profile = conn.execute("SELECT trust_score FROM profiles WHERE id = %s", (user_id,)).fetchone()
-            trust_score = profile["trust_score"] if profile else 50
+            profile = conn.execute("SELECT commitment_score FROM profiles WHERE id = %s", (user_id,)).fetchone()
+            commitment_score = profile["commitment_score"] if profile else 50
 
             debts = conn.execute(
                 """
@@ -544,12 +566,12 @@ class PostgresRepository(Repository):
                 (user_id,),
             ).fetchall()
 
-            current_statuses = {"active", "delay"}
+            current_statuses = {"active", "overdue", "payment_pending_confirmation"}
             current = [d for d in debts if d["status"] in current_statuses]
             total = sum((d["amount"] for d in current), Decimal("0"))
             today = date.today()
             due_soon = [d for d in current if today <= d["due_date"] <= today + timedelta(days=3)]
-            overdue = [d for d in current if d["status"] == "delay"]
+            overdue = [d for d in current if d["status"] == "overdue"]
             creditors = sorted({str(d["creditor_id"]) for d in current})
 
             return DebtorDashboardOut(
@@ -557,7 +579,7 @@ class PostgresRepository(Repository):
                 due_soon_count=len(due_soon),
                 overdue_count=len(overdue),
                 creditors=creditors,
-                trust_score=trust_score,
+                commitment_score=commitment_score,
                 debts=[_debt_from_row(d) for d in debts],
             )
 
@@ -572,7 +594,7 @@ class PostgresRepository(Repository):
                 (user_id,),
             ).fetchall()
 
-            receivable_statuses = {"active", "delay"}
+            receivable_statuses = {"active", "overdue", "payment_pending_confirmation"}
             receivable = [d for d in debts if d["status"] in receivable_statuses]
             total = sum((d["amount"] for d in receivable), Decimal("0"))
             debtor_ids = {str(d["debtor_id"]) for d in debts if d.get("debtor_id")}
@@ -581,12 +603,12 @@ class PostgresRepository(Repository):
             if debtor_ids:
                 placeholders = ", ".join(["%s"] * len(debtor_ids))
                 rows = conn.execute(
-                    f"SELECT * FROM profiles WHERE id IN ({placeholders}) ORDER BY trust_score DESC LIMIT 5",  # noqa: S608
+                    f"SELECT * FROM profiles WHERE id IN ({placeholders}) ORDER BY commitment_score DESC LIMIT 5",  # noqa: S608
                     list(debtor_ids),
                 ).fetchall()
                 best_customers = [_profile_from_row(r) for r in rows]
 
-            delayed = [d for d in debts if d["status"] == "delay"]
+            delayed = [d for d in debts if d["status"] == "overdue"]
             alerts = [f"{d['debtor_name']} is delayed on {d['amount']} {d['currency'].strip()}" for d in delayed]
 
             return CreditorDashboardOut(
@@ -652,14 +674,14 @@ class PostgresRepository(Repository):
             conn.commit()
         return NotificationPreferenceOut(user_id=user_id, merchant_id=payload.merchant_id, whatsapp_enabled=payload.whatsapp_enabled, updated_at=utcnow())
 
-    def list_trust_score_events(self, user_id: str) -> list[TrustScoreEventOut]:
+    def list_commitment_score_events(self, user_id: str) -> list[CommitmentScoreEventOut]:
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
             rows = conn.execute(
-                "SELECT * FROM trust_score_events WHERE user_id = %s ORDER BY created_at DESC", (user_id,)
+                "SELECT * FROM commitment_score_events WHERE user_id = %s ORDER BY created_at DESC", (user_id,)
             ).fetchall()
             return [
-                TrustScoreEventOut(
+                CommitmentScoreEventOut(
                     id=str(r["id"]), user_id=str(r["user_id"]),
                     delta=r["delta"], score_after=r["score_after"],
                     reason=r["reason"],

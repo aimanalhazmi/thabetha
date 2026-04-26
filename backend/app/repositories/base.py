@@ -17,6 +17,7 @@ from app.schemas.domain import (
     AttachmentType,
     BusinessProfileIn,
     BusinessProfileOut,
+    CommitmentScoreEventOut,
     CreditorDashboardOut,
     DebtChangeRequest,
     DebtCreate,
@@ -36,7 +37,6 @@ from app.schemas.domain import (
     ProfileUpdate,
     SettlementCreate,
     SettlementOut,
-    TrustScoreEventOut,
 )
 
 
@@ -95,6 +95,9 @@ class Repository(ABC):
     @abstractmethod
     def confirm_payment(self, user_id: str, debt_id: str) -> DebtOut: ...
 
+    @abstractmethod
+    def cancel_debt(self, user_id: str, debt_id: str, message: str | None = None) -> DebtOut: ...
+
     # ── Events & attachments ──────────────────────────────────────────
 
     @abstractmethod
@@ -126,7 +129,7 @@ class Repository(ABC):
     def set_notification_preference(self, user_id: str, payload: NotificationPreferenceIn) -> NotificationPreferenceOut: ...
 
     @abstractmethod
-    def list_trust_score_events(self, user_id: str) -> list[TrustScoreEventOut]: ...
+    def list_commitment_score_events(self, user_id: str) -> list[CommitmentScoreEventOut]: ...
 
     # ── Groups ────────────────────────────────────────────────────────
 
