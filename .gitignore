@@ -25,6 +25,8 @@ MANIFEST
 wheels/
 sdist/
 
+.env
+.idea/
 # Test & quality tool caches
 .pytest_cache/
 .ruff_cache/
