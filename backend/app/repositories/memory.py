@@ -15,6 +15,7 @@ from app.schemas.domain import (
     AttachmentType,
     BusinessProfileIn,
     BusinessProfileOut,
+    CommitmentScoreEventOut,
     CreditorDashboardOut,
     DebtChangeRequest,
     DebtCreate,
@@ -37,7 +38,6 @@ from app.schemas.domain import (
     ProfileUpdate,
     SettlementCreate,
     SettlementOut,
-    TrustScoreEventOut,
     utcnow,
 )
 
@@ -64,7 +64,7 @@ class InMemoryRepository(Repository):
             self.attachments: list[AttachmentOut] = []
             self.notifications: list[NotificationOut] = []
             self.notification_preferences: dict[tuple[str, str], NotificationPreferenceOut] = {}
-            self.trust_score_events: list[TrustScoreEventOut] = []
+            self.commitment_score_events: list[CommitmentScoreEventOut] = []
             self.groups: dict[str, GroupOut] = {}
             self.group_members: list[GroupMemberOut] = []
             self.settlements: list[SettlementOut] = []
@@ -81,7 +81,7 @@ class InMemoryRepository(Repository):
                 name=user.name or user.email or user.phone or f"User {user.id[:6]}",
                 phone=user.phone or "+000000000",
                 email=user.email,
-                account_type=AccountType.individual,
+                account_type=AccountType.debtor,
                 created_at=now,
                 updated_at=now,
             )
@@ -117,7 +117,9 @@ class InMemoryRepository(Repository):
             )
             self.business_profiles[owner_id] = business
             current = self.get_profile(owner_id)
-            self.profiles[owner_id] = current.model_copy(update={"account_type": AccountType.business, "updated_at": now})
+            if current.account_type == AccountType.debtor:
+                current = current.model_copy(update={"account_type": AccountType.creditor})
+            self.profiles[owner_id] = current.model_copy(update={"updated_at": now})
             return business
 
     def current_business_profile(self, owner_id: str) -> BusinessProfileOut | None:
@@ -209,7 +211,7 @@ class InMemoryRepository(Repository):
             debt = self.get_authorized_debt(user_id, debt_id)
             if debt.debtor_id != user_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the debtor can accept this debt")
-            if debt.status not in {DebtStatus.pending_confirmation, DebtStatus.change_requested}:
+            if debt.status not in {DebtStatus.pending_confirmation, DebtStatus.edit_requested}:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt cannot be accepted from its current state")
             debt = debt.model_copy(update={"status": DebtStatus.active, "confirmed_at": utcnow(), "updated_at": utcnow()})
             self.debts[debt_id] = debt
@@ -237,10 +239,10 @@ class InMemoryRepository(Repository):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the debtor can request changes")
             if debt.status != DebtStatus.pending_confirmation:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only pending debts can be changed")
-            debt = debt.model_copy(update={"status": DebtStatus.change_requested, "updated_at": utcnow()})
+            debt = debt.model_copy(update={"status": DebtStatus.edit_requested, "updated_at": utcnow()})
             self.debts[debt_id] = debt
-            self._add_event(debt.id, user_id, "debt_change_requested", payload.message, payload.model_dump(exclude_none=True))
-            self._notify(debt.creditor_id, NotificationType.debt_change_requested, "Debt change requested", payload.message, debt.id)
+            self._add_event(debt.id, user_id, "debt_edit_requested", payload.message, payload.model_dump(exclude_none=True))
+            self._notify(debt.creditor_id, NotificationType.debt_edit_requested, "Debt change requested", payload.message, debt.id)
             return debt
 
     def mark_paid(self, user_id: str, debt_id: str, payload: PaymentRequest) -> PaymentConfirmationOut:
@@ -283,8 +285,23 @@ class InMemoryRepository(Repository):
             self._add_event(debt.id, user_id, "payment_confirmed", "Creditor confirmed receiving payment")
             if debt.debtor_id:
                 delta = 5 if now.date() <= debt.due_date else -2
-                self._change_trust_score(debt.debtor_id, delta, "payment_confirmed", debt.id)
+                self._change_commitment_score(debt.debtor_id, delta, "payment_confirmed", debt.id)
                 self._notify(debt.debtor_id, NotificationType.payment_confirmed, "Payment confirmed", f"{debt.amount} {debt.currency} was confirmed as paid", debt.id)
+            return debt
+
+    def cancel_debt(self, user_id: str, debt_id: str, message: str | None = None) -> DebtOut:
+        with self._lock:
+            debt = self.get_authorized_debt(user_id, debt_id)
+            if debt.creditor_id != user_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the creditor can cancel this debt")
+            cancellable = {DebtStatus.pending_confirmation, DebtStatus.edit_requested, DebtStatus.rejected}
+            if debt.status not in cancellable:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Active or paid debts cannot be cancelled")
+            debt = debt.model_copy(update={"status": DebtStatus.cancelled, "updated_at": utcnow()})
+            self.debts[debt_id] = debt
+            self._add_event(debt.id, user_id, "debt_cancelled", message)
+            if debt.debtor_id:
+                self._notify(debt.debtor_id, NotificationType.debt_cancelled, "Debt cancelled", message or f"{debt.amount} {debt.currency} cancelled by creditor", debt.id)
             return debt
 
     def list_events(self, user_id: str, debt_id: str) -> list[DebtEventOut]:
@@ -326,7 +343,7 @@ class InMemoryRepository(Repository):
             due_soon_count=len(due_soon),
             overdue_count=len([debt for debt in current if debt.status == DebtStatus.overdue]),
             creditors=creditors,
-            trust_score=profile.trust_score,
+            commitment_score=profile.commitment_score,
             debts=debts,
         )
 
@@ -338,7 +355,7 @@ class InMemoryRepository(Repository):
         debtor_ids = {debt.debtor_id for debt in debts if debt.debtor_id}
         best_customers = sorted(
             [self.profiles[debtor_id] for debtor_id in debtor_ids if debtor_id in self.profiles],
-            key=lambda profile: profile.trust_score,
+            key=lambda profile: profile.commitment_score,
             reverse=True,
         )[:5]
         overdue = [debt for debt in debts if debt.status == DebtStatus.overdue]
@@ -371,8 +388,8 @@ class InMemoryRepository(Repository):
         self.notification_preferences[(user_id, payload.merchant_id)] = preference
         return preference
 
-    def list_trust_score_events(self, user_id: str) -> list[TrustScoreEventOut]:
-        return [event for event in self.trust_score_events if event.user_id == user_id]
+    def list_commitment_score_events(self, user_id: str) -> list[CommitmentScoreEventOut]:
+        return [event for event in self.commitment_score_events if event.user_id == user_id]
 
     def create_group(self, owner_id: str, payload: GroupCreate) -> GroupOut:
         with self._lock:
@@ -472,14 +489,14 @@ class InMemoryRepository(Repository):
         self.notifications.append(notification)
         return notification
 
-    def _change_trust_score(self, user_id: str, delta: int, reason: str, debt_id: str | None = None) -> TrustScoreEventOut:
+    def _change_commitment_score(self, user_id: str, delta: int, reason: str, debt_id: str | None = None) -> CommitmentScoreEventOut:
         profile = self.profiles.get(user_id)
         if not profile:
-            return TrustScoreEventOut(id=str(uuid4()), user_id=user_id, delta=0, score_after=50, reason="profile_missing", debt_id=debt_id, created_at=utcnow())
-        score_after = min(100, max(0, profile.trust_score + delta))
-        event = TrustScoreEventOut(id=str(uuid4()), user_id=user_id, delta=delta, score_after=score_after, reason=reason, debt_id=debt_id, created_at=utcnow())
-        self.trust_score_events.append(event)
-        self.profiles[user_id] = profile.model_copy(update={"trust_score": score_after, "updated_at": utcnow()})
+            return CommitmentScoreEventOut(id=str(uuid4()), user_id=user_id, delta=0, score_after=50, reason="profile_missing", debt_id=debt_id, created_at=utcnow())
+        score_after = min(100, max(0, profile.commitment_score + delta))
+        event = CommitmentScoreEventOut(id=str(uuid4()), user_id=user_id, delta=delta, score_after=score_after, reason=reason, debt_id=debt_id, created_at=utcnow())
+        self.commitment_score_events.append(event)
+        self.profiles[user_id] = profile.model_copy(update={"commitment_score": score_after, "updated_at": utcnow()})
         return event
 
     def _refresh_overdue(self) -> None:
@@ -490,7 +507,7 @@ class InMemoryRepository(Repository):
                 self.debts[debt.id] = updated
                 self._add_event(debt.id, "system", "debt_overdue", "Debt moved to overdue")
                 if debt.debtor_id and debt.id not in self._overdue_penalties:
-                    self._change_trust_score(debt.debtor_id, -5, "debt_overdue", debt.id)
+                    self._change_commitment_score(debt.debtor_id, -5, "debt_overdue", debt.id)
                     self._overdue_penalties.add(debt.id)
                     self._notify(debt.debtor_id, NotificationType.overdue, "Debt overdue", f"{debt.amount} {debt.currency} is overdue", debt.id, merchant_id=debt.creditor_id)
 

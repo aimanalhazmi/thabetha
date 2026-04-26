@@ -80,7 +80,7 @@ export function QRPage({ language }: Props) {
               <h3>{tr("customerProfile")}</h3>
               <p><strong>{scanned.name}</strong></p>
               <p>{scanned.phone}</p>
-              <p>{tr("trustScore")}: <strong>{scanned.trust_score} / 100</strong></p>
+              <p>{tr("commitmentIndicator")}: <strong>{scanned.commitment_score} / 100</strong></p>
               <p style={{ fontSize: '0.75rem', color: '#94a3b8' }}>ID: {scanned.id}</p>
             </div>
           )}

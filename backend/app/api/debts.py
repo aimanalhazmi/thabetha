@@ -8,8 +8,8 @@ from app.schemas.domain import (
     ActionMessageIn,
     AttachmentOut,
     AttachmentType,
-    DebtChangeRequest,
     DebtCreate,
+    DebtEditRequest,
     DebtEventOut,
     DebtOut,
     PaymentConfirmationOut,
@@ -79,15 +79,26 @@ def reject_debt(
     return repo.reject_debt(user.id, debt_id, payload.message)
 
 
-@router.post("/{debt_id}/change-request", response_model=DebtOut)
-def request_change(
+@router.post("/{debt_id}/edit-request", response_model=DebtOut)
+def request_edit(
     debt_id: str,
-    payload: DebtChangeRequest,
+    payload: DebtEditRequest,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     repo: Annotated[Repository, Depends(get_repository)],
 ) -> DebtOut:
     repo.ensure_profile(user)
     return repo.request_debt_change(user.id, debt_id, payload)
+
+
+@router.post("/{debt_id}/cancel", response_model=DebtOut)
+def cancel_debt(
+    debt_id: str,
+    payload: ActionMessageIn,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> DebtOut:
+    repo.ensure_profile(user)
+    return repo.cancel_debt(user.id, debt_id, payload.message)
 
 
 @router.post("/{debt_id}/mark-paid", response_model=PaymentConfirmationOut)

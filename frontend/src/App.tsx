@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { Layout } from "./components/Layout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AuthPage } from "./pages/AuthPage";
@@ -11,6 +11,8 @@ import { QRPage } from "./pages/QRPage";
 import { GroupsPage } from "./pages/GroupsPage";
 import { AIPage } from "./pages/AIPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
+import { LandingPage } from "./pages/LandingPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import type { TranslationKey } from "./lib/i18n";
 import type { Language } from "./lib/types";
 
@@ -22,6 +24,7 @@ const routeLabels: Record<string, TranslationKey> = {
   "/groups": "groups",
   "/ai": "ai",
   "/notifications": "notifications",
+  "/settings": "settings",
 };
 
 interface ShellProps {
@@ -50,11 +53,19 @@ function AppShell({ language, onToggleLanguage }: ShellProps) {
           <Route path="/groups" element={<GroupsPage language={language} key={refreshKey} />} />
           <Route path="/ai" element={<AIPage language={language} key={refreshKey} />} />
           <Route path="/notifications" element={<NotificationsPage language={language} key={refreshKey} />} />
+          <Route path="/settings" element={<SettingsPage language={language} onToggleLanguage={onToggleLanguage} key={refreshKey} />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Layout>
     </ProtectedRoute>
   );
+}
+
+function RootRoute({ language, onToggleLanguage }: ShellProps) {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return null;
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  return <LandingPage language={language} onToggleLanguage={onToggleLanguage} />;
 }
 
 export default function App() {
@@ -71,7 +82,8 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<AuthPage language={language} onToggleLanguage={toggleLanguage} />} />
+          <Route path="/" element={<RootRoute language={language} onToggleLanguage={toggleLanguage} />} />
+          <Route path="/auth" element={<AuthPage language={language} onToggleLanguage={toggleLanguage} />} />
           <Route path="/*" element={<AppShell language={language} onToggleLanguage={toggleLanguage} />} />
         </Routes>
       </BrowserRouter>

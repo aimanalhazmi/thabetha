@@ -32,12 +32,12 @@ export function DashboardPage({ language, message }: Props) {
 
   // Calculate stats
   const activeDebts = debts.filter(d => d.status === 'active');
-  const waitingDebts = debts.filter(d => d.status === 'waiting_for_confirmation');
-  const delayDebts = debts.filter(d => d.status === 'delay');
+  const waitingDebts = debts.filter(d => d.status === 'pending_confirmation');
+  const overdueDebts = debts.filter(d => d.status === 'overdue');
   const paidDebts = debts.filter(d => d.status === 'paid');
 
   const totalAmount = debts
-    .filter(d => d.status === 'active' || d.status === 'delay')
+    .filter(d => d.status === 'active' || d.status === 'overdue')
     .reduce((sum, d) => sum + parseFloat(d.amount || '0'), 0);
 
   if (loading) return <p className="empty">{tr('loading')}</p>;
@@ -62,22 +62,22 @@ export function DashboardPage({ language, message }: Props) {
 
       <Stat label={isCreditor ? tr('receivable') : tr('totalDebt')} value={`${totalAmount.toFixed(2)} SAR`} />
       <Stat label={tr('active')} value={String(activeDebts.length)} />
-      <Stat label={tr('waitingForConfirmation')} value={String(waitingDebts.length)} />
-      <Stat label={tr('trustScore')} value={`${profile?.trust_score ?? 50} / 100`} />
+      <Stat label={tr('pendingConfirmation')} value={String(waitingDebts.length)} />
+      <Stat label={tr('commitmentIndicator')} value={`${profile?.commitment_score ?? 50} / 100`} />
 
       {/* Delay Alerts */}
-      {delayDebts.length > 0 && (
+      {overdueDebts.length > 0 && (
         <section className="wide-panel">
-          <h2>⚠️ {tr('delayAlerts')}</h2>
+          <h2>⚠️ {tr('overdueAlerts')}</h2>
           <div className="debt-stack">
-            {delayDebts.map(d => (
+            {overdueDebts.map(d => (
               <div key={d.id} className="debt-item">
                 <div>
                   <strong>{d.debtor_name}</strong>
                   <span>{d.description}</span>
                 </div>
                 <b>{d.amount} {d.currency}</b>
-                <span className="status-badge delay">{tr('delay')}</span>
+                <span className="status-badge overdue">{tr('overdue')}</span>
               </div>
             ))}
           </div>
@@ -85,7 +85,7 @@ export function DashboardPage({ language, message }: Props) {
       )}
 
       {/* Recent debts */}
-      <section className={delayDebts.length > 0 ? 'panel' : 'wide-panel'}>
+      <section className={overdueDebts.length > 0 ? 'panel' : 'wide-panel'}>
         <h2>{tr('recentDebts')} ({debts.length})</h2>
         <div className="compact-list">
           {debts.slice(0, 6).map((d) => (
@@ -93,10 +93,14 @@ export function DashboardPage({ language, message }: Props) {
               <strong>{d.debtor_name}</strong>
               <span>{d.amount} {d.currency}</span>
               <span className={`status-badge ${d.status}`}>
-                {d.status === 'waiting_for_confirmation' ? tr('waitingForConfirmation')
+                {d.status === 'pending_confirmation' ? tr('pendingConfirmation')
                   : d.status === 'active' ? tr('active')
                   : d.status === 'paid' ? tr('paid')
-                  : tr('delay')}
+                  : d.status === 'edit_requested' ? tr('editRequested')
+                  : d.status === 'rejected' ? tr('rejected')
+                  : d.status === 'payment_pending_confirmation' ? tr('paymentPendingConfirmation')
+                  : d.status === 'cancelled' ? tr('cancelled')
+                  : tr('overdue')}
               </span>
             </div>
           ))}
@@ -105,7 +109,7 @@ export function DashboardPage({ language, message }: Props) {
       </section>
 
       {/* Stats panel */}
-      <Panel title={delayDebts.length > 0 ? tr('notifications') : tr('notifications')}>
+      <Panel title={overdueDebts.length > 0 ? tr('notifications') : tr('notifications')}>
         {isCreditor && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
@@ -124,7 +128,7 @@ export function DashboardPage({ language, message }: Props) {
           ))}
           {notifications.length === 0 && <p className="empty">{tr('noData')}</p>}
         </ul>
-        <p className="trust-disclaimer">{tr('trustScoreDisclaimer')}</p>
+        <p className="trust-disclaimer">{tr('commitmentDisclaimer')}</p>
       </Panel>
     </section>
   );

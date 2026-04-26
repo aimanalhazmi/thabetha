@@ -3,18 +3,23 @@ import type { Language } from './types';
 /** All translation keys used across the app. */
 export type TranslationKey =
   | 'appName'
+  | 'tagline'
   | 'dashboard'
   | 'debts'
   | 'profile'
   | 'qr'
+  | 'qrProfile'
+  | 'qrScanner'
   | 'groups'
   | 'ai'
   | 'notifications'
+  | 'settings'
   | 'refresh'
   | 'totalDebt'
   | 'receivable'
   | 'overdue'
-  | 'trustScore'
+  | 'commitmentIndicator'
+  | 'commitmentDisclaimer'
   | 'noData'
   | 'createDebt'
   | 'debtorName'
@@ -24,10 +29,12 @@ export type TranslationKey =
   | 'description'
   | 'dueDate'
   | 'create'
+  | 'cancel'
   | 'active'
   | 'paid'
   | 'accept'
   | 'reject'
+  | 'requestEdit'
   | 'markPaid'
   | 'confirmPayment'
   | 'save'
@@ -61,8 +68,11 @@ export type TranslationKey =
   | 'welcomeBack'
   | 'alreadyHaveAccount'
   | 'dontHaveAccount'
-  | 'waitingForConfirmation'
-  | 'delay'
+  | 'pendingConfirmation'
+  | 'editRequested'
+  | 'rejected'
+  | 'paymentPendingConfirmation'
+  | 'cancelled'
   | 'checkEmail'
   | 'emailVerification'
   | 'emailVerificationDesc'
@@ -71,8 +81,7 @@ export type TranslationKey =
   | 'debtorDashboard'
   | 'dueSoon'
   | 'debtors'
-  | 'trustScoreDisclaimer'
-  | 'delayAlerts'
+  | 'overdueAlerts'
   | 'recentDebts'
   | 'allStatuses'
   | 'noDebtsYet'
@@ -95,24 +104,37 @@ export type TranslationKey =
   | 'lookup'
   | 'customerProfile'
   | 'unpaidDebts'
-  | 'myDebtStatus';
+  | 'myDebtStatus'
+  | 'landingHeadline'
+  | 'landingPitch'
+  | 'getStarted'
+  | 'learnMore'
+  | 'forCreditors'
+  | 'forDebtors'
+  | 'creditorPitch'
+  | 'debtorPitch';
 
 type Translations = Record<TranslationKey, string>;
 
 const ar: Translations = {
   appName: 'ثبتها',
+  tagline: 'دفتر الديون الذي يؤكّده الطرفان',
   dashboard: 'لوحة التحكم',
   debts: 'الديون',
   profile: 'الملف الشخصي',
   qr: 'رمز QR',
+  qrProfile: 'ملفي عبر QR',
+  qrScanner: 'ماسح رمز العميل',
   groups: 'المجموعات',
   ai: 'الذكاء الاصطناعي',
   notifications: 'الإشعارات',
+  settings: 'الإعدادات',
   refresh: 'تحديث',
   totalDebt: 'إجمالي الدين',
   receivable: 'المستحقات',
   overdue: 'متأخر',
-  trustScore: 'نقاط الثقة',
+  commitmentIndicator: 'مؤشر الالتزام',
+  commitmentDisclaimer: 'مؤشر داخلي للالتزام بالسداد، وليس تقييمًا ائتمانيًا رسميًا',
   noData: 'لا توجد بيانات',
   createDebt: 'إنشاء دين',
   debtorName: 'اسم المدين',
@@ -122,12 +144,14 @@ const ar: Translations = {
   description: 'الوصف',
   dueDate: 'تاريخ الاستحقاق',
   create: 'إنشاء',
+  cancel: 'إلغاء',
   active: 'نشط',
   paid: 'مدفوع',
   accept: 'قبول',
   reject: 'رفض',
+  requestEdit: 'طلب تعديل',
   markPaid: 'تحديد كمدفوع',
-  confirmPayment: 'تأكيد الدفع',
+  confirmPayment: 'تأكيد استلام الدفع',
   save: 'حفظ',
   aiEnabled: 'تفعيل الذكاء الاصطناعي',
   whatsapp: 'واتساب',
@@ -159,8 +183,11 @@ const ar: Translations = {
   welcomeBack: 'مرحباً بعودتك',
   alreadyHaveAccount: 'لديك حساب بالفعل؟',
   dontHaveAccount: 'ليس لديك حساب؟',
-  waitingForConfirmation: 'بانتظار التأكيد',
-  delay: 'متأخر',
+  pendingConfirmation: 'بانتظار التأكيد',
+  editRequested: 'طلب تعديل',
+  rejected: 'مرفوض',
+  paymentPendingConfirmation: 'بانتظار تأكيد الدفع',
+  cancelled: 'ملغي',
   checkEmail: 'تحقق من بريدك الإلكتروني',
   emailVerification: 'تأكيد البريد الإلكتروني',
   emailVerificationDesc: 'تم إرسال رابط التحقق إلى بريدك الإلكتروني. يرجى التحقق من بريدك لتفعيل حسابك.',
@@ -169,8 +196,7 @@ const ar: Translations = {
   debtorDashboard: 'لوحة تحكم المدين',
   dueSoon: 'قريب الاستحقاق',
   debtors: 'المدينون',
-  trustScoreDisclaimer: 'مؤشر ثقة داخلي وليس تقييم ائتماني رسمي',
-  delayAlerts: 'تنبيهات التأخير',
+  overdueAlerts: 'تنبيهات التأخر',
   recentDebts: 'الديون الأخيرة',
   allStatuses: 'جميع الحالات',
   noDebtsYet: 'لا توجد ديون حتى الآن',
@@ -194,22 +220,35 @@ const ar: Translations = {
   customerProfile: 'ملف العميل',
   unpaidDebts: 'الديون غير المدفوعة',
   myDebtStatus: 'حالة ديوني',
+  landingHeadline: 'دفتر ديون رقمي يؤكده الطرفان',
+  landingPitch: 'استبدل دفتر الديون الورقي بسجل بسيط، عربي أولاً، يؤكده كلٌ من الدائن والمدين، مع مؤشر التزام داخلي وتذكيرات تلقائية.',
+  getStarted: 'ابدأ الآن',
+  learnMore: 'تعرف على المزيد',
+  forCreditors: 'للدائنين',
+  forDebtors: 'للمدينين',
+  creditorPitch: 'أنشئ ديونًا، امسح QR العميل، استلم تأكيد الدفع، وراقب المستحقات والمتأخر.',
+  debtorPitch: 'تابع ديونك في مكان واحد، أكد القبول، اطلب تعديلًا، وأخطر دائنك عند السداد.',
 };
 
 const en: Translations = {
   appName: 'Thabetha',
+  tagline: 'The debt notebook both sides confirm',
   dashboard: 'Dashboard',
   debts: 'Debts',
   profile: 'Profile',
   qr: 'QR Code',
+  qrProfile: 'My QR profile',
+  qrScanner: 'QR scanner',
   groups: 'Groups',
   ai: 'AI Assistant',
   notifications: 'Notifications',
+  settings: 'Settings',
   refresh: 'Refresh',
   totalDebt: 'Total Debt',
   receivable: 'Receivable',
   overdue: 'Overdue',
-  trustScore: 'Trust Score',
+  commitmentIndicator: 'Commitment Indicator',
+  commitmentDisclaimer: 'Internal commitment indicator, not an official credit score',
   noData: 'No data',
   createDebt: 'Create Debt',
   debtorName: 'Debtor Name',
@@ -219,12 +258,14 @@ const en: Translations = {
   description: 'Description',
   dueDate: 'Due Date',
   create: 'Create',
+  cancel: 'Cancel',
   active: 'Active',
   paid: 'Paid',
   accept: 'Accept',
   reject: 'Reject',
-  markPaid: 'Mark Paid',
-  confirmPayment: 'Confirm Payment',
+  requestEdit: 'Request edit',
+  markPaid: 'Mark paid',
+  confirmPayment: 'Confirm payment',
   save: 'Save',
   aiEnabled: 'AI Enabled',
   whatsapp: 'WhatsApp',
@@ -256,8 +297,11 @@ const en: Translations = {
   welcomeBack: 'Welcome Back',
   alreadyHaveAccount: 'Already have an account?',
   dontHaveAccount: "Don't have an account?",
-  waitingForConfirmation: 'Waiting for Confirmation',
-  delay: 'Delayed',
+  pendingConfirmation: 'Pending confirmation',
+  editRequested: 'Edit requested',
+  rejected: 'Rejected',
+  paymentPendingConfirmation: 'Payment pending confirmation',
+  cancelled: 'Cancelled',
   checkEmail: 'Check Your Email',
   emailVerification: 'Email Verification',
   emailVerificationDesc: 'A verification link has been sent to your email. Please check your inbox to activate your account.',
@@ -266,8 +310,7 @@ const en: Translations = {
   debtorDashboard: 'Debtor Dashboard',
   dueSoon: 'Due Soon',
   debtors: 'Debtors',
-  trustScoreDisclaimer: 'Internal trust indicator, not an official credit score',
-  delayAlerts: 'Delay Alerts',
+  overdueAlerts: 'Overdue alerts',
   recentDebts: 'Recent Debts',
   allStatuses: 'All Statuses',
   noDebtsYet: 'No debts yet',
@@ -291,6 +334,14 @@ const en: Translations = {
   customerProfile: 'Customer Profile',
   unpaidDebts: 'Unpaid Debts',
   myDebtStatus: 'My Debt Status',
+  landingHeadline: 'A digital debt notebook both sides confirm',
+  landingPitch: 'Replace the paper debt notebook with a simple, Arabic-first ledger that the creditor and debtor both confirm — with an internal commitment indicator and automatic reminders.',
+  getStarted: 'Get started',
+  learnMore: 'Learn more',
+  forCreditors: 'For creditors',
+  forDebtors: 'For debtors',
+  creditorPitch: 'Create debts, scan a customer QR, confirm receipt of payments, and track receivables and overdue alerts.',
+  debtorPitch: 'See every debt in one place, accept or request an edit, and notify the creditor when you pay.',
 };
 
 const translations: Record<Language, Translations> = { ar, en };

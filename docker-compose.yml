@@ -1,34 +1,24 @@
-services:
-  db:
-    image: postgres:16-alpine
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_local
-      POSTGRES_DB: thabetha
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./docker/init-gotrue.sql:/docker-entrypoint-initdb.d/001_init.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 2s
-      timeout: 5s
-      retries: 10
+# Optional production-style smoke test for the FastAPI backend.
+#
+# For local development, prefer the supported path: `supabase start` (Auth +
+# Postgres + Storage + Studio in Docker) plus `uv run uvicorn` for the backend
+# and `npm run dev` for the frontend. See docs/local-development.md.
+#
+# This file builds a single `web` container that serves the FastAPI backend and
+# the built frontend on :8000. It expects a Supabase stack already running on
+# the host (the CLI defaults: API 55321, DB 55322).
 
+services:
   web:
     build: .
     ports:
       - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
       APP_ENV: local
-      DATABASE_URL: postgresql://thabetha:thabetha_local@db:5432/thabetha
-      SUPABASE_JWT_SECRET: super-secret-jwt-token-for-local-dev-min-32-chars!!
       REPOSITORY_TYPE: postgres
+      DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:55322/postgres
+      SUPABASE_URL: http://host.docker.internal:55321
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
       SEED_DEMO_DATA: "false"
-
-volumes:
-  pgdata:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

@@ -42,7 +42,7 @@ def test_two_party_debt_and_payment_lifecycle(client: TestClient) -> None:
 
     debtor_dashboard = client.get("/api/v1/dashboard/debtor", headers=debtor_headers)
     assert debtor_dashboard.status_code == 200
-    assert debtor_dashboard.json()["trust_score"] == 55
+    assert debtor_dashboard.json()["commitment_score"] == 55
 
 
 def test_unrelated_user_cannot_read_debt(client: TestClient) -> None:

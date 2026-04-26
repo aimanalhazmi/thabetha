@@ -1,20 +1,21 @@
-import { Bell, Bot, CreditCard, Languages, LayoutDashboard, LogOut, QrCode, RefreshCw, Store, UserRound, Users } from 'lucide-react';
+import { Bell, Bot, CreditCard, Languages, LayoutDashboard, LogOut, QrCode, RefreshCw, Settings, Store, UserRound, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { t, type TranslationKey } from '../lib/i18n';
-import type { Language } from '../lib/types';
+import type { AccountType, Language } from '../lib/types';
 
-type NavItem = { path: string; icon: typeof LayoutDashboard; label: TranslationKey; roles?: Array<'creditor' | 'debtor' | 'both'> };
+type NavItem = { path: string; icon: typeof LayoutDashboard; label: TranslationKey; roles?: Array<AccountType> };
 
 const navItems: NavItem[] = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'dashboard' },
   { path: '/debts', icon: CreditCard, label: 'debts' },
   { path: '/profile', icon: UserRound, label: 'profile' },
-  { path: '/qr', icon: QrCode, label: 'qr', roles: ['creditor', 'both'] },
-  { path: '/groups', icon: Users, label: 'groups' },
+  { path: '/qr', icon: QrCode, label: 'qr' }, // creditor: scanner; debtor: own QR
+  { path: '/groups', icon: Users, label: 'groups', roles: ['debtor', 'both'] },
   { path: '/ai', icon: Bot, label: 'ai', roles: ['creditor', 'both'] },
   { path: '/notifications', icon: Bell, label: 'notifications' },
+  { path: '/settings', icon: Settings, label: 'settings' },
 ];
 
 interface Props {
@@ -32,7 +33,7 @@ export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel
 
   async function handleSignOut() {
     await signOut();
-    navigate('/');
+    navigate('/auth');
   }
 
   const initials = user?.name

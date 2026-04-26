@@ -1,54 +1,76 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code working in this repository. Product and lifecycle details live in [`docs/`](./docs/) — this file is intentionally short and dev-focused.
 
-## What is Thabetha
+## Project summary
 
-A web-based debt confirmation and settlement system for local merchants and customers. Debts require bilateral confirmation — a creditor creates a debt, the debtor must accept/reject before it becomes "active". Features include QR identity tokens, trust scoring, groups, notifications, and AI stubs (voice draft, merchant chatbot).
+**Thabetha / ثبتها** — a bilingual (Arabic-first, English) web app that turns the paper "debt notebook" used in Arab local markets into a bilaterally-confirmed debt ledger. Stack: React/Vite frontend, FastAPI backend, **Supabase** for Auth + Postgres + Storage.
 
-## Product Concept & Use Cases
+Full product context: [`docs/product-requirements.md`](./docs/product-requirements.md) (and [`docs/product-requirements-ar.md`](./docs/product-requirements-ar.md)).
 
-Replaces the paper "debt notebook" used in Arab local markets. Digitizes informal credit between shops and customers (and between friends/family) with bilateral confirmation, reminders, and a trust score.
+## Core product rules
 
-**Actors**
-- **Creditor**: shop/business (grocer, barber, café, restaurant) or individual lender.
-- **Debtor**: customer, friend, relative, neighbor.
+- **Bilateral confirmation is the differentiator.** A debt is binding only after the debtor accepts. A debt is `paid` only after the creditor confirms receipt.
+- **Use the canonical 8-state debt lifecycle.** See [`docs/debt-lifecycle.md`](./docs/debt-lifecycle.md). The string identifiers in code, DB, and UI must match exactly.
+- **Use the term "commitment indicator / مؤشر الالتزام"**, never "credit score" / "trust score". The indicator is internal to Thabetha and visible only in bilateral context.
+- **Per-user data isolation.** A user only ever sees debts where they are creditor, debtor, or accepted group member. Enforced both in API handlers and by Postgres RLS.
+- **Arabic-first.** New strings must land in `frontend/src/lib/i18n.ts` for both languages.
 
-**Debt lifecycle**: `pending_confirmation` → `active` → (`overdue` if past due) → `paid`. State only advances via bilateral action.
+## Actors
 
-**Core use cases**
-- **UC1 — Sign up / profile**: name, phone (WhatsApp), password, user type required; email + tax/CR number optional. Business accounts add a sub-profile: shop name, activity type, location, description.
-- **UC2 — Create debt** (creditor): amount, currency, debtor name, description, due date required; invoice photo, voice note, notes optional. AI-subscribed creditors can dictate; AI extracts fields and asks for confirmation.
-- **UC3 — Bilateral confirm**: debtor receives request and may **accept / reject / request edit**. Debt is binding only after accept.
-- **UC4 — QR identification**: every user has a rotating, time-limited QR + ID. Creditor scans debtor's QR to open profile, see trust score, and attach the new debt to the right person.
-- **UC5 — Payment**: debtor taps "paid" → creditor confirms receipt → state = `paid` → trust score updated.
-- **UC6 — Notifications**: in-app + WhatsApp on create, confirm, due-soon, overdue, closed. Debtor can disable WhatsApp per-merchant in settings.
-- **UC7 — Trust score**: starts 50/100. ↑ on on-time/early payment and repeated compliance; ↓ on lateness/ignored debts. Visible only in the bilateral context between two parties — never public.
-- **UC8 — Dashboards**:
-  - Debtor: total owed, due-soon, overdue, per-creditor list, own trust score.
-  - Creditor: total receivable, debtor count, active/overdue/paid breakdowns, top-compliant customers, overdue alerts, simple stats. AI-subscribed creditors get a chatbot for summaries / stats / recommendations.
-- **UC9 — Groups (friends/family, optional)**: shared multi-party group with **no internal privacy** — members see each other's debts so they can settle on each other's behalf. System auto-nets cross-debts (e.g. B pays A's barber bill, system offsets A↔B).
-- **UC10 — AI (creditor-only, paid tier)**: voice → debt fields extraction; chatbot for ledger summaries, stats, and recommendations. Future: behavior analysis, payment-likelihood prediction, fraud detection, repayment-plan suggestions.
+- **Creditor** — shop / freelancer / individual lender. Creates debts, scans QR, confirms payments.
+- **Debtor** — customer / friend / family. Accepts / rejects / requests-edit, marks debts paid, shows QR.
+- **Both** — shows the union of nav items.
 
-**Non-functional must-haves**
-- Bilingual AR/EN with runtime RTL/LTR toggle (Arabic-first).
-- Encrypted passwords; strict per-user data isolation — a user only sees their own debts (plus group debts if enrolled). No public debtor list.
-- Full audit trail per debt: created-at + by, confirmed-at + by, paid-at + by, current state.
-- Simple, fast UX usable by non-technical shop owners.
+Page → actor mapping: [`docs/pages-and-use-cases.md`](./docs/pages-and-use-cases.md).
 
-## Development Commands
+## MVP boundaries
 
-### Backend (FastAPI + Python 3.12, managed with `uv`)
+[`docs/mvp-scope.md`](./docs/mvp-scope.md). The hackathon target is UC1–UC8 minus the AI tier. Group debt (UC9) is post-MVP — endpoints exist but are not surfaced in MVP nav. AI (UC10) is paid-tier and gated on `profile.ai_enabled`.
+
+## Supabase-first technical direction
+
+- **Auth**: Supabase Auth via `@supabase/supabase-js` on the frontend; backend validates `SUPABASE_JWT_SECRET` (HS256). The `/api/v1/auth/*` proxy is a thin convenience wrapper around the same Supabase Auth REST endpoints.
+- **DB**: Supabase Postgres. Migrations in `supabase/migrations/` are auto-applied at backend startup when `REPOSITORY_TYPE=postgres`, or via `supabase db reset` locally.
+- **Storage**: two private buckets — `receipts` and `voice-notes` — gated by RLS in `003_storage_policies.sql`.
+- **Local stack**: `supabase start` (Docker) for the full Auth+DB+Storage+Studio stack. See [`docs/local-development.md`](./docs/local-development.md).
+- **In-memory repository** (`REPOSITORY_TYPE=memory`) is for tests and quick local debugging without Docker. Tests force this mode via `tests/conftest.py`.
+
+## Repository structure
+
+```
+backend/app/
+  api/        # FastAPI routers (one file per domain)
+  core/       # config, security (JWT validation)
+  db/         # migration runner
+  repositories/
+    base.py     # Repository ABC
+    memory.py   # InMemoryRepository (tests, demo)
+    postgres.py # PostgresRepository (Supabase-backed)
+  schemas/    # Pydantic models (single source of truth for enums)
+  main.py
+backend/tests/
+frontend/src/
+  pages/      # one file per route (role-aware)
+  components/ # Layout, ProtectedRoute, primitives
+  lib/        # api, auth, supabaseClient, i18n, types
+  contexts/   # AuthContext
+supabase/
+  migrations/ # 001..NNN, applied in order
+  config.toml # Supabase CLI config
+docs/         # Product & developer documentation (canonical)
+```
+
+## Development commands
+
+### Backend (FastAPI + Python 3.12, `uv`)
 
 ```bash
 cd backend
-uv sync                                      # install dependencies
-uv run uvicorn app.main:app --reload         # dev server on :8000
-uv run pytest                                # run all tests (uses in-memory repo)
-uv run pytest tests/test_debt_lifecycle.py   # single test file
-uv run pytest -k test_name                   # single test by name
-uv run ruff check .                          # lint
-uv run ruff check --fix .                    # lint + auto-fix
+uv sync
+uv run uvicorn app.main:app --reload   # :8000
+uv run pytest                          # in-memory repo
+uv run ruff check --fix .
 ```
 
 ### Frontend (React 19 + Vite + TypeScript)
@@ -56,76 +78,79 @@ uv run ruff check --fix .                    # lint + auto-fix
 ```bash
 cd frontend
 npm install
-npm run dev          # dev server with HMR on :5173
+npm run dev          # :5173
 npm run build        # tsc + vite build
-npm run typecheck    # tsc --noEmit
+npm run typecheck
 ```
 
-### Full-stack Docker (preferred for full-stack dev)
+### Supabase (local)
 
 ```bash
-docker compose up --build   # starts Postgres + GoTrue (auth) + app on :8000
+supabase start         # Auth + DB + Storage + Studio (Docker)
+supabase db reset      # apply migrations + seed
+supabase status -o env # print URLs / keys
 ```
 
-This spins up three services: `db` (Postgres 16), `auth` (GoTrue/supabase), `web` (FastAPI + built frontend). No manual DB setup needed — migrations run automatically at startup.
+## Local development summary
 
-## Architecture
+Quick path: `supabase start` → `cp .env.example .env` (and `backend/`, `frontend/`) → `cd backend && uv run uvicorn app.main:app --reload` → `cd frontend && npm run dev`. Sign up at `http://127.0.0.1:5173`, confirm via Inbucket (`http://127.0.0.1:55324`).
 
-### Backend (`backend/app/`)
+Full instructions, troubleshooting: [`docs/local-development.md`](./docs/local-development.md).
 
-**App factory**: `main.py` — `create_app()` builds the FastAPI instance, mounts API routers under `/api/v1`, runs Postgres migrations at startup (when `REPOSITORY_TYPE=postgres`), optionally seeds demo data (in-memory only), and serves the built frontend as a SPA fallback.
+## Architecture notes
 
-**Routers** (`api/`): One file per domain — `debts.py`, `profiles.py`, `qr.py`, `dashboards.py`, `notifications.py`, `groups.py`, `ai.py`, `auth.py`, `health.py`. All aggregated in `api/router.py`.
+- **App factory** (`main.py::create_app`) builds the FastAPI app, mounts routers under `/api/v1`, applies Postgres migrations when `REPOSITORY_TYPE=postgres`, and serves the built frontend as a SPA fallback.
+- **Repository pattern**. Routers depend on `Repository` (ABC) via `Depends(get_repository)`. The factory in `repositories/__init__.py` selects memory or postgres from `REPOSITORY_TYPE`. Both implementations must stay in sync — change `base.py` first, then both implementations, then routers.
+- **Schemas** (`schemas/domain.py`) are the single source of truth for enums (`DebtStatus`, `AccountType`, `NotificationType`, `AttachmentType`, `GroupMemberStatus`). Frontend `lib/types.ts` mirrors these manually.
+- **Frontend auth** uses `@supabase/supabase-js`; the JWT goes into `Authorization: Bearer` for backend calls (`lib/api.ts`).
 
-**Repository pattern**: All routers depend on `Repository` (the ABC from `repositories/base.py`) via `Depends(get_repository)`. The factory in `repositories/__init__.py` selects the implementation based on `REPOSITORY_TYPE`:
-- `repositories/memory.py` — `InMemoryRepository`: thread-safe in-memory store; used for tests and local dev without Docker
-- `repositories/postgres.py` — `PostgresRepository`: full SQL implementation using `psycopg` v3 + `psycopg-pool`; used when running via Docker
+## Auth and security
 
-**Auth backend** (`api/auth.py`): Proxies sign-up/sign-in to GoTrue via `httpx`. The frontend only talks to FastAPI — never directly to GoTrue.
-- `POST /api/v1/auth/signup` → GoTrue `/signup` + creates profile row
-- `POST /api/v1/auth/signin` → GoTrue `/token?grant_type=password`
-- `POST /api/v1/auth/refresh` → GoTrue `/token?grant_type=refresh_token`
+- Backend validates JWTs in `core/security.py::get_current_user`. In `APP_ENV != production` it also accepts `x-demo-*` headers for tests and quick debugging.
+- Postgres RLS is enabled on all user-data tables (`001_initial_schema.sql`, refreshed in `002_*.sql`). Backend code currently runs as the Postgres role and so bypasses RLS — treat the policies as the authoritative authorisation contract and mirror them in handler code.
+- QR tokens are random UUIDs with a TTL (default 10 min); they resolve to a profile preview, never to credentials.
+- Storage objects are private; serve via signed URLs only.
 
-**Migrations** (`db/migrate.py`): `apply_migrations()` reads `supabase/migrations/*.sql` in order and tracks applied files in a `schema_migrations` table. Called at app startup when using Postgres.
+## Storage
 
-**Schemas**: All Pydantic models (requests, responses, enums) in `schemas/domain.py`.
+- Bucket `receipts` — invoice photos, scanned bills. Path: `<debt_id>/<uuid>-<filename>`.
+- Bucket `voice-notes` — optional voice memos. Same path convention.
+- RLS in `003_storage_policies.sql` allows read/write only when the caller is creditor or debtor of the debt encoded in the first path segment.
 
-**Config** (`core/config.py`): `pydantic-settings` with `.env` support.
+## Testing
 
-### Auth model
+Tests use `FastAPI.TestClient` via the `client` fixture. `conftest.py` forces `REPOSITORY_TYPE=memory` and provides `auth_headers(user_id, ...)` for demo auth. The `reset_repository` autouse fixture clears state between tests. Add a test for any new state transition.
 
-`core/security.py` → `get_current_user` FastAPI dependency:
-- **Non-production** (`APP_ENV != production`): accepts demo headers (`x-demo-user-id`, `x-demo-name`, `x-demo-phone`) — no JWT needed. Used in tests.
-- **Production / Docker**: requires `Authorization: Bearer <JWT>` validated against `SUPABASE_JWT_SECRET`.
+## Coding conventions
 
-### Frontend (`frontend/src/`)
+- Backend: Ruff (`line-length=150`, `py312`), Pyflakes, pycodestyle, isort, pep8-naming, pyupgrade, flake8-bugbear. `E501` ignored.
+- Frontend: TypeScript strict, components in `pages/` (one per route) and `components/` (reusable). New strings → `lib/i18n.ts` (Arabic + English).
+- New columns / enum values → migration file under `supabase/migrations/`. Don't edit `001_*.sql` retroactively.
 
-- `App.tsx` — `AuthProvider` + `BrowserRouter`; two route groups: `/` (AuthPage) and `/*` (AppShell with Layout + page routes)
-- `contexts/AuthContext.tsx` — JWT state; restores session from localStorage on mount; provides `signIn`, `signUp`, `signOut`, `user`, `isAuthenticated`
-- `lib/auth.ts` — raw sign-up/sign-in functions; token storage in localStorage (`auth_token`, `refresh_token`, `auth_user`, `auth_expires_at`)
-- `lib/api.ts` — `apiRequest<T>()` reads token from localStorage, sets `Authorization: Bearer`
-- `lib/types.ts` — TypeScript types mirroring backend schemas
-- `lib/i18n.ts` — Arabic/English translations; Arabic-first, RTL/LTR via `document.dir`
-- `components/Layout.tsx` — sidebar with `NavLink` routing, user info, language toggle, sign-out; also exports `Stat`, `Panel`, `Input` sub-components
-- `components/ProtectedRoute.tsx` — redirects to `/` if not authenticated
-- `pages/` — one file per route: `AuthPage`, `DashboardPage`, `DebtsPage`, `ProfilePage`, `QRPage`, `GroupsPage`, `AIPage`, `NotificationsPage`
+## Detailed docs
 
-### Testing patterns
-
-Tests use `FastAPI.TestClient` via a `client` fixture. `conftest.py` forces `REPOSITORY_TYPE=memory` so tests never touch Postgres. The `reset_repository` fixture (autouse) clears state between tests. Use `auth_headers(user_id, name, phone)` to build demo auth headers.
+- [`docs/product-requirements.md`](./docs/product-requirements.md) — problem, solution, actors, features.
+- [`docs/product-requirements-ar.md`](./docs/product-requirements-ar.md) — Arabic mirror.
+- [`docs/pages-and-use-cases.md`](./docs/pages-and-use-cases.md) — actor → page → UC mapping.
+- [`docs/debt-lifecycle.md`](./docs/debt-lifecycle.md) — canonical 8-state machine.
+- [`docs/mvp-scope.md`](./docs/mvp-scope.md) — MoSCoW.
+- [`docs/roadmap.md`](./docs/roadmap.md) — hackathon, post-MVP, future.
+- [`docs/user-flows.md`](./docs/user-flows.md) — creditor / debtor / shared flows.
+- [`docs/local-development.md`](./docs/local-development.md) — exact local setup.
+- [`docs/supabase.md`](./docs/supabase.md) — Auth, DB, Storage, RLS, CLI workflow.
 
 ## Key environment variables
 
 | Variable | Purpose |
 |---|---|
-| `REPOSITORY_TYPE` | `memory` (default) or `postgres` |
-| `DATABASE_URL` | Postgres connection string (required when `REPOSITORY_TYPE=postgres`) |
-| `GOTRUE_URL` | GoTrue service URL, e.g. `http://auth:9999` (required for auth proxy) |
-| `SUPABASE_JWT_SECRET` | JWT secret; must match GoTrue's `GOTRUE_JWT_SECRET` |
-| `APP_ENV` | `local` / `staging` / `production` — gates demo-header auth |
-| `SEED_DEMO_DATA` | Seeds demo users/debts on startup (in-memory only) |
-| `OPENAI_API_KEY` | AI voice/chat stubs |
-
-## Linting config
-
-Backend uses Ruff (`line-length=150`, target `py312`): Pyflakes, pycodestyle, isort, pep8-naming, pyupgrade, flake8-bugbear. `E501` ignored.
+| `APP_ENV` | `local` / `staging` / `production` — gates demo-header auth. |
+| `REPOSITORY_TYPE` | `memory` (default; tests) or `postgres`. |
+| `DATABASE_URL` | Postgres connection string when `REPOSITORY_TYPE=postgres`. |
+| `SUPABASE_URL` | Supabase API URL (local: `http://127.0.0.1:55321`). |
+| `SUPABASE_ANON_KEY` | Public anon key for the frontend / proxy. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service-role key (backend admin operations only). |
+| `SUPABASE_JWT_SECRET` | HS256 secret used to validate access tokens. |
+| `SUPABASE_STORAGE_BUCKET` | Default bucket for legacy attachment paths. |
+| `SEED_DEMO_DATA` | In-memory only — seeds demo users / debts at boot. |
+| `OPENAI_API_KEY` | Optional; AI voice / chat stubs. |
+| `WHATSAPP_PROVIDER` | `mock` (default). Real provider config is post-MVP. |

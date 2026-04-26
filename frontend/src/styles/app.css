@@ -487,7 +487,9 @@ textarea { min-height: 100px; resize: vertical; }
   white-space: nowrap;
 }
 
-.status-badge.waiting_for_confirmation {
+.status-badge.pending_confirmation,
+.status-badge.edit_requested,
+.status-badge.payment_pending_confirmation {
   background: var(--warning-light);
   color: #b45309;
 }
@@ -502,7 +504,13 @@ textarea { min-height: 100px; resize: vertical; }
   color: #047857;
 }
 
-.status-badge.delay {
+.status-badge.rejected,
+.status-badge.cancelled {
+  background: var(--neutral-light, #e5e7eb);
+  color: #475569;
+}
+
+.status-badge.overdue {
   background: var(--danger-light);
   color: #b91c1c;
   animation: pulse-badge 2s infinite;
@@ -952,4 +960,104 @@ pre, .answer {
 @media (max-width: 600px) {
   .content-grid { grid-template-columns: 1fr; }
   .wide-panel { grid-column: auto; }
+}
+
+/* ── Landing page ─────────────────────────────────────────── */
+.landing-page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+.landing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.landing-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.landing-brand strong {
+  font-size: 1.5rem;
+}
+
+.landing-brand span {
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.landing-hero {
+  text-align: center;
+  max-width: 720px;
+  margin: 2rem auto 0;
+}
+
+.landing-hero h1 {
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  margin: 0 0 1rem;
+}
+
+.landing-hero p {
+  font-size: 1.05rem;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.landing-cta {
+  margin-top: 2rem;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.landing-roles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.landing-roles article {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+}
+
+.landing-footer {
+  margin-top: auto;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: #fff;
+  color: var(--primary, #2563eb);
+  border: 1px solid var(--primary, #2563eb);
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
 }
