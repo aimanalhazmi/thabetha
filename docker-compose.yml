@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_local
+      POSTGRES_DB: thabetha
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init-gotrue.sql:/docker-entrypoint-initdb.d/001_init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: local
+      DATABASE_URL: postgresql://thabetha:thabetha_local@db:5432/thabetha
+      SUPABASE_JWT_SECRET: super-secret-jwt-token-for-local-dev-min-32-chars!!
+      REPOSITORY_TYPE: postgres
+      SEED_DEMO_DATA: "false"
+
+volumes:
+  pgdata:

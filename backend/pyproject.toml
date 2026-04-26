@@ -4,7 +4,18 @@ version = "0.1.0"
 description = "Smart debt tracking with two‑party confirmation, reminders, Trust Score and QR profiles"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "bcrypt>=5.0.0",
+    "fastapi>=0.136.1",
+    "httpx>=0.28.1",
+    "psycopg[binary]>=3.2.0",
+    "psycopg-pool>=3.2.0",
+    "pydantic-settings>=2.14.0",
+    "python-jose>=3.5.0",
+    "python-multipart>=0.0.26",
+    "supabase>=2.29.0",
+    "uvicorn>=0.46.0",
+]
 
 
 [build-system]
@@ -16,7 +27,7 @@ packages = ["app"]
 
 [project.scripts]
 main = "app.main:main"
-#server = "app.main:start_server"
+server = "app.main:main"
 
 
 [tool.mypy]
@@ -51,12 +62,14 @@ ignore = [
 ]
 
 [tool.vulture]
-paths = ["src"]
+paths = ["app"]
 exclude = [".tmp"]
 min_confidence = 80
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
     "ruff>=0.15.5",
 ]
