@@ -1,9 +1,29 @@
-# Byte-compiled / optimized / DLL files
+# Secrets & environment
+.env
+.envrc
+
+#  macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+
+#  Editor / IDE
+.vscode/
+# JetBrains / PyCharm / IntelliJ / Cursor
+.idea/
+*.iml
+# Vim / Neovim swap files
+*.swp
+*.swo
+*~
+
+#  Python
 __pycache__/
 *.py[codz]
 *$py.class
-
-# C extensions
 *.so
 
 # Virtual environments
@@ -11,9 +31,6 @@ __pycache__/
 venv/
 env/
 ENV/
-
-# uv – keep uv.lock committed (ensures reproducible CI/Docker builds)
-# uv.lock  ← do NOT ignore
 
 # Build / packaging artefacts
 build/
@@ -25,8 +42,6 @@ MANIFEST
 wheels/
 sdist/
 
-.env
-.idea/
 # Test & quality tool caches
 .pytest_cache/
 .ruff_cache/
@@ -51,7 +66,7 @@ pip-log.txt
 tempCodeRunnerFile.py
 .pypirc
 
-# ── Node / Frontend ───────────────────────────────────────────────────────────
+# Node / Frontend
 node_modules/
 
 # Vite build output (generated; never commit)
@@ -67,18 +82,15 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# ── Docker ────────────────────────────────────────────────────────────────────
-# Don't ignore docker-compose.yml – it's source.
-# Ignore any locally overridden compose files that may hold credentials.
+# Docker
 docker-compose.override.yml
 docker-compose.local.yml
 
-# ── Supabase local CLI ────────────────────────────────────────────────────────
+# Supabase local CLI
 supabase/.branches/
 supabase/.temp/
 
-# ── Misc ──────────────────────────────────────────────────────────────────────
-# Byte-order mark artefacts, OS thumbnails, etc.
+#  Misc
 Thumbs.db
 ehthumbs.db
 Desktop.ini
