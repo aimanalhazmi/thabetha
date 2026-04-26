@@ -11,18 +11,16 @@ def utcnow() -> datetime:
 
 
 class AccountType(StrEnum):
-    individual = "individual"
-    business = "business"
+    creditor = "creditor"
+    debtor = "debtor"
+    both = "both"
 
 
 class DebtStatus(StrEnum):
-    pending_confirmation = "pending_confirmation"
+    waiting_for_confirmation = "waiting_for_confirmation"
     active = "active"
-    overdue = "overdue"
-    payment_pending_confirmation = "payment_pending_confirmation"
     paid = "paid"
-    rejected = "rejected"
-    change_requested = "change_requested"
+    delay = "delay"
 
 
 class AttachmentType(StrEnum):
@@ -35,7 +33,6 @@ class NotificationType(StrEnum):
     debt_created = "debt_created"
     debt_confirmed = "debt_confirmed"
     debt_rejected = "debt_rejected"
-    debt_change_requested = "debt_change_requested"
     due_soon = "due_soon"
     overdue = "overdue"
     payment_requested = "payment_requested"
@@ -54,6 +51,10 @@ class ProfileUpdate(BaseModel):
     account_type: AccountType | None = None
     tax_id: str | None = None
     commercial_registration: str | None = None
+    shop_name: str | None = None
+    activity_type: str | None = None
+    shop_location: str | None = None
+    shop_description: str | None = None
     whatsapp_enabled: bool | None = None
     ai_enabled: bool | None = None
 
@@ -63,14 +64,18 @@ class ProfileOut(BaseModel):
     name: str
     phone: str
     email: str | None = None
-    account_type: AccountType = AccountType.individual
+    account_type: AccountType = AccountType.debtor
     tax_id: str | None = None
     commercial_registration: str | None = None
+    shop_name: str | None = None
+    activity_type: str | None = None
+    shop_location: str | None = None
+    shop_description: str | None = None
     whatsapp_enabled: bool = True
     ai_enabled: bool = False
     trust_score: int = Field(default=50, ge=0, le=100)
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class BusinessProfileIn(BaseModel):
@@ -306,7 +311,7 @@ class SignUpRequest(BaseModel):
     phone: str = Field(min_length=5)
     email: str = Field(min_length=5)
     password: str = Field(min_length=6)
-    account_type: AccountType = AccountType.individual
+    account_type: AccountType = AccountType.debtor
     tax_id: str | None = None
     commercial_registration: str | None = None
 

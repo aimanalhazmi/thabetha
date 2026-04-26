@@ -1,24 +1,24 @@
-import { getStoredToken } from "./auth";
+import { supabase } from './supabaseClient';
 
-const API_BASE = "/api/v1";
+const API_BASE = '/api/v1';
 
 /**
  * Thin wrapper around `fetch` that:
  *  - prepends the API base path
- *  - injects the Bearer token from localStorage
+ *  - injects the Bearer token from Supabase session
  *  - sets JSON content-type for requests with a body
  *  - throws on non-2xx responses
  */
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
 
-  const token = getStoredToken();
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    headers.set('Authorization', `Bearer ${session.access_token}`);
   }
 
-  if (init?.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+  if (init?.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
   }
 
   const response = await fetch(`${API_BASE}${path}`, {

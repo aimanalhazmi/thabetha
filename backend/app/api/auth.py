@@ -1,203 +1,123 @@
-"""Auth endpoints — sign-up / sign-in with bcrypt password hashing and HS256 JWTs."""
+"""Auth endpoints — proxy to Supabase GoTrue for sign-up / sign-in / refresh."""
 
-import secrets
-import uuid
-from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
-import bcrypt
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from jose import JWTError, jwt
-from psycopg.rows import dict_row
 
 from app.core.config import Settings, get_settings
-from app.core.security import AuthenticatedUser
-from app.repositories import Repository, get_repository
-from app.schemas.domain import RefreshRequest, SignInRequest, SignUpRequest
 
 router = APIRouter()
 
-_ACCESS_EXPIRE = timedelta(hours=1)
-_REFRESH_EXPIRE = timedelta(days=7)
-_ALGORITHM = "HS256"
+
+def _gotrue_url(settings: Settings) -> str:
+    """Get the GoTrue base URL from Supabase URL."""
+    base = settings.supabase_url or "http://127.0.0.1:55321"
+    return f"{base}/auth/v1"
 
 
-def _make_access_token(user_id: str, email: str, name: str, phone: str, secret: str) -> str:
-    now = datetime.now(timezone.utc)
-    payload = {
-        "sub": user_id,
-        "email": email,
-        "phone": phone,
-        "user_metadata": {"name": name, "phone": phone},
-        "role": "authenticated",
-        "iat": int(now.timestamp()),
-        "exp": int((now + _ACCESS_EXPIRE).timestamp()),
+def _headers(settings: Settings) -> dict[str, str]:
+    """Headers required for GoTrue API calls."""
+    key = settings.supabase_anon_key or ""
+    return {
+        "apikey": key,
+        "Content-Type": "application/json",
     }
-    return jwt.encode(payload, secret, algorithm=_ALGORITHM)
-
-
-def _make_refresh_token(user_id: str, secret: str) -> str:
-    now = datetime.now(timezone.utc)
-    payload = {
-        "sub": user_id,
-        "type": "refresh",
-        "jti": secrets.token_hex(16),
-        "iat": int(now.timestamp()),
-        "exp": int((now + _REFRESH_EXPIRE).timestamp()),
-    }
-    return jwt.encode(payload, secret, algorithm=_ALGORITHM)
-
-
-def _require_secret(settings: Settings) -> str:
-    if not settings.supabase_jwt_secret:
-        raise HTTPException(status_code=500, detail="JWT secret is not configured (SUPABASE_JWT_SECRET)")
-    return settings.supabase_jwt_secret
-
-
-def _require_pool(repo: Repository):
-    from app.repositories.postgres import PostgresRepository
-
-    if not isinstance(repo, PostgresRepository):
-        raise HTTPException(status_code=503, detail="Auth requires REPOSITORY_TYPE=postgres")
-    return repo._pool
 
 
 @router.post("/signup")
 def signup(
-    payload: SignUpRequest,
+    payload: dict[str, Any],
     settings: Annotated[Settings, Depends(get_settings)],
-    repo: Annotated[Repository, Depends(get_repository)],
 ) -> dict[str, Any]:
-    secret = _require_secret(settings)
-    pool = _require_pool(repo)
+    """Sign up via Supabase Auth. Sends verification email."""
+    gotrue = _gotrue_url(settings)
+    headers = _headers(settings)
 
-    pw_hash = bcrypt.hashpw(payload.password.encode(), bcrypt.gensalt()).decode()
-    user_id = str(uuid.uuid4())
+    # Determine account type based on tax_id
+    tax_id = payload.get("tax_id")
+    account_type = "creditor" if tax_id else "debtor"
 
-    with pool.connection() as conn:
-        try:
-            conn.execute(
-                "INSERT INTO public.users (id, email, password_hash, name, phone) VALUES (%s, %s, %s, %s, %s)",
-                (user_id, payload.email, pw_hash, payload.name, payload.phone),
-            )
-            conn.commit()
-        except Exception as exc:
-            msg = str(exc).lower()
-            if "unique" in msg or "duplicate" in msg:
-                raise HTTPException(status_code=422, detail="Email already registered") from exc
-            raise
-
-    # Create profile row via repository
-    auth_user = AuthenticatedUser(id=user_id, name=payload.name, phone=payload.phone, email=payload.email)
-    repo.ensure_profile(auth_user)
-
-    if payload.account_type.value == "business" or payload.tax_id or payload.commercial_registration:
-        from app.schemas.domain import ProfileUpdate
-
-        repo.update_profile(
-            auth_user,
-            ProfileUpdate(
-                account_type=payload.account_type,
-                tax_id=payload.tax_id,
-                commercial_registration=payload.commercial_registration,
-            ),
-        )
-
-    access_token = _make_access_token(user_id, payload.email, payload.name, payload.phone, secret)
-    refresh_token = _make_refresh_token(user_id, secret)
-
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "expires_in": int(_ACCESS_EXPIRE.total_seconds()),
-        "user": {
-            "id": user_id,
-            "email": payload.email,
-            "user_metadata": {"name": payload.name, "phone": payload.phone},
+    body = {
+        "email": payload["email"],
+        "password": payload["password"],
+        "data": {
+            "name": payload.get("name", ""),
+            "phone": payload.get("phone", ""),
+            "account_type": account_type,
+            "tax_id": tax_id,
+            "commercial_registration": payload.get("commercial_registration"),
         },
     }
+
+    try:
+        resp = httpx.post(f"{gotrue}/signup", json=body, headers=headers, timeout=10)
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Auth service unavailable: {exc}") from exc
+
+    if resp.status_code >= 400:
+        detail = resp.json().get("msg", resp.text) if resp.headers.get("content-type", "").startswith("application/json") else resp.text
+        raise HTTPException(status_code=resp.status_code, detail=detail)
+
+    return resp.json()
 
 
 @router.post("/signin")
 def signin(
-    payload: SignInRequest,
+    payload: dict[str, Any],
     settings: Annotated[Settings, Depends(get_settings)],
-    repo: Annotated[Repository, Depends(get_repository)],
 ) -> dict[str, Any]:
-    secret = _require_secret(settings)
-    pool = _require_pool(repo)
+    """Sign in via Supabase Auth (email + password)."""
+    gotrue = _gotrue_url(settings)
+    headers = _headers(settings)
 
-    with pool.connection() as conn:
-        conn.row_factory = dict_row
-        row = conn.execute(
-            "SELECT id, email, password_hash, name, phone FROM public.users WHERE email = %s",
-            (payload.email,),
-        ).fetchone()
-
-    if row is None or not bcrypt.checkpw(payload.password.encode(), row["password_hash"].encode()):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    user_id = str(row["id"])
-    name = row["name"] or ""
-    phone = row["phone"] or ""
-
-    access_token = _make_access_token(user_id, payload.email, name, phone, secret)
-    refresh_token = _make_refresh_token(user_id, secret)
-
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "expires_in": int(_ACCESS_EXPIRE.total_seconds()),
-        "user": {
-            "id": user_id,
-            "email": payload.email,
-            "user_metadata": {"name": name, "phone": phone},
-        },
+    body = {
+        "email": payload["email"],
+        "password": payload["password"],
     }
+
+    try:
+        resp = httpx.post(
+            f"{gotrue}/token?grant_type=password",
+            json=body,
+            headers=headers,
+            timeout=10,
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Auth service unavailable: {exc}") from exc
+
+    if resp.status_code >= 400:
+        detail = resp.json().get("error_description", resp.text) if resp.headers.get("content-type", "").startswith("application/json") else resp.text
+        raise HTTPException(status_code=resp.status_code, detail=detail)
+
+    return resp.json()
 
 
 @router.post("/refresh")
 def refresh_token(
-    payload: RefreshRequest,
+    payload: dict[str, Any],
     settings: Annotated[Settings, Depends(get_settings)],
-    repo: Annotated[Repository, Depends(get_repository)],
 ) -> dict[str, Any]:
-    secret = _require_secret(settings)
-    pool = _require_pool(repo)
+    """Refresh tokens via Supabase Auth."""
+    gotrue = _gotrue_url(settings)
+    headers = _headers(settings)
+
+    body = {"refresh_token": payload["refresh_token"]}
 
     try:
-        claims = jwt.decode(payload.refresh_token, secret, algorithms=[_ALGORITHM])
-    except JWTError as exc:
-        raise HTTPException(status_code=401, detail="Invalid refresh token") from exc
+        resp = httpx.post(
+            f"{gotrue}/token?grant_type=refresh_token",
+            json=body,
+            headers=headers,
+            timeout=10,
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Auth service unavailable: {exc}") from exc
 
-    if claims.get("type") != "refresh":
-        raise HTTPException(status_code=401, detail="Not a refresh token")
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text)
 
-    user_id = claims.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    with pool.connection() as conn:
-        conn.row_factory = dict_row
-        row = conn.execute(
-            "SELECT email, name, phone FROM public.users WHERE id = %s",
-            (user_id,),
-        ).fetchone()
-
-    if row is None:
-        raise HTTPException(status_code=401, detail="User not found")
-
-    access_token = _make_access_token(user_id, row["email"], row["name"] or "", row["phone"] or "", secret)
-    new_refresh = _make_refresh_token(user_id, secret)
-
-    return {
-        "access_token": access_token,
-        "refresh_token": new_refresh,
-        "token_type": "bearer",
-        "expires_in": int(_ACCESS_EXPIRE.total_seconds()),
-    }
+    return resp.json()
 
 
 @router.post("/signout")
