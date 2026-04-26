@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
+import { ToastProvider } from "./contexts/ToastContext";
 import { Layout } from "./components/Layout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AuthPage } from "./pages/AuthPage";
@@ -43,7 +44,7 @@ function AppShell({ language, onToggleLanguage }: ShellProps) {
         currentPageLabel={currentLabel}
       >
         <Routes>
-          <Route path="/dashboard" element={<DashboardPage language={language} message="" key={refreshKey} />} />
+          <Route path="/dashboard" element={<DashboardPage language={language} key={refreshKey} />} />
           <Route path="/debts" element={<DebtsPage language={language} key={refreshKey} />} />
           <Route path="/profile" element={<ProfilePage language={language} key={refreshKey} />} />
           <Route path="/qr" element={<QRPage language={language} key={refreshKey} />} />
@@ -69,12 +70,14 @@ export default function App() {
 
   return (
     <AuthProvider>
+      <ToastProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<AuthPage language={language} onToggleLanguage={toggleLanguage} />} />
           <Route path="/*" element={<AppShell language={language} onToggleLanguage={toggleLanguage} />} />
         </Routes>
       </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 }

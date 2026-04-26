@@ -76,7 +76,38 @@ export type TranslationKey =
   | 'recentDebts'
   | 'allStatuses'
   | 'noDebtsYet'
-  | 'loading';
+  | 'loading'
+  | 'markRead'
+  | 'rejected'
+  | 'changeRequested'
+  | 'paymentPendingConfirmation'
+  | 'requestChange'
+  | 'changeMessage'
+  | 'newAmount'
+  | 'newDueDate'
+  | 'submitChangeRequest'
+  | 'scanQr'
+  | 'qrToken'
+  | 'lookupDebtor'
+  | 'debtorFound'
+  | 'invalidQrToken'
+  | 'creditorView'
+  | 'debtorView'
+  | 'confidence'
+  | 'shopDescription'
+  | 'cancel'
+  | 'confirmReject'
+  | 'from'
+  | 'useDraft'
+  | 'unread'
+  | 'dueSoonWarning'
+  | 'creditorLabel'
+  | 'totalOwed'
+  | 'myDebtors'
+  | 'noUnread'
+  | 'viewAll'
+  | 'debtCreatedCta'
+  | 'noDebtsCta';
 
 type Translations = Record<TranslationKey, string>;
 
@@ -156,6 +187,37 @@ const ar: Translations = {
   allStatuses: 'جميع الحالات',
   noDebtsYet: 'لا توجد ديون حتى الآن',
   loading: 'جاري التحميل...',
+  markRead: 'تحديد كمقروء',
+  rejected: 'مرفوض',
+  changeRequested: 'طلب تعديل',
+  paymentPendingConfirmation: 'بانتظار تأكيد الدفع',
+  requestChange: 'طلب تعديل',
+  changeMessage: 'رسالة التعديل',
+  newAmount: 'المبلغ الجديد (اختياري)',
+  newDueDate: 'تاريخ استحقاق جديد (اختياري)',
+  submitChangeRequest: 'إرسال طلب التعديل',
+  scanQr: 'بحث برمز QR',
+  qrToken: 'رمز QR',
+  lookupDebtor: 'بحث عن المدين',
+  debtorFound: 'تم العثور على المدين',
+  invalidQrToken: 'رمز QR غير صالح أو منتهي الصلاحية',
+  creditorView: 'عرض الدائن',
+  debtorView: 'عرض المدين',
+  confidence: 'الثقة',
+  shopDescription: 'وصف المتجر',
+  cancel: 'إلغاء',
+  confirmReject: 'تأكيد الرفض',
+  from: 'من',
+  useDraft: 'إنشاء دين من هذه المسودة',
+  unread: 'غير مقروء',
+  dueSoonWarning: 'الاستحقاق خلال 3 أيام',
+  creditorLabel: 'الدائن',
+  totalOwed: 'إجمالي ما عليك',
+  myDebtors: 'مدينوني',
+  noUnread: 'لا إشعارات جديدة',
+  viewAll: 'عرض الكل',
+  debtCreatedCta: 'أنشئ دينك الأول لتبدأ المتابعة',
+  noDebtsCta: 'لا توجد ديون في هذه الفئة',
 };
 
 const en: Translations = {
@@ -234,6 +296,37 @@ const en: Translations = {
   allStatuses: 'All Statuses',
   noDebtsYet: 'No debts yet',
   loading: 'Loading...',
+  markRead: 'Mark as Read',
+  rejected: 'Rejected',
+  changeRequested: 'Change Requested',
+  paymentPendingConfirmation: 'Payment Pending Confirmation',
+  requestChange: 'Request Change',
+  changeMessage: 'Change Message',
+  newAmount: 'New Amount (optional)',
+  newDueDate: 'New Due Date (optional)',
+  submitChangeRequest: 'Submit Change Request',
+  scanQr: 'Scan QR Code',
+  qrToken: 'QR Token',
+  lookupDebtor: 'Look Up Debtor',
+  debtorFound: 'Debtor Found',
+  invalidQrToken: 'Invalid or expired QR token',
+  creditorView: 'Creditor View',
+  debtorView: 'Debtor View',
+  confidence: 'Confidence',
+  shopDescription: 'Shop Description',
+  cancel: 'Cancel',
+  confirmReject: 'Confirm Reject',
+  from: 'From',
+  useDraft: 'Create Debt from Draft',
+  unread: 'Unread',
+  dueSoonWarning: 'Due within 3 days',
+  creditorLabel: 'Creditor',
+  totalOwed: 'Total You Owe',
+  myDebtors: 'My Debtors',
+  noUnread: 'No new notifications',
+  viewAll: 'View All',
+  debtCreatedCta: 'Create your first debt to start tracking',
+  noDebtsCta: 'No debts in this category',
 };
 
 const translations: Record<Language, Translations> = { ar, en };

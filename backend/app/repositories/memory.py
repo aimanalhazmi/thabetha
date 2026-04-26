@@ -81,7 +81,7 @@ class InMemoryRepository(Repository):
                 name=user.name or user.email or user.phone or f"User {user.id[:6]}",
                 phone=user.phone or "+000000000",
                 email=user.email,
-                account_type=AccountType.individual,
+                account_type=AccountType.debtor,
                 created_at=now,
                 updated_at=now,
             )
@@ -154,16 +154,19 @@ class InMemoryRepository(Repository):
         with self._lock:
             self._refresh_overdue()
             now = utcnow()
+            creditor_profile = self.profiles.get(creditor_id)
+            creditor_name = creditor_profile.name if creditor_profile else f"User {creditor_id[:6]}"
             debt = DebtOut(
                 id=str(uuid4()),
                 creditor_id=creditor_id,
+                creditor_name=creditor_name,
                 debtor_id=payload.debtor_id,
                 debtor_name=payload.debtor_name,
                 amount=payload.amount,
                 currency=payload.currency,
                 description=payload.description,
                 due_date=payload.due_date,
-                status=DebtStatus.pending_confirmation,
+                status=DebtStatus.waiting_for_confirmation,
                 invoice_url=payload.invoice_url,
                 notes=payload.notes,
                 group_id=payload.group_id,
@@ -209,7 +212,7 @@ class InMemoryRepository(Repository):
             debt = self.get_authorized_debt(user_id, debt_id)
             if debt.debtor_id != user_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the debtor can accept this debt")
-            if debt.status not in {DebtStatus.pending_confirmation, DebtStatus.change_requested}:
+            if debt.status not in {DebtStatus.waiting_for_confirmation, DebtStatus.change_requested}:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt cannot be accepted from its current state")
             debt = debt.model_copy(update={"status": DebtStatus.active, "confirmed_at": utcnow(), "updated_at": utcnow()})
             self.debts[debt_id] = debt
@@ -222,7 +225,7 @@ class InMemoryRepository(Repository):
             debt = self.get_authorized_debt(user_id, debt_id)
             if debt.debtor_id != user_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the debtor can reject this debt")
-            if debt.status != DebtStatus.pending_confirmation:
+            if debt.status != DebtStatus.waiting_for_confirmation:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt cannot be rejected from its current state")
             debt = debt.model_copy(update={"status": DebtStatus.rejected, "updated_at": utcnow()})
             self.debts[debt_id] = debt
@@ -235,7 +238,7 @@ class InMemoryRepository(Repository):
             debt = self.get_authorized_debt(user_id, debt_id)
             if debt.debtor_id != user_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the debtor can request changes")
-            if debt.status != DebtStatus.pending_confirmation:
+            if debt.status != DebtStatus.waiting_for_confirmation:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only pending debts can be changed")
             debt = debt.model_copy(update={"status": DebtStatus.change_requested, "updated_at": utcnow()})
             self.debts[debt_id] = debt
@@ -248,7 +251,7 @@ class InMemoryRepository(Repository):
             debt = self.get_authorized_debt(user_id, debt_id)
             if debt.debtor_id != user_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the debtor can mark the debt paid")
-            if debt.status not in {DebtStatus.active, DebtStatus.overdue}:
+            if debt.status not in {DebtStatus.active, DebtStatus.delay}:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt must be active or overdue")
             now = utcnow()
             debt = debt.model_copy(update={"status": DebtStatus.payment_pending_confirmation, "updated_at": now})
@@ -316,7 +319,7 @@ class InMemoryRepository(Repository):
         self._refresh_overdue()
         profile = self.get_profile(user_id)
         debts = [debt for debt in self.list_debts_for_user(user_id) if debt.debtor_id == user_id]
-        current = [debt for debt in debts if debt.status in {DebtStatus.active, DebtStatus.overdue, DebtStatus.payment_pending_confirmation}]
+        current = [debt for debt in debts if debt.status in {DebtStatus.active, DebtStatus.delay, DebtStatus.payment_pending_confirmation}]
         total = sum((debt.amount for debt in current), Decimal("0"))
         today = date.today()
         due_soon = [debt for debt in current if today <= debt.due_date <= today + timedelta(days=3)]
@@ -324,7 +327,7 @@ class InMemoryRepository(Repository):
         return DebtorDashboardOut(
             total_current_debt=total,
             due_soon_count=len(due_soon),
-            overdue_count=len([debt for debt in current if debt.status == DebtStatus.overdue]),
+            overdue_count=len([debt for debt in current if debt.status == DebtStatus.delay]),
             creditors=creditors,
             trust_score=profile.trust_score,
             debts=debts,
@@ -333,7 +336,7 @@ class InMemoryRepository(Repository):
     def creditor_dashboard(self, user_id: str) -> CreditorDashboardOut:
         self._refresh_overdue()
         debts = [debt for debt in self.list_debts_for_user(user_id) if debt.creditor_id == user_id]
-        receivable = [debt for debt in debts if debt.status in {DebtStatus.active, DebtStatus.overdue, DebtStatus.payment_pending_confirmation}]
+        receivable = [debt for debt in debts if debt.status in {DebtStatus.active, DebtStatus.delay, DebtStatus.payment_pending_confirmation}]
         total = sum((debt.amount for debt in receivable), Decimal("0"))
         debtor_ids = {debt.debtor_id for debt in debts if debt.debtor_id}
         best_customers = sorted(
@@ -341,7 +344,7 @@ class InMemoryRepository(Repository):
             key=lambda profile: profile.trust_score,
             reverse=True,
         )[:5]
-        overdue = [debt for debt in debts if debt.status == DebtStatus.overdue]
+        overdue = [debt for debt in debts if debt.status == DebtStatus.delay]
         alerts = [f"{debt.debtor_name} is overdue on {debt.amount} {debt.currency}" for debt in overdue]
         return CreditorDashboardOut(
             total_receivable=total,
@@ -486,7 +489,7 @@ class InMemoryRepository(Repository):
         today = date.today()
         for debt in list(self.debts.values()):
             if debt.status == DebtStatus.active and debt.due_date < today:
-                updated = debt.model_copy(update={"status": DebtStatus.overdue, "updated_at": utcnow()})
+                updated = debt.model_copy(update={"status": DebtStatus.delay, "updated_at": utcnow()})
                 self.debts[debt.id] = updated
                 self._add_event(debt.id, "system", "debt_overdue", "Debt moved to overdue")
                 if debt.debtor_id and debt.id not in self._overdue_penalties:

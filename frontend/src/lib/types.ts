@@ -1,7 +1,14 @@
 /** Shared type definitions for the Thabetha frontend. */
 
 export type AccountType = 'creditor' | 'debtor' | 'both';
-export type DebtStatus = 'waiting_for_confirmation' | 'active' | 'paid' | 'delay';
+export type DebtStatus =
+  | 'waiting_for_confirmation'
+  | 'active'
+  | 'paid'
+  | 'delay'
+  | 'rejected'
+  | 'change_requested'
+  | 'payment_pending_confirmation';
 export type Language = 'ar' | 'en';
 
 export interface Profile {
@@ -23,12 +30,15 @@ export interface Profile {
 
 export interface QRToken {
   token: string;
+  user_id: string;
   expires_at: string;
+  created_at: string;
 }
 
 export interface Debt {
   id: string;
   creditor_id: string;
+  creditor_name: string;
   debtor_id: string | null;
   debtor_name: string;
   amount: string;
@@ -84,4 +94,6 @@ export interface VoiceDraft {
   currency: string;
   description: string | null;
   due_date: string | null;
+  confidence: number;
+  raw_transcript: string;
 }

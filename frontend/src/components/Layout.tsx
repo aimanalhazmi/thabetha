@@ -1,19 +1,17 @@
 import { Bell, Bot, CreditCard, Languages, LayoutDashboard, LogOut, QrCode, RefreshCw, Store, UserRound, Users } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { apiRequest } from '../lib/api';
 import { t, type TranslationKey } from '../lib/i18n';
-import type { Language } from '../lib/types';
+import type { Language, NotificationItem } from '../lib/types';
 
-const navItems: Array<{ path: string; icon: typeof LayoutDashboard; label: TranslationKey }> = [
-  { path: '/dashboard', icon: LayoutDashboard, label: 'dashboard' },
-  { path: '/debts', icon: CreditCard, label: 'debts' },
-  { path: '/profile', icon: UserRound, label: 'profile' },
-  { path: '/qr', icon: QrCode, label: 'qr' },
-  { path: '/groups', icon: Users, label: 'groups' },
-  { path: '/ai', icon: Bot, label: 'ai' },
-  { path: '/notifications', icon: Bell, label: 'notifications' },
-];
+interface NavItemDef {
+  path: string;
+  icon: typeof LayoutDashboard;
+  label: TranslationKey;
+  badge?: number;
+}
 
 interface Props {
   language: Language;
@@ -27,6 +25,24 @@ export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const tr = (key: TranslationKey) => t(language, key);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    void apiRequest<NotificationItem[]>('/notifications')
+      .then(notifs => setUnreadCount(notifs.filter(n => !n.read_at).length))
+      .catch(() => {});
+  }, [user]);
+
+  const navItems: NavItemDef[] = [
+    { path: '/dashboard', icon: LayoutDashboard, label: 'dashboard' },
+    { path: '/debts', icon: CreditCard, label: 'debts' },
+    { path: '/profile', icon: UserRound, label: 'profile' },
+    { path: '/qr', icon: QrCode, label: 'qr' },
+    { path: '/groups', icon: Users, label: 'groups' },
+    { path: '/ai', icon: Bot, label: 'ai' },
+    { path: '/notifications', icon: Bell, label: 'notifications', badge: unreadCount },
+  ];
 
   async function handleSignOut() {
     await signOut();
@@ -84,6 +100,9 @@ export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel
                 >
                   <Icon size={18} />
                   <span>{tr(item.label)}</span>
+                  {!!item.badge && item.badge > 0 && (
+                    <span className="nav-badge">{item.badge > 9 ? '9+' : item.badge}</span>
+                  )}
                 </NavLink>
               );
             })}
@@ -105,7 +124,7 @@ export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel
       <section className="workspace">
         <header className="topbar">
           <div>
-            <span className="eyebrow">{user?.email ?? ''}</span>
+            <span className="eyebrow">{user?.name ?? user?.email ?? ''}</span>
             <h1>{tr(currentPageLabel)}</h1>
           </div>
           <button className="icon-button" title={tr('refresh')} onClick={onRefresh}>
@@ -118,12 +137,12 @@ export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel
   );
 }
 
-// Shared sub-components used across pages
-export function Stat({ label, value }: { label: string; value: string }) {
+export function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <section className="stat">
       <span>{label}</span>
       <strong>{value}</strong>
+      {sub && <small>{sub}</small>}
     </section>
   );
 }

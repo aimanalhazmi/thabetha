@@ -1,16 +1,27 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Panel, Stat } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../lib/api';
 import { t } from '../lib/i18n';
 import type { Debt, Language, NotificationItem, Profile } from '../lib/types';
 
-interface Props {
-  language: Language;
-  message: string;
+interface Props { language: Language }
+
+function allStatusLabel(s: string, tr: (k: Parameters<typeof t>[1]) => string): string {
+  switch (s) {
+    case 'waiting_for_confirmation': return tr('waitingForConfirmation');
+    case 'active': return tr('active');
+    case 'paid': return tr('paid');
+    case 'delay': return tr('delay');
+    case 'rejected': return tr('rejected');
+    case 'change_requested': return tr('changeRequested');
+    case 'payment_pending_confirmation': return tr('paymentPendingConfirmation');
+    default: return s;
+  }
 }
 
-export function DashboardPage({ language, message }: Props) {
+export function DashboardPage({ language }: Props) {
   const tr = (key: Parameters<typeof t>[1]) => t(language, key);
   const { user } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -30,36 +41,74 @@ export function DashboardPage({ language, message }: Props) {
   const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both';
   const isDebtor = user?.account_type === 'debtor' || user?.account_type === 'both';
 
-  // Calculate stats
-  const activeDebts = debts.filter(d => d.status === 'active');
-  const waitingDebts = debts.filter(d => d.status === 'waiting_for_confirmation');
-  const delayDebts = debts.filter(d => d.status === 'delay');
-  const paidDebts = debts.filter(d => d.status === 'paid');
+  // Separate by role
+  const myDebtsAsCreditor = debts.filter(d => d.creditor_id === user?.id);
+  const myDebtsAsDebtor = debts.filter(d => d.debtor_id === user?.id);
 
-  const totalAmount = debts
+  const totalReceivable = myDebtsAsCreditor
+    .filter(d => d.status === 'active' || d.status === 'delay' || d.status === 'payment_pending_confirmation')
+    .reduce((sum, d) => sum + parseFloat(d.amount || '0'), 0);
+
+  const totalOwed = myDebtsAsDebtor
     .filter(d => d.status === 'active' || d.status === 'delay')
     .reduce((sum, d) => sum + parseFloat(d.amount || '0'), 0);
 
+  const waitingForMe = debts.filter(d => d.debtor_id === user?.id && d.status === 'waiting_for_confirmation');
+  const delayDebts = isCreditor
+    ? myDebtsAsCreditor.filter(d => d.status === 'delay')
+    : myDebtsAsDebtor.filter(d => d.status === 'delay');
+
+  const paymentPending = myDebtsAsCreditor.filter(d => d.status === 'payment_pending_confirmation');
+
   if (loading) return <p className="empty">{tr('loading')}</p>;
+
+  // The other party's name for a debt
+  function partyName(d: Debt) {
+    return d.creditor_id === user?.id ? d.debtor_name : (d.creditor_name || d.creditor_id.slice(0, 8));
+  }
 
   return (
     <section className="content-grid">
-      {message && <div className="message" style={{ gridColumn: '1 / -1' }}>{message}</div>}
 
-      <Stat label={isCreditor ? tr('receivable') : tr('totalDebt')} value={`${totalAmount.toFixed(2)} SAR`} />
-      <Stat label={tr('active')} value={String(activeDebts.length)} />
-      <Stat label={tr('waitingForConfirmation')} value={String(waitingDebts.length)} />
+      {/* Financial stats */}
+      {isCreditor && (
+        <Stat label={tr('receivable')} value={`${totalReceivable.toFixed(2)} SAR`} sub={`${myDebtsAsCreditor.length} ${tr('debts')}`} />
+      )}
+      {isDebtor && (
+        <Stat label={tr('totalOwed')} value={`${totalOwed.toFixed(2)} SAR`} sub={`${myDebtsAsDebtor.length} ${tr('debts')}`} />
+      )}
+      <Stat label={tr('waitingForConfirmation')} value={String(waitingForMe.length)} />
       <Stat label={tr('trustScore')} value={`${profile?.trust_score ?? 50} / 100`} />
 
-      {/* Delay Alerts */}
+      {/* Payment pending alerts — creditor needs to confirm */}
+      {paymentPending.length > 0 && (
+        <section className="wide-panel alert-panel">
+          <h2>💰 {tr('paymentPendingConfirmation')}</h2>
+          <div className="debt-stack">
+            {paymentPending.map(d => (
+              <div key={d.id} className="debt-item">
+                <div>
+                  <strong>{d.debtor_name}</strong>
+                  <span>{d.description}</span>
+                </div>
+                <b>{d.amount} {d.currency}</b>
+                <span className="status-badge payment_pending_confirmation">{tr('paymentPendingConfirmation')}</span>
+              </div>
+            ))}
+          </div>
+          <Link to="/debts" className="cta-link">{tr('viewAll')} →</Link>
+        </section>
+      )}
+
+      {/* Delay / overdue alerts */}
       {delayDebts.length > 0 && (
-        <section className="wide-panel">
+        <section className="wide-panel alert-panel alert-danger">
           <h2>⚠️ {tr('delayAlerts')}</h2>
           <div className="debt-stack">
             {delayDebts.map(d => (
               <div key={d.id} className="debt-item">
                 <div>
-                  <strong>{d.debtor_name}</strong>
+                  <strong>{partyName(d)}</strong>
                   <span>{d.description}</span>
                 </div>
                 <b>{d.amount} {d.currency}</b>
@@ -67,49 +116,61 @@ export function DashboardPage({ language, message }: Props) {
               </div>
             ))}
           </div>
+          <Link to="/debts" className="cta-link">{tr('viewAll')} →</Link>
         </section>
       )}
 
       {/* Recent debts */}
-      <section className={delayDebts.length > 0 ? 'panel' : 'wide-panel'}>
+      <section className={delayDebts.length > 0 || paymentPending.length > 0 ? 'panel' : 'wide-panel'}>
         <h2>{tr('recentDebts')} ({debts.length})</h2>
         <div className="compact-list">
           {debts.slice(0, 6).map((d) => (
             <div key={d.id}>
-              <strong>{d.debtor_name}</strong>
+              <strong>{partyName(d)}</strong>
               <span>{d.amount} {d.currency}</span>
               <span className={`status-badge ${d.status}`}>
-                {d.status === 'waiting_for_confirmation' ? tr('waitingForConfirmation')
-                  : d.status === 'active' ? tr('active')
-                  : d.status === 'paid' ? tr('paid')
-                  : tr('delay')}
+                {allStatusLabel(d.status, tr)}
               </span>
             </div>
           ))}
-          {debts.length === 0 && <p className="empty">{tr('noDebtsYet')}</p>}
+          {debts.length === 0 && (
+            <div style={{ flexDirection: 'column', border: 'none', padding: '24px 0', gap: '12px' }}>
+              <p className="empty" style={{ padding: 0 }}>{tr('noDebtsYet')}</p>
+              {isCreditor && (
+                <Link to="/debts" className="cta-link">{tr('debtCreatedCta')} →</Link>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
-      {/* Stats panel */}
-      <Panel title={delayDebts.length > 0 ? tr('notifications') : tr('notifications')}>
+      {/* Notifications + stats panel */}
+      <Panel title={tr('notifications')}>
         {isCreditor && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+          <div className="stat-rows">
+            <div className="stat-row">
               <span>{tr('paid')}</span>
-              <strong style={{ color: 'var(--success)' }}>{paidDebts.length}</strong>
+              <strong style={{ color: 'var(--success)' }}>{myDebtsAsCreditor.filter(d => d.status === 'paid').length}</strong>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-              <span>{tr('debtors')}</span>
-              <strong>{new Set(debts.map(d => d.debtor_id).filter(Boolean)).size}</strong>
+            <div className="stat-row">
+              <span>{tr('myDebtors')}</span>
+              <strong>{new Set(myDebtsAsCreditor.map(d => d.debtor_id).filter(Boolean)).size}</strong>
             </div>
           </div>
         )}
         <ul className="simple-list">
           {notifications.slice(0, 5).map((n) => (
-            <li key={n.id}><strong>{n.title}</strong>: {n.body}</li>
+            <li key={n.id} className={n.read_at ? '' : 'unread-notif'}>
+              <strong>{n.title}</strong>: {n.body}
+            </li>
           ))}
-          {notifications.length === 0 && <p className="empty">{tr('noData')}</p>}
+          {notifications.length === 0 && <p className="empty">{tr('noUnread')}</p>}
         </ul>
+        {notifications.length > 5 && (
+          <Link to="/notifications" className="cta-link" style={{ marginTop: '8px', display: 'block' }}>
+            {tr('viewAll')} →
+          </Link>
+        )}
         <p className="trust-disclaimer">{tr('trustScoreDisclaimer')}</p>
       </Panel>
     </section>

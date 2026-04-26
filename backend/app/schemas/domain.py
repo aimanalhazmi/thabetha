@@ -20,7 +20,10 @@ class DebtStatus(StrEnum):
     waiting_for_confirmation = "waiting_for_confirmation"
     active = "active"
     paid = "paid"
-    delay = "delay"
+    delay = "delay"  # overdue / past due date
+    rejected = "rejected"
+    change_requested = "change_requested"
+    payment_pending_confirmation = "payment_pending_confirmation"
 
 
 class AttachmentType(StrEnum):
@@ -33,6 +36,7 @@ class NotificationType(StrEnum):
     debt_created = "debt_created"
     debt_confirmed = "debt_confirmed"
     debt_rejected = "debt_rejected"
+    debt_change_requested = "debt_change_requested"
     due_soon = "due_soon"
     overdue = "overdue"
     payment_requested = "payment_requested"
@@ -129,6 +133,7 @@ class ActionMessageIn(BaseModel):
 class DebtOut(BaseModel):
     id: str
     creditor_id: str
+    creditor_name: str = ""
     debtor_id: str | None
     debtor_name: str
     amount: Decimal
