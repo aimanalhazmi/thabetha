@@ -81,7 +81,7 @@ class InMemoryRepository(Repository):
                 name=user.name or user.email or user.phone or f"User {user.id[:6]}",
                 phone=user.phone or "+000000000",
                 email=user.email,
-                account_type=AccountType.individual,
+                account_type=AccountType.debtor,
                 created_at=now,
                 updated_at=now,
             )

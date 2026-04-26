@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     supabase_anon_key: str | None = None
     supabase_service_role_key: str | None = None
     supabase_jwt_secret: str | None = None
+    supabase_jwks_url: str | None = None
     supabase_storage_bucket: str = "thabetha-attachments"
 
     openai_api_key: str | None = None
