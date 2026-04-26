@@ -57,7 +57,7 @@ def _profile_from_row(row: dict) -> ProfileOut:
         shop_description=row.get("shop_description"),
         whatsapp_enabled=row["whatsapp_enabled"],
         ai_enabled=row["ai_enabled"],
-        commitment_score=row["trust_score"],
+        commitment_score=row["commitment_score"],
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
     )
@@ -82,6 +82,14 @@ def _debt_from_row(row: dict) -> DebtOut:
         confirmed_at=row.get("confirmed_at"),
         paid_at=row.get("paid_at"),
     )
+
+
+_PROFILE_SELECT = """
+SELECT p.*, bp.shop_name, bp.activity_type,
+       bp.location AS shop_location, bp.description AS shop_description
+FROM profiles p
+LEFT JOIN business_profiles bp ON bp.owner_id = p.id
+"""
 
 
 class PostgresRepository(Repository):
@@ -179,7 +187,7 @@ class PostgresRepository(Repository):
     def ensure_profile(self, user: AuthenticatedUser) -> ProfileOut:
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
-            row = conn.execute("SELECT * FROM profiles WHERE id = %s", (user.id,)).fetchone()
+            row = conn.execute(_PROFILE_SELECT + " WHERE p.id = %s", (user.id,)).fetchone()
             if row:
                 return _profile_from_row(row)
             conn.execute(
@@ -190,13 +198,13 @@ class PostgresRepository(Repository):
                 (user.id, user.name or user.email or user.phone or f"User {user.id[:6]}", user.phone or "+000000000", user.email),
             )
             conn.commit()
-            row = conn.execute("SELECT * FROM profiles WHERE id = %s", (user.id,)).fetchone()
+            row = conn.execute(_PROFILE_SELECT + " WHERE p.id = %s", (user.id,)).fetchone()
             return _profile_from_row(row)
 
     def get_profile(self, user_id: str) -> ProfileOut:
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
-            row = conn.execute("SELECT * FROM profiles WHERE id = %s", (user_id,)).fetchone()
+            row = conn.execute(_PROFILE_SELECT + " WHERE p.id = %s", (user_id,)).fetchone()
             if not row:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
             return _profile_from_row(row)
@@ -206,13 +214,16 @@ class PostgresRepository(Repository):
         if not data:
             return self.ensure_profile(user)
         self.ensure_profile(user)
-        set_clauses = ", ".join(f"{k} = %s" for k in data)
-        values = list(data.values()) + [user.id]
+        # shop_* fields live in business_profiles, not profiles — strip them here.
+        profile_data = {k: v for k, v in data.items() if k not in {"shop_name", "activity_type", "shop_location", "shop_description"}}
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
-            conn.execute(f"UPDATE profiles SET {set_clauses}, updated_at = now() WHERE id = %s", values)  # noqa: S608
-            conn.commit()
-            row = conn.execute("SELECT * FROM profiles WHERE id = %s", (user.id,)).fetchone()
+            if profile_data:
+                set_clauses = ", ".join(f"{k} = %s" for k in profile_data)
+                values = list(profile_data.values()) + [user.id]
+                conn.execute(f"UPDATE profiles SET {set_clauses}, updated_at = now() WHERE id = %s", values)  # noqa: S608
+                conn.commit()
+            row = conn.execute(_PROFILE_SELECT + " WHERE p.id = %s", (user.id,)).fetchone()
             return _profile_from_row(row)
 
     def upsert_business_profile(self, owner_id: str, payload: BusinessProfileIn) -> BusinessProfileOut:
@@ -658,7 +669,7 @@ class PostgresRepository(Repository):
             if debtor_ids:
                 placeholders = ", ".join(["%s"] * len(debtor_ids))
                 rows = conn.execute(
-                    f"SELECT * FROM profiles WHERE id IN ({placeholders}) ORDER BY commitment_score DESC LIMIT 5",  # noqa: S608
+                    f"{_PROFILE_SELECT} WHERE p.id IN ({placeholders}) ORDER BY p.commitment_score DESC LIMIT 5",  # noqa: S608
                     list(debtor_ids),
                 ).fetchall()
                 best_customers = [_profile_from_row(r) for r in rows]

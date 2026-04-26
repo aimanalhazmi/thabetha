@@ -1,6 +1,6 @@
 /** Shared type definitions for the Thabetha frontend. */
 
-export type AccountType = 'creditor' | 'debtor' | 'both';
+export type AccountType = 'creditor' | 'debtor' | 'both' | 'business';
 
 /**
  * Canonical 8-state debt lifecycle. Mirrors `DebtStatus` in

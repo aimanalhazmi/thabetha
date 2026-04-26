@@ -47,7 +47,15 @@ alter type debt_status add value if not exists 'cancelled';
 alter table public.debts alter column status set default 'pending_confirmation';
 
 -- ── 2. Commitment score: profiles column rename ───────────────────────
-alter table public.profiles rename column trust_score to commitment_score;
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'profiles' and column_name = 'trust_score'
+  ) then
+    alter table public.profiles rename column trust_score to commitment_score;
+  end if;
+end$$;
 
 -- ── 3. Commitment score events table rename + index/policy refresh ────
 alter table if exists public.trust_score_events rename to commitment_score_events;

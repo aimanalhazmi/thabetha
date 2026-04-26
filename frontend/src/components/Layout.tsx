@@ -3,9 +3,9 @@ import type { ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { t, type TranslationKey } from '../lib/i18n';
-import type { Language } from '../lib/types';
+import type { AccountType, Language } from '../lib/types';
 
-type NavItem = { path: string; icon: typeof LayoutDashboard; label: TranslationKey; roles?: Array<'creditor' | 'debtor' | 'both'> };
+type NavItem = { path: string; icon: typeof LayoutDashboard; label: TranslationKey; roles?: Array<AccountType> };
 
 const navItems: NavItem[] = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'dashboard' },

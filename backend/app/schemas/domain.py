@@ -14,6 +14,7 @@ class AccountType(StrEnum):
     creditor = "creditor"
     debtor = "debtor"
     both = "both"
+    business = "business"
 
 
 class DebtStatus(StrEnum):
