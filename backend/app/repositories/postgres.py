@@ -57,7 +57,7 @@ def _profile_from_row(row: dict) -> ProfileOut:
         shop_description=row.get("shop_description"),
         whatsapp_enabled=row["whatsapp_enabled"],
         ai_enabled=row["ai_enabled"],
-        commitment_score=row["commitment_score"],
+        commitment_score=row["trust_score"],
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
     )
@@ -119,7 +119,9 @@ class PostgresRepository(Repository):
         )
         return event_id
 
-    def _notify_raw(self, conn, user_id: str, notification_type: str, title: str, body: str, debt_id: str | None, merchant_id: str | None = None) -> str:
+    def _notify_raw(
+        self, conn, user_id: str, notification_type: str, title: str, body: str, debt_id: str | None, merchant_id: str | None = None
+    ) -> str:
         # Check WhatsApp preference
         whatsapp_attempted = True
         if merchant_id:
@@ -311,15 +313,30 @@ class PostgresRepository(Repository):
                                    status, invoice_url, notes, group_id, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending_confirmation', %s, %s, %s, now(), now())
                 """,
-                (debt_id, creditor_id, payload.debtor_id, payload.debtor_name, payload.amount, payload.currency,
-                 payload.description, payload.due_date, payload.invoice_url, payload.notes, payload.group_id),
+                (
+                    debt_id,
+                    creditor_id,
+                    payload.debtor_id,
+                    payload.debtor_name,
+                    payload.amount,
+                    payload.currency,
+                    payload.description,
+                    payload.due_date,
+                    payload.invoice_url,
+                    payload.notes,
+                    payload.group_id,
+                ),
             )
             self._add_event_raw(conn, debt_id, creditor_id, "debt_created", "Debt created and awaiting debtor confirmation")
             if payload.debtor_id:
                 self._notify_raw(
-                    conn, payload.debtor_id, "debt_created", "New debt requires confirmation",
+                    conn,
+                    payload.debtor_id,
+                    "debt_created",
+                    "New debt requires confirmation",
                     f"{payload.debtor_name}, confirm {payload.amount} {payload.currency}: {payload.description}",
-                    debt_id, merchant_id=creditor_id,
+                    debt_id,
+                    merchant_id=creditor_id,
                 )
             conn.commit()
             row = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
@@ -371,8 +388,14 @@ class PostgresRepository(Repository):
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt cannot be accepted from its current state")
             conn.execute("UPDATE debts SET status = 'active', confirmed_at = now(), updated_at = now() WHERE id = %s", (debt_id,))
             self._add_event_raw(conn, debt_id, user_id, "debt_confirmed", "Debtor accepted the debt")
-            self._notify_raw(conn, str(row["creditor_id"]), "debt_confirmed", "Debt accepted",
-                             f"{row['debtor_name']} accepted {row['amount']} {row['currency'].strip()}", debt_id)
+            self._notify_raw(
+                conn,
+                str(row["creditor_id"]),
+                "debt_confirmed",
+                "Debt accepted",
+                f"{row['debtor_name']} accepted {row['amount']} {row['currency'].strip()}",
+                debt_id,
+            )
             conn.commit()
             updated = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
             return _debt_from_row(updated)
@@ -390,8 +413,9 @@ class PostgresRepository(Repository):
             # Delete the debt since we don't have a rejected status
             conn.execute("DELETE FROM debts WHERE id = %s", (debt_id,))
             self._add_event_raw(conn, debt_id, user_id, "debt_rejected", message)
-            self._notify_raw(conn, str(row["creditor_id"]), "debt_rejected", "Debt rejected",
-                             message or f"{row['debtor_name']} rejected the debt", debt_id)
+            self._notify_raw(
+                conn, str(row["creditor_id"]), "debt_rejected", "Debt rejected", message or f"{row['debtor_name']} rejected the debt", debt_id
+            )
             conn.commit()
             updated = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
             return _debt_from_row(updated)
@@ -436,14 +460,25 @@ class PostgresRepository(Repository):
                 (confirmation_id, debt_id, user_id, str(row["creditor_id"]), payload.note),
             )
             self._add_event_raw(conn, debt_id, user_id, "payment_requested", payload.note)
-            self._notify_raw(conn, str(row["creditor_id"]), "payment_requested", "Payment confirmation requested",
-                             f"{row['debtor_name']} marked the debt as paid", debt_id)
+            self._notify_raw(
+                conn,
+                str(row["creditor_id"]),
+                "payment_requested",
+                "Payment confirmation requested",
+                f"{row['debtor_name']} marked the debt as paid",
+                debt_id,
+            )
             conn.commit()
             pc = conn.execute("SELECT * FROM payment_confirmations WHERE id = %s", (confirmation_id,)).fetchone()
             return PaymentConfirmationOut(
-                id=str(pc["id"]), debt_id=str(pc["debt_id"]), debtor_id=str(pc["debtor_id"]),
-                creditor_id=str(pc["creditor_id"]), status=pc["status"], note=pc.get("note"),
-                requested_at=pc["requested_at"], confirmed_at=pc.get("confirmed_at"),
+                id=str(pc["id"]),
+                debt_id=str(pc["debt_id"]),
+                debtor_id=str(pc["debtor_id"]),
+                creditor_id=str(pc["creditor_id"]),
+                status=pc["status"],
+                note=pc.get("note"),
+                requested_at=pc["requested_at"],
+                confirmed_at=pc.get("confirmed_at"),
             )
 
     def confirm_payment(self, user_id: str, debt_id: str) -> DebtOut:
@@ -464,8 +499,14 @@ class PostgresRepository(Repository):
                 now = utcnow()
                 delta = 5 if now.date() <= row["due_date"] else -2
                 self._change_commitment_score_raw(conn, debtor_id, delta, "payment_confirmed", debt_id)
-                self._notify_raw(conn, debtor_id, "payment_confirmed", "Payment confirmed",
-                                 f"{row['amount']} {row['currency'].strip()} was confirmed as paid", debt_id)
+                self._notify_raw(
+                    conn,
+                    debtor_id,
+                    "payment_confirmed",
+                    "Payment confirmed",
+                    f"{row['amount']} {row['currency'].strip()} was confirmed as paid",
+                    debt_id,
+                )
             conn.commit()
             updated = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
             return _debt_from_row(updated)
@@ -484,8 +525,14 @@ class PostgresRepository(Repository):
             self._add_event_raw(conn, debt_id, user_id, "debt_cancelled", message)
             debtor_id = str(row["debtor_id"]) if row.get("debtor_id") else None
             if debtor_id:
-                self._notify_raw(conn, debtor_id, "debt_cancelled", "Debt cancelled",
-                                 message or f"{row['amount']} {row['currency'].strip()} cancelled by creditor", debt_id)
+                self._notify_raw(
+                    conn,
+                    debtor_id,
+                    "debt_cancelled",
+                    "Debt cancelled",
+                    message or f"{row['amount']} {row['currency'].strip()} cancelled by creditor",
+                    debt_id,
+                )
             conn.commit()
             updated = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
             return _debt_from_row(updated)
@@ -496,14 +543,14 @@ class PostgresRepository(Repository):
         self.get_authorized_debt(user_id, debt_id)
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
-            rows = conn.execute(
-                "SELECT * FROM debt_events WHERE debt_id = %s ORDER BY created_at", (debt_id,)
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM debt_events WHERE debt_id = %s ORDER BY created_at", (debt_id,)).fetchall()
             return [
                 DebtEventOut(
-                    id=str(r["id"]), debt_id=str(r["debt_id"]),
+                    id=str(r["id"]),
+                    debt_id=str(r["debt_id"]),
                     actor_id=str(r["actor_id"]) if r.get("actor_id") else None,
-                    event_type=r["event_type"], message=r.get("message"),
+                    event_type=r["event_type"],
+                    message=r.get("message"),
                     metadata=r.get("metadata") or {},
                     created_at=r["created_at"],
                 )
@@ -527,9 +574,13 @@ class PostgresRepository(Repository):
             conn.commit()
         await file.close()
         return AttachmentOut(
-            id=att_id, debt_id=debt_id, uploader_id=user_id,
-            attachment_type=attachment_type, file_name=file_name,
-            content_type=file.content_type, url=f"mock://{storage_path}",
+            id=att_id,
+            debt_id=debt_id,
+            uploader_id=user_id,
+            attachment_type=attachment_type,
+            file_name=file_name,
+            content_type=file.content_type,
+            url=f"mock://{storage_path}",
             created_at=utcnow(),
         )
 
@@ -540,9 +591,13 @@ class PostgresRepository(Repository):
             rows = conn.execute("SELECT * FROM attachments WHERE debt_id = %s ORDER BY created_at", (debt_id,)).fetchall()
             return [
                 AttachmentOut(
-                    id=str(r["id"]), debt_id=str(r["debt_id"]), uploader_id=str(r["uploader_id"]),
-                    attachment_type=r["attachment_type"], file_name=r["file_name"],
-                    content_type=r.get("content_type"), url=r.get("public_url") or r["storage_path"],
+                    id=str(r["id"]),
+                    debt_id=str(r["debt_id"]),
+                    uploader_id=str(r["uploader_id"]),
+                    attachment_type=r["attachment_type"],
+                    file_name=r["file_name"],
+                    content_type=r.get("content_type"),
+                    url=r.get("public_url") or r["storage_path"],
                     created_at=r["created_at"],
                 )
                 for r in rows
@@ -627,15 +682,17 @@ class PostgresRepository(Repository):
     def list_notifications(self, user_id: str) -> list[NotificationOut]:
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
-            rows = conn.execute(
-                "SELECT * FROM notifications WHERE user_id = %s ORDER BY created_at DESC", (user_id,)
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM notifications WHERE user_id = %s ORDER BY created_at DESC", (user_id,)).fetchall()
             return [
                 NotificationOut(
-                    id=str(r["id"]), user_id=str(r["user_id"]),
-                    notification_type=r["notification_type"], title=r["title"], body=r["body"],
+                    id=str(r["id"]),
+                    user_id=str(r["user_id"]),
+                    notification_type=r["notification_type"],
+                    title=r["title"],
+                    body=r["body"],
                     debt_id=str(r["debt_id"]) if r.get("debt_id") else None,
-                    read_at=r.get("read_at"), whatsapp_attempted=r["whatsapp_attempted"],
+                    read_at=r.get("read_at"),
+                    whatsapp_attempted=r["whatsapp_attempted"],
                     created_at=r["created_at"],
                 )
                 for r in rows
@@ -653,10 +710,14 @@ class PostgresRepository(Repository):
             if not row:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found")
             return NotificationOut(
-                id=str(row["id"]), user_id=str(row["user_id"]),
-                notification_type=row["notification_type"], title=row["title"], body=row["body"],
+                id=str(row["id"]),
+                user_id=str(row["user_id"]),
+                notification_type=row["notification_type"],
+                title=row["title"],
+                body=row["body"],
                 debt_id=str(row["debt_id"]) if row.get("debt_id") else None,
-                read_at=row.get("read_at"), whatsapp_attempted=row["whatsapp_attempted"],
+                read_at=row.get("read_at"),
+                whatsapp_attempted=row["whatsapp_attempted"],
                 created_at=row["created_at"],
             )
 
@@ -672,18 +733,20 @@ class PostgresRepository(Repository):
                 (user_id, payload.merchant_id, payload.whatsapp_enabled),
             )
             conn.commit()
-        return NotificationPreferenceOut(user_id=user_id, merchant_id=payload.merchant_id, whatsapp_enabled=payload.whatsapp_enabled, updated_at=utcnow())
+        return NotificationPreferenceOut(
+            user_id=user_id, merchant_id=payload.merchant_id, whatsapp_enabled=payload.whatsapp_enabled, updated_at=utcnow()
+        )
 
     def list_commitment_score_events(self, user_id: str) -> list[CommitmentScoreEventOut]:
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
-            rows = conn.execute(
-                "SELECT * FROM commitment_score_events WHERE user_id = %s ORDER BY created_at DESC", (user_id,)
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM commitment_score_events WHERE user_id = %s ORDER BY created_at DESC", (user_id,)).fetchall()
             return [
                 CommitmentScoreEventOut(
-                    id=str(r["id"]), user_id=str(r["user_id"]),
-                    delta=r["delta"], score_after=r["score_after"],
+                    id=str(r["id"]),
+                    user_id=str(r["user_id"]),
+                    delta=r["delta"],
+                    score_after=r["score_after"],
                     reason=r["reason"],
                     debt_id=str(r["debt_id"]) if r.get("debt_id") else None,
                     created_at=r["created_at"],
@@ -707,7 +770,9 @@ class PostgresRepository(Repository):
             )
             conn.commit()
             row = conn.execute("SELECT * FROM groups WHERE id = %s", (group_id,)).fetchone()
-            return GroupOut(id=str(row["id"]), owner_id=str(row["owner_id"]), name=row["name"], description=row.get("description"), created_at=row["created_at"])
+            return GroupOut(
+                id=str(row["id"]), owner_id=str(row["owner_id"]), name=row["name"], description=row.get("description"), created_at=row["created_at"]
+            )
 
     def list_groups(self, user_id: str) -> list[GroupOut]:
         with self._pool.connection() as conn:
@@ -734,13 +799,15 @@ class PostgresRepository(Repository):
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
             if str(group["owner_id"]) != actor_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the group owner can invite members")
-            existing = conn.execute(
-                "SELECT * FROM group_members WHERE group_id = %s AND user_id = %s", (group_id, payload.user_id)
-            ).fetchone()
+            existing = conn.execute("SELECT * FROM group_members WHERE group_id = %s AND user_id = %s", (group_id, payload.user_id)).fetchone()
             if existing:
                 return GroupMemberOut(
-                    id=str(existing["id"]), group_id=str(existing["group_id"]), user_id=str(existing["user_id"]),
-                    status=existing["status"], created_at=existing["created_at"], accepted_at=existing.get("accepted_at"),
+                    id=str(existing["id"]),
+                    group_id=str(existing["group_id"]),
+                    user_id=str(existing["user_id"]),
+                    status=existing["status"],
+                    created_at=existing["created_at"],
+                    accepted_at=existing.get("accepted_at"),
                 )
             member_id = str(uuid4())
             conn.execute(
@@ -751,8 +818,12 @@ class PostgresRepository(Repository):
             conn.commit()
             row = conn.execute("SELECT * FROM group_members WHERE id = %s", (member_id,)).fetchone()
             return GroupMemberOut(
-                id=str(row["id"]), group_id=str(row["group_id"]), user_id=str(row["user_id"]),
-                status=row["status"], created_at=row["created_at"], accepted_at=row.get("accepted_at"),
+                id=str(row["id"]),
+                group_id=str(row["group_id"]),
+                user_id=str(row["user_id"]),
+                status=row["status"],
+                created_at=row["created_at"],
+                accepted_at=row.get("accepted_at"),
             )
 
     def accept_group_invite(self, user_id: str, group_id: str) -> GroupMemberOut:
@@ -767,8 +838,12 @@ class PostgresRepository(Repository):
             if not row:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group invitation not found")
             return GroupMemberOut(
-                id=str(row["id"]), group_id=str(row["group_id"]), user_id=str(row["user_id"]),
-                status=row["status"], created_at=row["created_at"], accepted_at=row.get("accepted_at"),
+                id=str(row["id"]),
+                group_id=str(row["group_id"]),
+                user_id=str(row["user_id"]),
+                status=row["status"],
+                created_at=row["created_at"],
+                accepted_at=row.get("accepted_at"),
             )
 
     def group_debts(self, user_id: str, group_id: str) -> list[DebtOut]:
@@ -815,13 +890,24 @@ class PostgresRepository(Repository):
                 """,
                 (settlement_id, group_id, payer_id, payload.debtor_id, payload.amount, payload.currency, payload.note),
             )
-            self._notify_raw(conn, payload.debtor_id, "payment_confirmed", "Group settlement recorded",
-                             f"{payer_id} paid {payload.amount} {payload.currency} for you", None)
+            self._notify_raw(
+                conn,
+                payload.debtor_id,
+                "payment_confirmed",
+                "Group settlement recorded",
+                f"{payer_id} paid {payload.amount} {payload.currency} for you",
+                None,
+            )
             conn.commit()
             return SettlementOut(
-                id=settlement_id, group_id=group_id, payer_id=payer_id,
-                debtor_id=payload.debtor_id, amount=payload.amount, currency=payload.currency,
-                note=payload.note, created_at=utcnow(),
+                id=settlement_id,
+                group_id=group_id,
+                payer_id=payer_id,
+                debtor_id=payload.debtor_id,
+                amount=payload.amount,
+                currency=payload.currency,
+                note=payload.note,
+                created_at=utcnow(),
             )
 
     # ── AI / analytics ────────────────────────────────────────────────

@@ -46,14 +46,14 @@ async def get_current_user(
 
     token = credentials.credentials
     try:
-        if settings.supabase_jwt_secret:
-            claims = jwt.decode(token, settings.supabase_jwt_secret, algorithms=["HS256"], options={"verify_aud": False})
-        elif settings.is_production:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Supabase JWT secret is not configured")
+        if settings.is_production:
+            if not settings.supabase_jwt_secret:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Supabase JWT secret is not configured")
+            claims = jwt.decode(token, settings.supabase_jwt_secret, algorithms=["HS256", "ES256"], options={"verify_aud": False})
         else:
-            claims = jwt.get_unverified_claims(token)
-    except JWTError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bearer token") from exc
+            claims = jwt.decode(token, "", options={"verify_signature": False, "verify_aud": False})
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid bearer token: {str(exc)}") from exc
 
     user_id = claims.get("sub")
     if not user_id:
@@ -65,4 +65,3 @@ async def get_current_user(
         phone=claims.get("phone"),
         name=claims.get("user_metadata", {}).get("name") if isinstance(claims.get("user_metadata"), dict) else None,
     )
-
