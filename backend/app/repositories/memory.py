@@ -110,7 +110,28 @@ class InMemoryRepository(Repository):
             data = payload.model_dump(exclude_unset=True)
             if not data:
                 return profile
-            profile = profile.model_copy(update={**data, "updated_at": utcnow()})
+            now = utcnow()
+            shop_keys = {"shop_name", "activity_type", "shop_location", "shop_description"}
+            shop_data = {k: data[k] for k in shop_keys if k in data}
+            if shop_data:
+                existing = self.business_profiles.get(user.id)
+                merged = {
+                    "shop_name": shop_data.get("shop_name", existing.shop_name if existing else ""),
+                    "activity_type": shop_data.get("activity_type", existing.activity_type if existing else ""),
+                    "location": shop_data.get("shop_location", existing.location if existing else ""),
+                    "description": shop_data.get("shop_description", existing.description if existing else ""),
+                }
+                # BusinessProfileIn requires min_length=1 on all four fields. Only mirror to
+                # business_profiles once all four are populated; partial state stays on the profile.
+                if all(v for v in merged.values()):
+                    self.business_profiles[user.id] = BusinessProfileOut(
+                        id=existing.id if existing else str(uuid4()),
+                        owner_id=user.id,
+                        **merged,
+                        created_at=existing.created_at if existing else now,
+                        updated_at=now,
+                    )
+            profile = profile.model_copy(update={**data, "updated_at": now})
             self.profiles[user.id] = profile
             return profile
 

@@ -280,44 +280,60 @@ class PostgresRepository(Repository):
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
             return _profile_from_row(row)
 
+    # Map ProfileUpdate's shop_* field names to business_profiles column names.
+    _BUSINESS_FIELD_MAP = {
+        "shop_name": "shop_name",
+        "activity_type": "activity_type",
+        "shop_location": "location",
+        "shop_description": "description",
+    }
+
+    def _upsert_business_profile_fields(self, conn, owner_id: str, fields: dict) -> None:
+        """Partial upsert into business_profiles. `fields` keys are business_profiles column names."""
+        if not fields:
+            return
+        existing = conn.execute("SELECT 1 FROM business_profiles WHERE owner_id = %s", (owner_id,)).fetchone()
+        if existing:
+            set_clauses = ", ".join(f"{k} = %s" for k in fields)
+            values = list(fields.values()) + [owner_id]
+            conn.execute(f"UPDATE business_profiles SET {set_clauses}, updated_at = now() WHERE owner_id = %s", values)  # noqa: S608
+        else:
+            cols = ["id", "owner_id", *fields.keys(), "created_at", "updated_at"]
+            placeholders = ", ".join(["%s"] * (len(fields) + 2) + ["now()", "now()"])
+            values = [str(uuid4()), owner_id, *fields.values()]
+            conn.execute(f"INSERT INTO business_profiles ({', '.join(cols)}) VALUES ({placeholders})", values)  # noqa: S608
+        conn.execute("UPDATE profiles SET account_type = 'business', updated_at = now() WHERE id = %s AND account_type = 'debtor'", (owner_id,))
+
     def update_profile(self, user: AuthenticatedUser, payload: ProfileUpdate) -> ProfileOut:
         data = payload.model_dump(exclude_unset=True)
         if not data:
             return self.ensure_profile(user)
         self.ensure_profile(user)
-        # shop_* fields live in business_profiles, not profiles — strip them here.
-        profile_data = {k: v for k, v in data.items() if k not in {"shop_name", "activity_type", "shop_location", "shop_description"}}
+        business_fields = {self._BUSINESS_FIELD_MAP[k]: data.pop(k) for k in list(data) if k in self._BUSINESS_FIELD_MAP}
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
-            if profile_data:
-                set_clauses = ", ".join(f"{k} = %s" for k in profile_data)
-                values = list(profile_data.values()) + [user.id]
+            if data:
+                set_clauses = ", ".join(f"{k} = %s" for k in data)
+                values = list(data.values()) + [user.id]
                 conn.execute(f"UPDATE profiles SET {set_clauses}, updated_at = now() WHERE id = %s", values)  # noqa: S608
-                conn.commit()
+            self._upsert_business_profile_fields(conn, user.id, business_fields)
+            conn.commit()
             row = conn.execute(_PROFILE_SELECT + " WHERE p.id = %s", (user.id,)).fetchone()
             return _profile_from_row(row)
 
     def upsert_business_profile(self, owner_id: str, payload: BusinessProfileIn) -> BusinessProfileOut:
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
-            existing = conn.execute("SELECT * FROM business_profiles WHERE owner_id = %s", (owner_id,)).fetchone()
-            if existing:
-                conn.execute(
-                    """
-                    UPDATE business_profiles SET shop_name = %s, activity_type = %s, location = %s, description = %s, updated_at = now()
-                    WHERE owner_id = %s
-                    """,
-                    (payload.shop_name, payload.activity_type, payload.location, payload.description, owner_id),
-                )
-            else:
-                conn.execute(
-                    """
-                    INSERT INTO business_profiles (id, owner_id, shop_name, activity_type, location, description, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, now(), now())
-                    """,
-                    (str(uuid4()), owner_id, payload.shop_name, payload.activity_type, payload.location, payload.description),
-                )
-            conn.execute("UPDATE profiles SET account_type = 'business', updated_at = now() WHERE id = %s", (owner_id,))
+            self._upsert_business_profile_fields(
+                conn,
+                owner_id,
+                {
+                    "shop_name": payload.shop_name,
+                    "activity_type": payload.activity_type,
+                    "location": payload.location,
+                    "description": payload.description,
+                },
+            )
             conn.commit()
             row = conn.execute("SELECT * FROM business_profiles WHERE owner_id = %s", (owner_id,)).fetchone()
             return BusinessProfileOut(
