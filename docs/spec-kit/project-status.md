@@ -1,15 +1,15 @@
 # Project Status — 2026-04-27
 
-Snapshot of what is shipped, in flight, and pending. The current branch  `develop`.
+Snapshot of what is shipped, in flight, and pending. Working branch: `spec-kit-initialization` (up to date with `develop`).
 
-## Recent merges (last 5 commits, develop ←)
+## Recent merges (last 6 commits, develop ←)
 
 ```
-8abc7b1 Merge pull request #6 from aimanalhazmi/feature/debt-edit-request
+ef2f10b Merge pull request #6 from aimanalhazmi/feature/debt-edit-request
 d0146ef feat: inline debt-edit thread + creditor amend on approve
 2ceb740 feat: support partial business profile updates via profile endpoint
 deefc60 feat: implement debt edit request flow and commitment indicator logic
-8abc7b1 Merge pull request #5 — cleanup/supabase-first-refactor
+8abc7b1 Merge pull request #5 from aimanalhazmi/cleanup/supabase-first-refactor
 88b7ff3 refactor: align repository with Supabase schema and lifecycle
 ```
 
@@ -55,5 +55,5 @@ deefc60 feat: implement debt edit request flow and commitment indicator logic
 
 ## Branch state
 
-- `develop`: stable, contains everything in "Shipped" above.
-- `feature/debt-edit-request`: current working branch — already merged content lines up with `develop` per recent commits; verify before opening new branches.
+- `develop`: stable, contains everything in "Shipped" above (PR #6 merged).
+- `spec-kit-initialization`: current working branch — adds `docs/spec-kit/` and the `.specify/` scaffolding; up to date with `develop`.
