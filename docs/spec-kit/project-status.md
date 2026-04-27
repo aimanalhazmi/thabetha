@@ -34,7 +34,7 @@ deefc60 feat: implement debt edit request flow and commitment indicator logic
 - Polished bilingual UI (Arabic-first, English toggle) — strings exist in `lib/i18n.ts`, but coverage and RTL polish are not complete.
 - End-to-end demo path: signup → create debt → bilateral confirm → mark-paid → confirm → indicator updates.
 - **Receipt upload on Create Debt** (UC2) — create-debt UI accepts image/PDF receipts, uploads them after debt creation, lists signed receipt links on debt cards, and preserves failed uploads for retry.
-- **QR scanner pass-through on Create Debt** (UC4 → UC2) — scanner page exists, hand-off to create-debt with prefilled `debtor_id` is not wired.
+- ~~**QR scanner pass-through on Create Debt**~~ ✅ **Shipped** (UC4 → UC2) — scanner confirm step, `/debts?qr_token=` deep link, prefilled-and-locked debtor identity, re-resolve on submit, expired/self/error handling, bilingual strings (AR+EN), backend self-billing 409 guard, integration test.
 - Cancel-non-binding-debt UX (creditor) — backend endpoint exists, UI partial.
 - Per-creditor WhatsApp opt-out enforcement on the actual sender (currently mock provider).
 
