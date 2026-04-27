@@ -68,17 +68,6 @@ def accept_debt(
     return repo.accept_debt(user.id, debt_id)
 
 
-@router.post("/{debt_id}/reject", response_model=DebtOut)
-def reject_debt(
-    debt_id: str,
-    payload: ActionMessageIn,
-    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    repo: Annotated[Repository, Depends(get_repository)],
-) -> DebtOut:
-    repo.ensure_profile(user)
-    return repo.reject_debt(user.id, debt_id, payload.message)
-
-
 @router.post("/{debt_id}/edit-request", response_model=DebtOut)
 def request_edit(
     debt_id: str,
@@ -88,6 +77,28 @@ def request_edit(
 ) -> DebtOut:
     repo.ensure_profile(user)
     return repo.request_debt_change(user.id, debt_id, payload)
+
+
+@router.post("/{debt_id}/edit-request/approve", response_model=DebtOut)
+def approve_edit_request(
+    debt_id: str,
+    payload: ActionMessageIn,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> DebtOut:
+    repo.ensure_profile(user)
+    return repo.approve_edit_request(user.id, debt_id, payload.message)
+
+
+@router.post("/{debt_id}/edit-request/reject", response_model=DebtOut)
+def reject_edit_request(
+    debt_id: str,
+    payload: ActionMessageIn,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> DebtOut:
+    repo.ensure_profile(user)
+    return repo.reject_edit_request(user.id, debt_id, payload.message)
 
 
 @router.post("/{debt_id}/cancel", response_model=DebtOut)

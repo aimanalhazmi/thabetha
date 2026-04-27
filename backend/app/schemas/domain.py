@@ -26,7 +26,6 @@ class DebtStatus(StrEnum):
     pending_confirmation = "pending_confirmation"
     active = "active"
     edit_requested = "edit_requested"
-    rejected = "rejected"
     overdue = "overdue"
     payment_pending_confirmation = "payment_pending_confirmation"
     paid = "paid"
@@ -42,8 +41,9 @@ class AttachmentType(StrEnum):
 class NotificationType(StrEnum):
     debt_created = "debt_created"
     debt_confirmed = "debt_confirmed"
-    debt_rejected = "debt_rejected"
     debt_edit_requested = "debt_edit_requested"
+    debt_edit_approved = "debt_edit_approved"
+    debt_edit_rejected = "debt_edit_rejected"
     debt_cancelled = "debt_cancelled"
     due_soon = "due_soon"
     overdue = "overdue"
@@ -118,6 +118,7 @@ class DebtCreate(BaseModel):
     currency: str = Field(min_length=3, max_length=3)
     description: str = Field(min_length=1)
     due_date: date
+    reminder_dates: list[date] = Field(default_factory=list)
     invoice_url: str | None = None
     notes: str | None = None
     group_id: str | None = None
@@ -153,6 +154,7 @@ class DebtOut(BaseModel):
     currency: str
     description: str
     due_date: date
+    reminder_dates: list[date] = Field(default_factory=list)
     status: DebtStatus
     invoice_url: str | None = None
     notes: str | None = None
@@ -228,6 +230,7 @@ class CommitmentScoreEventOut(BaseModel):
     score_after: int
     reason: str
     debt_id: str | None = None
+    reminder_date: date | None = None
     created_at: datetime
 
 

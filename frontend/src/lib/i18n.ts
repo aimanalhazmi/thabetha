@@ -33,8 +33,16 @@ export type TranslationKey =
   | 'active'
   | 'paid'
   | 'accept'
-  | 'reject'
   | 'requestEdit'
+  | 'approveEdit'
+  | 'rejectEdit'
+  | 'reminderDates'
+  | 'addReminder'
+  | 'reminderPresetOnDue'
+  | 'reminderPresetPlus1'
+  | 'reminderPresetPlus3'
+  | 'reminderPresetPlus7'
+  | 'reminderPresetPlus14'
   | 'markPaid'
   | 'confirmPayment'
   | 'save'
@@ -70,7 +78,6 @@ export type TranslationKey =
   | 'dontHaveAccount'
   | 'pendingConfirmation'
   | 'editRequested'
-  | 'rejected'
   | 'paymentPendingConfirmation'
   | 'cancelled'
   | 'checkEmail'
@@ -148,8 +155,16 @@ const ar: Translations = {
   active: 'نشط',
   paid: 'مدفوع',
   accept: 'قبول',
-  reject: 'رفض',
   requestEdit: 'طلب تعديل',
+  approveEdit: 'الموافقة على التعديل',
+  rejectEdit: 'رفض التعديل',
+  reminderDates: 'تواريخ التذكير',
+  addReminder: 'إضافة تذكير',
+  reminderPresetOnDue: 'في تاريخ الاستحقاق',
+  reminderPresetPlus1: 'بعد يوم',
+  reminderPresetPlus3: 'بعد ٣ أيام',
+  reminderPresetPlus7: 'بعد ٧ أيام',
+  reminderPresetPlus14: 'بعد ١٤ يومًا',
   markPaid: 'تحديد كمدفوع',
   confirmPayment: 'تأكيد استلام الدفع',
   save: 'حفظ',
@@ -185,7 +200,6 @@ const ar: Translations = {
   dontHaveAccount: 'ليس لديك حساب؟',
   pendingConfirmation: 'بانتظار التأكيد',
   editRequested: 'طلب تعديل',
-  rejected: 'مرفوض',
   paymentPendingConfirmation: 'بانتظار تأكيد الدفع',
   cancelled: 'ملغي',
   checkEmail: 'تحقق من بريدك الإلكتروني',
@@ -262,8 +276,16 @@ const en: Translations = {
   active: 'Active',
   paid: 'Paid',
   accept: 'Accept',
-  reject: 'Reject',
   requestEdit: 'Request edit',
+  approveEdit: 'Approve edit',
+  rejectEdit: 'Reject edit',
+  reminderDates: 'Reminders',
+  addReminder: 'Add reminder',
+  reminderPresetOnDue: 'On due date',
+  reminderPresetPlus1: '+1 day',
+  reminderPresetPlus3: '+3 days',
+  reminderPresetPlus7: '+7 days',
+  reminderPresetPlus14: '+14 days',
   markPaid: 'Mark paid',
   confirmPayment: 'Confirm payment',
   save: 'Save',
@@ -299,7 +321,6 @@ const en: Translations = {
   dontHaveAccount: "Don't have an account?",
   pendingConfirmation: 'Pending confirmation',
   editRequested: 'Edit requested',
-  rejected: 'Rejected',
   paymentPendingConfirmation: 'Payment pending confirmation',
   cancelled: 'Cancelled',
   checkEmail: 'Check Your Email',

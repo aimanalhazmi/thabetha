@@ -19,12 +19,22 @@ export function DashboardPage({ language, message }: Props) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
-    void Promise.all([
-      apiRequest<Profile>('/profiles/me').then(setProfile).catch(() => {}),
-      apiRequest<Debt[]>('/debts').then(setDebts).catch(() => {}),
-      apiRequest<NotificationItem[]>('/notifications').then(setNotifications).catch(() => {}),
-    ]).finally(() => setLoading(false));
+    const loadAll = (initial: boolean) => {
+      if (initial) setLoading(true);
+      const promise = Promise.all([
+        apiRequest<Profile>('/profiles/me').then(setProfile).catch(() => {}),
+        apiRequest<Debt[]>('/debts').then(setDebts).catch(() => {}),
+        apiRequest<NotificationItem[]>('/notifications').then(setNotifications).catch(() => {}),
+      ]);
+      if (initial) {
+        void promise.finally(() => setLoading(false));
+      } else {
+        void promise;
+      }
+    };
+    loadAll(true);
+    const interval = setInterval(() => loadAll(false), 30_000);
+    return () => clearInterval(interval);
   }, []);
 
   const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both';
@@ -36,8 +46,10 @@ export function DashboardPage({ language, message }: Props) {
   const overdueDebts = debts.filter(d => d.status === 'overdue');
   const paidDebts = debts.filter(d => d.status === 'paid');
 
+  const paymentPendingDebts = debts.filter(d => d.status === 'payment_pending_confirmation');
+
   const totalAmount = debts
-    .filter(d => d.status === 'active' || d.status === 'overdue')
+    .filter(d => d.status === 'active' || d.status === 'overdue' || d.status === 'payment_pending_confirmation')
     .reduce((sum, d) => sum + parseFloat(d.amount || '0'), 0);
 
   if (loading) return <p className="empty">{tr('loading')}</p>;
@@ -63,6 +75,7 @@ export function DashboardPage({ language, message }: Props) {
       <Stat label={isCreditor ? tr('receivable') : tr('totalDebt')} value={`${totalAmount.toFixed(2)} SAR`} />
       <Stat label={tr('active')} value={String(activeDebts.length)} />
       <Stat label={tr('pendingConfirmation')} value={String(waitingDebts.length)} />
+      <Stat label={tr('paymentPendingConfirmation')} value={String(paymentPendingDebts.length)} />
       <Stat label={tr('commitmentIndicator')} value={`${profile?.commitment_score ?? 50} / 100`} />
 
       {/* Delay Alerts */}
@@ -97,7 +110,6 @@ export function DashboardPage({ language, message }: Props) {
                   : d.status === 'active' ? tr('active')
                   : d.status === 'paid' ? tr('paid')
                   : d.status === 'edit_requested' ? tr('editRequested')
-                  : d.status === 'rejected' ? tr('rejected')
                   : d.status === 'payment_pending_confirmation' ? tr('paymentPendingConfirmation')
                   : d.status === 'cancelled' ? tr('cancelled')
                   : tr('overdue')}

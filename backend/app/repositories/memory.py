@@ -42,6 +42,14 @@ from app.schemas.domain import (
 )
 
 
+def _late_penalty(missed_count: int) -> int:
+    """Late-payment / missed-reminder commitment-indicator penalty.
+
+    Base penalty is -2, doubled per already-missed reminder: -2, -4, -8, -16, ...
+    """
+    return -2 * (2 ** missed_count)
+
+
 class InMemoryRepository(Repository):
     """A local repository for demo/test use.
 
@@ -69,6 +77,8 @@ class InMemoryRepository(Repository):
             self.group_members: list[GroupMemberOut] = []
             self.settlements: list[SettlementOut] = []
             self._overdue_penalties: set[str] = set()
+            self._edit_request_payloads: dict[str, dict[str, object]] = {}
+            self._original_terms: dict[str, dict[str, object]] = {}
 
     def ensure_profile(self, user: AuthenticatedUser) -> ProfileOut:
         with self._lock:
@@ -165,6 +175,7 @@ class InMemoryRepository(Repository):
                 currency=payload.currency,
                 description=payload.description,
                 due_date=payload.due_date,
+                reminder_dates=sorted(set(payload.reminder_dates)),
                 status=DebtStatus.pending_confirmation,
                 invoice_url=payload.invoice_url,
                 notes=payload.notes,
@@ -219,19 +230,6 @@ class InMemoryRepository(Repository):
             self._notify(debt.creditor_id, NotificationType.debt_confirmed, "Debt accepted", f"{debt.debtor_name} accepted {debt.amount} {debt.currency}", debt.id)
             return debt
 
-    def reject_debt(self, user_id: str, debt_id: str, message: str | None = None) -> DebtOut:
-        with self._lock:
-            debt = self.get_authorized_debt(user_id, debt_id)
-            if debt.debtor_id != user_id:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the debtor can reject this debt")
-            if debt.status != DebtStatus.pending_confirmation:
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt cannot be rejected from its current state")
-            debt = debt.model_copy(update={"status": DebtStatus.rejected, "updated_at": utcnow()})
-            self.debts[debt_id] = debt
-            self._add_event(debt.id, user_id, "debt_rejected", message)
-            self._notify(debt.creditor_id, NotificationType.debt_rejected, "Debt rejected", message or f"{debt.debtor_name} rejected the debt", debt.id)
-            return debt
-
     def request_debt_change(self, user_id: str, debt_id: str, payload: DebtChangeRequest) -> DebtOut:
         with self._lock:
             debt = self.get_authorized_debt(user_id, debt_id)
@@ -241,8 +239,59 @@ class InMemoryRepository(Repository):
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only pending debts can be changed")
             debt = debt.model_copy(update={"status": DebtStatus.edit_requested, "updated_at": utcnow()})
             self.debts[debt_id] = debt
+            self._edit_request_payloads[debt_id] = payload.model_dump(exclude_none=True)
             self._add_event(debt.id, user_id, "debt_edit_requested", payload.message, payload.model_dump(exclude_none=True))
             self._notify(debt.creditor_id, NotificationType.debt_edit_requested, "Debt change requested", payload.message, debt.id)
+            return debt
+
+    def approve_edit_request(self, user_id: str, debt_id: str, message: str | None = None) -> DebtOut:
+        with self._lock:
+            debt = self.get_authorized_debt(user_id, debt_id)
+            if debt.creditor_id != user_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the creditor can decide on an edit request")
+            if debt.status != DebtStatus.edit_requested:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No edit request awaits a decision")
+            payload = self._edit_request_payloads.pop(debt_id, {})
+            update: dict[str, object] = {"status": DebtStatus.pending_confirmation, "updated_at": utcnow()}
+            if "requested_amount" in payload and payload["requested_amount"] is not None:
+                update["amount"] = Decimal(str(payload["requested_amount"]))
+            if "requested_due_date" in payload and payload["requested_due_date"] is not None:
+                value = payload["requested_due_date"]
+                update["due_date"] = value if isinstance(value, date) else date.fromisoformat(str(value))
+            debt = debt.model_copy(update=update)
+            self.debts[debt_id] = debt
+            self._add_event(debt.id, user_id, "debt_edit_approved", message, payload)
+            if debt.debtor_id:
+                self._notify(
+                    debt.debtor_id,
+                    NotificationType.debt_edit_approved,
+                    "Edit approved",
+                    message or f"{debt.amount} {debt.currency} updated; please re-confirm",
+                    debt.id,
+                    merchant_id=debt.creditor_id,
+                )
+            return debt
+
+    def reject_edit_request(self, user_id: str, debt_id: str, message: str | None = None) -> DebtOut:
+        with self._lock:
+            debt = self.get_authorized_debt(user_id, debt_id)
+            if debt.creditor_id != user_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the creditor can decide on an edit request")
+            if debt.status != DebtStatus.edit_requested:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No edit request awaits a decision")
+            self._edit_request_payloads.pop(debt_id, None)
+            debt = debt.model_copy(update={"status": DebtStatus.pending_confirmation, "updated_at": utcnow()})
+            self.debts[debt_id] = debt
+            self._add_event(debt.id, user_id, "debt_edit_rejected", message)
+            if debt.debtor_id:
+                self._notify(
+                    debt.debtor_id,
+                    NotificationType.debt_edit_rejected,
+                    "Edit rejected",
+                    message or "Creditor declined your edit; original terms stand",
+                    debt.id,
+                    merchant_id=debt.creditor_id,
+                )
             return debt
 
     def mark_paid(self, user_id: str, debt_id: str, payload: PaymentRequest) -> PaymentConfirmationOut:
@@ -284,8 +333,17 @@ class InMemoryRepository(Repository):
                 self.payment_confirmations[debt.id] = confirmation.model_copy(update={"status": "confirmed", "confirmed_at": now})
             self._add_event(debt.id, user_id, "payment_confirmed", "Creditor confirmed receiving payment")
             if debt.debtor_id:
-                delta = 5 if now.date() <= debt.due_date else -2
-                self._change_commitment_score(debt.debtor_id, delta, "payment_confirmed", debt.id)
+                today = now.date()
+                if today < debt.due_date:
+                    self._change_commitment_score(debt.debtor_id, 3, "paid_early", debt.id)
+                elif today == debt.due_date:
+                    self._change_commitment_score(debt.debtor_id, 1, "paid_on_time", debt.id)
+                else:
+                    missed = sum(
+                        1 for ev in self.commitment_score_events
+                        if ev.debt_id == debt.id and ev.reason == "missed_reminder"
+                    )
+                    self._change_commitment_score(debt.debtor_id, _late_penalty(missed), "paid_late", debt.id)
                 self._notify(debt.debtor_id, NotificationType.payment_confirmed, "Payment confirmed", f"{debt.amount} {debt.currency} was confirmed as paid", debt.id)
             return debt
 
@@ -294,7 +352,7 @@ class InMemoryRepository(Repository):
             debt = self.get_authorized_debt(user_id, debt_id)
             if debt.creditor_id != user_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the creditor can cancel this debt")
-            cancellable = {DebtStatus.pending_confirmation, DebtStatus.edit_requested, DebtStatus.rejected}
+            cancellable = {DebtStatus.pending_confirmation, DebtStatus.edit_requested}
             if debt.status not in cancellable:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Active or paid debts cannot be cancelled")
             debt = debt.model_copy(update={"status": DebtStatus.cancelled, "updated_at": utcnow()})
@@ -489,18 +547,29 @@ class InMemoryRepository(Repository):
         self.notifications.append(notification)
         return notification
 
-    def _change_commitment_score(self, user_id: str, delta: int, reason: str, debt_id: str | None = None) -> CommitmentScoreEventOut:
+    def _change_commitment_score(
+        self,
+        user_id: str,
+        delta: int,
+        reason: str,
+        debt_id: str | None = None,
+        reminder_date: date | None = None,
+    ) -> CommitmentScoreEventOut:
         profile = self.profiles.get(user_id)
         if not profile:
             return CommitmentScoreEventOut(id=str(uuid4()), user_id=user_id, delta=0, score_after=50, reason="profile_missing", debt_id=debt_id, created_at=utcnow())
         score_after = min(100, max(0, profile.commitment_score + delta))
-        event = CommitmentScoreEventOut(id=str(uuid4()), user_id=user_id, delta=delta, score_after=score_after, reason=reason, debt_id=debt_id, created_at=utcnow())
+        event = CommitmentScoreEventOut(
+            id=str(uuid4()), user_id=user_id, delta=delta, score_after=score_after,
+            reason=reason, debt_id=debt_id, reminder_date=reminder_date, created_at=utcnow(),
+        )
         self.commitment_score_events.append(event)
         self.profiles[user_id] = profile.model_copy(update={"commitment_score": score_after, "updated_at": utcnow()})
         return event
 
     def _refresh_overdue(self) -> None:
         today = date.today()
+        unpaid_states = {DebtStatus.active, DebtStatus.overdue, DebtStatus.payment_pending_confirmation}
         for debt in list(self.debts.values()):
             if debt.status == DebtStatus.active and debt.due_date < today:
                 updated = debt.model_copy(update={"status": DebtStatus.overdue, "updated_at": utcnow()})
@@ -510,6 +579,34 @@ class InMemoryRepository(Repository):
                     self._change_commitment_score(debt.debtor_id, -5, "debt_overdue", debt.id)
                     self._overdue_penalties.add(debt.id)
                     self._notify(debt.debtor_id, NotificationType.overdue, "Debt overdue", f"{debt.amount} {debt.currency} is overdue", debt.id, merchant_id=debt.creditor_id)
+        # Apply missed-reminder penalties for any unpaid debt whose reminder dates have passed.
+        for debt in list(self.debts.values()):
+            if debt.status not in unpaid_states or not debt.debtor_id:
+                continue
+            self._apply_missed_reminder_penalties(debt, today)
+
+    def _apply_missed_reminder_penalties(self, debt: DebtOut, today: date) -> None:
+        already = {
+            ev.reminder_date for ev in self.commitment_score_events
+            if ev.debt_id == debt.id and ev.reason == "missed_reminder" and ev.reminder_date is not None
+        }
+        for reminder in sorted(debt.reminder_dates):
+            if reminder >= today or reminder in already:
+                continue
+            prior = sum(
+                1 for ev in self.commitment_score_events
+                if ev.debt_id == debt.id and ev.reason == "missed_reminder"
+            )
+            self._change_commitment_score(debt.debtor_id, _late_penalty(prior), "missed_reminder", debt.id, reminder_date=reminder)
+            self._notify(
+                debt.debtor_id,
+                NotificationType.overdue,
+                "Reminder missed",
+                f"Reminder for {debt.amount} {debt.currency} on {reminder.isoformat()} passed unpaid",
+                debt.id,
+                merchant_id=debt.creditor_id,
+            )
+            already.add(reminder)
 
     def _can_view_debt(self, user_id: str, debt: DebtOut) -> bool:
         if debt.creditor_id == user_id or debt.debtor_id == user_id:

@@ -73,6 +73,7 @@ def _debt_from_row(row: dict) -> DebtOut:
         currency=row["currency"].strip(),
         description=row["description"],
         due_date=row["due_date"],
+        reminder_dates=list(row.get("reminder_dates") or []),
         status=row["status"],
         invoice_url=row.get("invoice_url"),
         notes=row.get("notes"),
@@ -82,6 +83,14 @@ def _debt_from_row(row: dict) -> DebtOut:
         confirmed_at=row.get("confirmed_at"),
         paid_at=row.get("paid_at"),
     )
+
+
+def _late_penalty(missed_count: int) -> int:
+    """Late-payment / missed-reminder commitment-indicator penalty.
+
+    Base penalty is -2, doubled per already-missed reminder: -2, -4, -8, -16, ...
+    """
+    return -2 * (2 ** missed_count)
 
 
 _PROFILE_SELECT = """
@@ -95,11 +104,24 @@ LEFT JOIN business_profiles bp ON bp.owner_id = p.id
 class PostgresRepository(Repository):
     def __init__(self, pool: ConnectionPool) -> None:
         self._pool = pool
+        self._reminder_dates_supported: bool | None = None
+
+    def _has_reminder_dates(self, conn) -> bool:
+        """Cache whether migration 006 (reminder_dates column) has been applied."""
+        if self._reminder_dates_supported is None:
+            row = conn.execute(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'debts' AND column_name = 'reminder_dates'
+                """,
+            ).fetchone()
+            self._reminder_dates_supported = row is not None
+        return self._reminder_dates_supported
 
     # ── helpers ────────────────────────────────────────────────────────
 
     def _refresh_overdue(self, conn) -> None:
-        """Move active debts past due_date to delay status."""
+        """Move active debts past due_date to overdue, then apply missed-reminder penalties."""
         cur = conn.execute(
             """
             UPDATE debts SET status = 'overdue', updated_at = now()
@@ -111,10 +133,56 @@ class PostgresRepository(Repository):
             debt_id = str(row[0])
             debtor_id = str(row[1]) if row[1] else None
             amount, currency, creditor_id = row[2], row[3].strip(), str(row[4])
-            self._add_event_raw(conn, debt_id, "system", "debt_overdue", "Debt moved to delay")
+            self._add_event_raw(conn, debt_id, "system", "debt_overdue", "Debt moved to overdue")
             if debtor_id:
                 self._change_commitment_score_raw(conn, debtor_id, -5, "debt_overdue", debt_id)
-                self._notify_raw(conn, debtor_id, "overdue", "Debt delayed", f"{amount} {currency} is delayed", debt_id, merchant_id=creditor_id)
+                self._notify_raw(conn, debtor_id, "overdue", "Debt overdue", f"{amount} {currency} is overdue", debt_id, merchant_id=creditor_id)
+        if self._has_reminder_dates(conn):
+            self._apply_missed_reminders(conn)
+
+    def _apply_missed_reminders(self, conn) -> None:
+        """For every unpaid debt, fire a one-time penalty for each reminder date that has passed."""
+        unpaid = ("active", "overdue", "payment_pending_confirmation")
+        rows = conn.execute(
+            """
+            SELECT id, debtor_id, creditor_id, amount, currency, reminder_dates
+            FROM debts
+            WHERE status = ANY(%s) AND debtor_id IS NOT NULL AND array_length(reminder_dates, 1) > 0
+            """,
+            (list(unpaid),),
+        ).fetchall()
+        for row in rows:
+            debt_id = str(row["id"])
+            debtor_id = str(row["debtor_id"])
+            creditor_id = str(row["creditor_id"])
+            amount = row["amount"]
+            currency = row["currency"].strip()
+            reminders = sorted(row["reminder_dates"] or [])
+            applied_rows = conn.execute(
+                """
+                SELECT reminder_date FROM commitment_score_events
+                WHERE debt_id = %s AND reason = 'missed_reminder' AND reminder_date IS NOT NULL
+                """,
+                (debt_id,),
+            ).fetchall()
+            already = {r["reminder_date"] for r in applied_rows}
+            for reminder in reminders:
+                if reminder >= date.today() or reminder in already:
+                    continue
+                prior = conn.execute(
+                    "SELECT COUNT(*) AS n FROM commitment_score_events WHERE debt_id = %s AND reason = 'missed_reminder'",
+                    (debt_id,),
+                ).fetchone()
+                prior_n = int(prior["n"]) if prior else 0
+                self._change_commitment_score_raw(
+                    conn, debtor_id, _late_penalty(prior_n), "missed_reminder", debt_id, reminder_date=reminder,
+                )
+                self._notify_raw(
+                    conn, debtor_id, "overdue", "Reminder missed",
+                    f"Reminder for {amount} {currency} on {reminder.isoformat()} passed unpaid",
+                    debt_id, merchant_id=creditor_id,
+                )
+                already.add(reminder)
 
     def _add_event_raw(self, conn, debt_id: str, actor_id: str, event_type: str, message: str | None = None, metadata: dict | None = None) -> str:
         event_id = str(uuid4())
@@ -149,19 +217,22 @@ class PostgresRepository(Repository):
         )
         return nid
 
-    def _change_commitment_score_raw(self, conn, user_id: str, delta: int, reason: str, debt_id: str | None = None) -> None:
+    def _change_commitment_score_raw(
+        self, conn, user_id: str, delta: int, reason: str, debt_id: str | None = None, reminder_date=None,
+    ) -> None:
         row = conn.execute("SELECT commitment_score FROM profiles WHERE id = %s", (user_id,)).fetchone()
         if not row:
             return
-        old_score = row[0]
+        # row may be a dict or tuple depending on cursor row_factory of the caller
+        old_score = row[0] if not isinstance(row, dict) else row["commitment_score"]
         new_score = min(100, max(0, old_score + delta))
         conn.execute("UPDATE profiles SET commitment_score = %s, updated_at = now() WHERE id = %s", (new_score, user_id))
         conn.execute(
             """
-            INSERT INTO commitment_score_events (id, user_id, delta, score_after, reason, debt_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, now())
+            INSERT INTO commitment_score_events (id, user_id, delta, score_after, reason, debt_id, reminder_date, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, now())
             """,
-            (str(uuid4()), user_id, delta, new_score, reason, debt_id),
+            (str(uuid4()), user_id, delta, new_score, reason, debt_id, reminder_date),
         )
 
     def _can_view_debt(self, conn, user_id: str, debt_id: str) -> dict | None:
@@ -318,26 +389,49 @@ class PostgresRepository(Repository):
             conn.row_factory = dict_row
             self._refresh_overdue(conn)
             debt_id = str(uuid4())
-            conn.execute(
-                """
-                INSERT INTO debts (id, creditor_id, debtor_id, debtor_name, amount, currency, description, due_date,
-                                   status, invoice_url, notes, group_id, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending_confirmation', %s, %s, %s, now(), now())
-                """,
-                (
-                    debt_id,
-                    creditor_id,
-                    payload.debtor_id,
-                    payload.debtor_name,
-                    payload.amount,
-                    payload.currency,
-                    payload.description,
-                    payload.due_date,
-                    payload.invoice_url,
-                    payload.notes,
-                    payload.group_id,
-                ),
-            )
+            if self._has_reminder_dates(conn):
+                conn.execute(
+                    """
+                    INSERT INTO debts (id, creditor_id, debtor_id, debtor_name, amount, currency, description, due_date,
+                                       reminder_dates, status, invoice_url, notes, group_id, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending_confirmation', %s, %s, %s, now(), now())
+                    """,
+                    (
+                        debt_id,
+                        creditor_id,
+                        payload.debtor_id,
+                        payload.debtor_name,
+                        payload.amount,
+                        payload.currency,
+                        payload.description,
+                        payload.due_date,
+                        sorted(set(payload.reminder_dates)),
+                        payload.invoice_url,
+                        payload.notes,
+                        payload.group_id,
+                    ),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO debts (id, creditor_id, debtor_id, debtor_name, amount, currency, description, due_date,
+                                       status, invoice_url, notes, group_id, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending_confirmation', %s, %s, %s, now(), now())
+                    """,
+                    (
+                        debt_id,
+                        creditor_id,
+                        payload.debtor_id,
+                        payload.debtor_name,
+                        payload.amount,
+                        payload.currency,
+                        payload.description,
+                        payload.due_date,
+                        payload.invoice_url,
+                        payload.notes,
+                        payload.group_id,
+                    ),
+                )
             self._add_event_raw(conn, debt_id, creditor_id, "debt_created", "Debt created and awaiting debtor confirmation")
             if payload.debtor_id:
                 self._notify_raw(
@@ -411,26 +505,6 @@ class PostgresRepository(Repository):
             updated = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
             return _debt_from_row(updated)
 
-    def reject_debt(self, user_id: str, debt_id: str, message: str | None = None) -> DebtOut:
-        with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            row = self._can_view_debt(conn, user_id, debt_id)
-            if not row:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
-            if str(row["debtor_id"]) != user_id:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the debtor can reject this debt")
-            if row["status"] != "pending_confirmation":
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt cannot be rejected from its current state")
-            # Delete the debt since we don't have a rejected status
-            conn.execute("DELETE FROM debts WHERE id = %s", (debt_id,))
-            self._add_event_raw(conn, debt_id, user_id, "debt_rejected", message)
-            self._notify_raw(
-                conn, str(row["creditor_id"]), "debt_rejected", "Debt rejected", message or f"{row['debtor_name']} rejected the debt", debt_id
-            )
-            conn.commit()
-            updated = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
-            return _debt_from_row(updated)
-
     def request_debt_change(self, user_id: str, debt_id: str, payload: DebtChangeRequest) -> DebtOut:
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
@@ -442,8 +516,73 @@ class PostgresRepository(Repository):
             if row["status"] != "pending_confirmation":
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only pending debts can be changed")
             conn.execute("UPDATE debts SET status = 'edit_requested', updated_at = now() WHERE id = %s", (debt_id,))
-            self._add_event_raw(conn, debt_id, user_id, "debt_edit_requested", payload.message, payload.model_dump(exclude_none=True))
+            self._add_event_raw(conn, debt_id, user_id, "debt_edit_requested", payload.message, payload.model_dump(exclude_none=True, mode="json"))
             self._notify_raw(conn, str(row["creditor_id"]), "debt_edit_requested", "Debt edit requested", payload.message, debt_id)
+            conn.commit()
+            updated = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
+            return _debt_from_row(updated)
+
+    def approve_edit_request(self, user_id: str, debt_id: str, message: str | None = None) -> DebtOut:
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            row = self._can_view_debt(conn, user_id, debt_id)
+            if not row:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
+            if str(row["creditor_id"]) != user_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the creditor can decide on an edit request")
+            if row["status"] != "edit_requested":
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No edit request awaits a decision")
+            # Pull the latest edit-request payload from the audit trail.
+            ev = conn.execute(
+                """
+                SELECT metadata FROM debt_events
+                WHERE debt_id = %s AND event_type = 'debt_edit_requested'
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (debt_id,),
+            ).fetchone()
+            metadata = (ev["metadata"] if ev else {}) or {}
+            sets = ["status = 'pending_confirmation'", "updated_at = now()"]
+            params: list[object] = []
+            if metadata.get("requested_amount") is not None:
+                sets.append("amount = %s")
+                params.append(Decimal(str(metadata["requested_amount"])))
+            if metadata.get("requested_due_date") is not None:
+                sets.append("due_date = %s")
+                params.append(date.fromisoformat(str(metadata["requested_due_date"])))
+            params.append(debt_id)
+            conn.execute(f"UPDATE debts SET {', '.join(sets)} WHERE id = %s", params)  # noqa: S608
+            self._add_event_raw(conn, debt_id, user_id, "debt_edit_approved", message, metadata)
+            debtor_id = str(row["debtor_id"]) if row.get("debtor_id") else None
+            if debtor_id:
+                self._notify_raw(
+                    conn, debtor_id, "debt_edit_approved", "Edit approved",
+                    message or "Creditor approved your edit; please re-confirm",
+                    debt_id, merchant_id=str(row["creditor_id"]),
+                )
+            conn.commit()
+            updated = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
+            return _debt_from_row(updated)
+
+    def reject_edit_request(self, user_id: str, debt_id: str, message: str | None = None) -> DebtOut:
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            row = self._can_view_debt(conn, user_id, debt_id)
+            if not row:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
+            if str(row["creditor_id"]) != user_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the creditor can decide on an edit request")
+            if row["status"] != "edit_requested":
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No edit request awaits a decision")
+            conn.execute("UPDATE debts SET status = 'pending_confirmation', updated_at = now() WHERE id = %s", (debt_id,))
+            self._add_event_raw(conn, debt_id, user_id, "debt_edit_rejected", message)
+            debtor_id = str(row["debtor_id"]) if row.get("debtor_id") else None
+            if debtor_id:
+                self._notify_raw(
+                    conn, debtor_id, "debt_edit_rejected", "Edit rejected",
+                    message or "Creditor declined your edit; original terms stand",
+                    debt_id, merchant_id=str(row["creditor_id"]),
+                )
             conn.commit()
             updated = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
             return _debt_from_row(updated)
@@ -507,9 +646,18 @@ class PostgresRepository(Repository):
             self._add_event_raw(conn, debt_id, user_id, "payment_confirmed", "Creditor confirmed receiving payment")
             debtor_id = str(row["debtor_id"]) if row.get("debtor_id") else None
             if debtor_id:
-                now = utcnow()
-                delta = 5 if now.date() <= row["due_date"] else -2
-                self._change_commitment_score_raw(conn, debtor_id, delta, "payment_confirmed", debt_id)
+                today = utcnow().date()
+                if today < row["due_date"]:
+                    self._change_commitment_score_raw(conn, debtor_id, 3, "paid_early", debt_id)
+                elif today == row["due_date"]:
+                    self._change_commitment_score_raw(conn, debtor_id, 1, "paid_on_time", debt_id)
+                else:
+                    missed_row = conn.execute(
+                        "SELECT COUNT(*) AS n FROM commitment_score_events WHERE debt_id = %s AND reason = 'missed_reminder'",
+                        (debt_id,),
+                    ).fetchone()
+                    missed = int(missed_row["n"]) if missed_row else 0
+                    self._change_commitment_score_raw(conn, debtor_id, _late_penalty(missed), "paid_late", debt_id)
                 self._notify_raw(
                     conn,
                     debtor_id,
@@ -530,7 +678,7 @@ class PostgresRepository(Repository):
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
             if str(row["creditor_id"]) != user_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the creditor can cancel this debt")
-            if row["status"] not in ("pending_confirmation", "edit_requested", "rejected"):
+            if row["status"] not in ("pending_confirmation", "edit_requested"):
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Active or paid debts cannot be cancelled")
             conn.execute("UPDATE debts SET status = 'cancelled', updated_at = now() WHERE id = %s", (debt_id,))
             self._add_event_raw(conn, debt_id, user_id, "debt_cancelled", message)
@@ -760,6 +908,7 @@ class PostgresRepository(Repository):
                     score_after=r["score_after"],
                     reason=r["reason"],
                     debt_id=str(r["debt_id"]) if r.get("debt_id") else None,
+                    reminder_date=r.get("reminder_date"),
                     created_at=r["created_at"],
                 )
                 for r in rows
