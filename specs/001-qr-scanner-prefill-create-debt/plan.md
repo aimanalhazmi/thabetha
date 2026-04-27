@@ -1,6 +1,6 @@
 # Implementation Plan: QR-scanner pass-through to Create Debt
 
-**Branch**: `001-qr-scanner-prefill-create-debt` | **Date**: 2026-04-27 | **Spec**: [spec.md](./spec.md)
+**Branch**: `001-qr-scanner-prefill-create-debt` | **Date**: 2026-04-27 | **Spec**: [spec.md](spec.md)
 **Input**: Feature specification from `/specs/001-qr-scanner-prefill-create-debt/spec.md`
 
 ## Summary
@@ -83,7 +83,7 @@ frontend/
 
 ## Phase 0 — Research
 
-Output: [`research.md`](./research.md). Resolves the small set of decisions that the spec deliberately leaves to the implementer:
+Output: [`research.md`](research.md). Resolves the small set of decisions that the spec deliberately leaves to the implementer:
 
 - **R1** — Where does the scanner's confirm step live (overlay on `QRPage.tsx` vs. dedicated route)? Decision: in-page sheet/overlay on `QRPage.tsx` so "Cancel" trivially equals "dismiss the sheet, camera stays live".
 - **R2** — How does the Create Debt form handle the transient loading state while resolving on mount? Decision: skeleton header in place of the preview; debt fields disabled until resolve completes or fails.
@@ -93,7 +93,7 @@ Output: [`research.md`](./research.md). Resolves the small set of decisions that
 
 ## Phase 1 — Design & Contracts
 
-### Data model — [`data-model.md`](./data-model.md)
+### Data model — [`data-model.md`](data-model.md)
 
 No new persistent entities. The data model captures the **form's local state machine** for the Create Debt screen:
 
@@ -101,7 +101,7 @@ No new persistent entities. The data model captures the **form's local state mac
 - `prefilled: { debtor_id: string; debtor_name: string; phone_last4: string; commitment_score: number } | null`
 - Transitions and per-state UI affordances are documented in `data-model.md`.
 
-### Contracts — [`contracts/frontend-routes.md`](./contracts/frontend-routes.md)
+### Contracts — [`contracts/frontend-routes.md`](contracts/frontend-routes.md)
 
 The only new contract is a deep-link convention between the scanner and the create-debt screen:
 
@@ -111,7 +111,7 @@ The only new contract is a deep-link convention between the scanner and the crea
 - **Backend touchpoints**: `GET /qr/resolve/{token}` (existing, `backend/app/api/qr.py:31`), `POST /debts` (existing, accepts `debtor_id` + `debtor_name`)
 - **Lifecycle**: token stripped from URL on successful debt creation (Q2 clarification — client-side single-use)
 
-### Quickstart — [`quickstart.md`](./quickstart.md)
+### Quickstart — [`quickstart.md`](quickstart.md)
 
 A short manual walkthrough a reviewer can run to validate the feature locally: sign in as creditor A in one browser, sign in as debtor B in another, open B's QR page, scan from A's `QRPage.tsx`, confirm on the sheet, fill the Create Debt form, submit, and assert that the resulting debt on B's side carries the correct `debtor_id` link.
 

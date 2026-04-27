@@ -166,6 +166,6 @@ disagree with a rule above, the constitution wins until formally amended.
   principle area (lifecycle, RLS, i18n, schemas, AI gating, QR, storage). The
   `Constitution Check` gate in `.specify/templates/plan-template.md` is the
   enforcement point during planning. Runtime developer guidance lives in
-  [`../../CLAUDE.md`](../../CLAUDE.md).
+  [`../../CLAUDE.md`](../../backend/CLAUDE.md).
 
 **Version**: 1.0.0 | **Ratified**: 2026-04-27 | **Last Amended**: 2026-04-27
