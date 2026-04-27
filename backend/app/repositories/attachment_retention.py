@@ -4,7 +4,7 @@ import calendar
 from datetime import UTC, datetime, timedelta
 
 from app.core.config import get_settings
-from app.schemas.domain import AttachmentRetentionState, AttachmentOut, DebtOut, DebtStatus, utcnow
+from app.schemas.domain import AttachmentOut, AttachmentRetentionState, DebtOut, DebtStatus, utcnow
 
 
 def receipt_url_expires_at(now: datetime | None = None) -> datetime:

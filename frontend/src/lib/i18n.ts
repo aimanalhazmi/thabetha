@@ -162,7 +162,12 @@ export type TranslationKey =
   | 'receiptUnsupported'
   | 'receiptLargeWarning'
   | 'receiptArchived'
-  | 'receiptAvailable';
+  | 'receiptAvailable'
+  | 'qrExpiredAskRefresh'
+  | 'cannotBillSelf'
+  | 'clearDebtor'
+  | 'scannedDebtorLabel'
+  | 'createDebtForPerson';
 
 type Translations = Record<TranslationKey, string>;
 
@@ -328,6 +333,11 @@ const ar: Translations = {
   receiptLargeWarning: 'ملف كبير، قد يستغرق الرفع وقتًا أطول',
   receiptArchived: 'مؤرشف',
   receiptAvailable: 'متاح',
+  qrExpiredAskRefresh: 'انتهت صلاحية رمز QR، اطلب من العميل تحديث رمزه',
+  cannotBillSelf: 'لا يمكنك تسجيل دين على نفسك',
+  clearDebtor: 'تغيير المدين',
+  scannedDebtorLabel: 'تم التحقق عبر QR',
+  createDebtForPerson: 'إنشاء دين لهذا الشخص',
 };
 
 const en: Translations = {
@@ -492,6 +502,11 @@ const en: Translations = {
   receiptLargeWarning: 'Large file, upload may take longer',
   receiptArchived: 'Archived',
   receiptAvailable: 'Available',
+  qrExpiredAskRefresh: 'QR code expired — ask the customer to refresh their code',
+  cannotBillSelf: "You can't bill yourself",
+  clearDebtor: 'Change debtor',
+  scannedDebtorLabel: 'Verified via QR',
+  createDebtForPerson: 'Create debt for this person',
 };
 
 const translations: Record<Language, Translations> = { ar, en };

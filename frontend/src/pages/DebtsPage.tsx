@@ -1,11 +1,21 @@
 import { Check, CreditCard, ExternalLink, FileText, Image as ImageIcon, Pencil, RotateCcw, WalletCards, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AttachmentUploader } from '../components/AttachmentUploader';
 import { Input, Panel } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../lib/api';
 import { t } from '../lib/i18n';
-import type { Attachment, Debt, DebtEvent, DebtStatus, Language, ReceiptUploadItem } from '../lib/types';
+import type { Attachment, Debt, DebtEvent, DebtStatus, Language, Profile, ReceiptUploadItem } from '../lib/types';
+
+type DebtorSource = 'manual' | 'qr-resolving' | 'qr-resolved' | 'qr-expired' | 'qr-self' | 'qr-error';
+
+interface Prefilled {
+  debtor_id: string;
+  debtor_name: string;
+  phone_last4: string;
+  commitment_score: number;
+}
 
 interface PendingEditRequest {
   message: string;
@@ -73,10 +83,17 @@ function addDays(iso: string, days: number): string {
 export function DebtsPage({ language }: Props) {
   const tr = (key: Parameters<typeof t>[1]) => t(language, key);
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both' || user?.account_type === 'business';
   const [debts, setDebts] = useState<Debt[]>([]);
   const [message, setMessage] = useState('');
   const [filter, setFilter] = useState<DebtStatus | 'all'>('all');
+
+  // QR prefill state
+  const [debtorSource, setDebtorSource] = useState<DebtorSource>('manual');
+  const [prefilled, setPrefilled] = useState<Prefilled | null>(null);
+  const [qrToken, setQrToken] = useState<string | null>(null);
   const [receiptItems, setReceiptItems] = useState<ReceiptUploadItem[]>([]);
   const [attachmentsByDebt, setAttachmentsByDebt] = useState<Record<string, DebtAttachmentState>>({});
   const [failedReceiptItemsByDebt, setFailedReceiptItemsByDebt] = useState<Record<string, ReceiptUploadItem[]>>({});
@@ -121,6 +138,44 @@ export function DebtsPage({ language }: Props) {
       return next;
     });
   }
+
+  // T005a: shared clear-debtor handler — used by "change debtor" link and US2 error recovery
+  function clearDebtor() {
+    setPrefilled(null);
+    setQrToken(null);
+    setDebtorSource('manual');
+    setDebtForm((f) => ({ ...f, debtor_name: '', debtor_id: '' }));
+    navigate({ search: '' }, { replace: true });
+  }
+
+  // T009: On mount, detect qr_token and resolve
+  useEffect(() => {
+    const token = searchParams.get('qr_token');
+    if (!token || !isCreditor) return;
+    setQrToken(token);
+    setDebtorSource('qr-resolving');
+    void (async () => {
+      try {
+        const profile = await apiRequest<Profile>(`/qr/resolve/${encodeURIComponent(token)}`);
+        if (profile.id === user?.id) {
+          setDebtorSource('qr-self');
+        } else {
+          setDebtorSource('qr-resolved');
+          const p: Prefilled = {
+            debtor_id: profile.id,
+            debtor_name: profile.name,
+            phone_last4: profile.phone.slice(-4),
+            commitment_score: profile.commitment_score,
+          };
+          setPrefilled(p);
+          setDebtForm((f) => ({ ...f, debtor_name: profile.name, debtor_id: profile.id }));
+        }
+      } catch {
+        setDebtorSource('qr-expired');
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function load() {
     try {
@@ -353,6 +408,21 @@ export function DebtsPage({ language }: Props) {
   }
 
   async function createDebtWithReceipts() {
+    // Guard: submit should never be reachable from error/resolving/self states (defense-in-depth)
+    if (debtorSource === 'qr-resolving' || debtorSource === 'qr-self' || debtorSource === 'qr-expired' || debtorSource === 'qr-error') return;
+
+    // T012: re-resolve token at submit time when QR-prefilled
+    if (debtorSource === 'qr-resolved' && qrToken) {
+      try {
+        const recheck = await apiRequest<Profile>(`/qr/resolve/${encodeURIComponent(qrToken)}`);
+        if (recheck.id === user?.id) { setDebtorSource('qr-self'); return; }
+        if (recheck.id !== prefilled?.debtor_id) { setDebtorSource('qr-error'); return; }
+      } catch {
+        setDebtorSource('qr-expired');
+        return;
+      }
+    }
+
     try {
       const created = await apiRequest<Debt>('/debts', {
         method: 'POST',
@@ -379,6 +449,13 @@ export function DebtsPage({ language }: Props) {
       } else {
         setReceiptItems([]);
         setMessage(language === 'ar' ? 'تم إنشاء الدين' : 'Debt created');
+      }
+      // T013: strip qr_token from URL after success (client-side single-use)
+      if (qrToken) {
+        setPrefilled(null);
+        setQrToken(null);
+        setDebtorSource('manual');
+        navigate({ search: '' }, { replace: true });
       }
       await load();
       await loadAttachmentsForDebt(created.id);
@@ -438,12 +515,72 @@ export function DebtsPage({ language }: Props) {
       {isCreditor && (
         <Panel title={tr('createDebt')}>
           {message && <div className="message">{message}</div>}
-          <Input label={tr('debtorName')} value={debtForm.debtor_name} onChange={(v) => setDebtForm({ ...debtForm, debtor_name: v })} />
-          <Input label={tr('debtorId')} value={debtForm.debtor_id} onChange={(v) => setDebtForm({ ...debtForm, debtor_id: v })} placeholder={language === 'ar' ? 'معرف المدين (اختياري)' : 'Debtor user ID (optional)'} />
-          <Input label={tr('amount')} value={debtForm.amount} onChange={(v) => setDebtForm({ ...debtForm, amount: v })} />
-          <Input label={tr('currency')} value={debtForm.currency} onChange={(v) => setDebtForm({ ...debtForm, currency: v })} />
-          <Input label={tr('description')} value={debtForm.description} onChange={(v) => setDebtForm({ ...debtForm, description: v })} />
-          <Input label={tr('dueDate')} type="date" value={debtForm.due_date} onChange={(v) => setDebtForm({ ...debtForm, due_date: v })} />
+
+          {/* T014: skeleton while resolving */}
+          {debtorSource === 'qr-resolving' && (
+            <div className="qr-debtor-preview qr-debtor-skeleton" aria-busy="true">
+              <div className="skeleton-line" style={{ width: '60%', height: '1rem', background: '#e2e8f0', borderRadius: 4 }} />
+              <div className="skeleton-line" style={{ width: '40%', height: '0.75rem', background: '#e2e8f0', borderRadius: 4, marginTop: 6 }} />
+            </div>
+          )}
+
+          {/* T010: debtor profile preview when QR resolved */}
+          {debtorSource === 'qr-resolved' && prefilled && (
+            <div className="qr-debtor-preview">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600 }}>{prefilled.debtor_name}</p>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#64748b' }}>···· {prefilled.phone_last4}</p>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.8rem' }}>{tr('commitmentIndicator')}: <strong>{prefilled.commitment_score}/100</strong></p>
+                </div>
+                <span style={{ fontSize: '0.7rem', background: '#dcfce7', color: '#166534', padding: '2px 6px', borderRadius: 4 }}>{tr('scannedDebtorLabel')}</span>
+              </div>
+              {/* T011 / T022: clear-debtor link */}
+              <button type="button" className="link-button" style={{ fontSize: '0.8rem', marginTop: 8 }} onClick={clearDebtor}>
+                {tr('clearDebtor')}
+              </button>
+            </div>
+          )}
+
+          {/* T018: self-scan block */}
+          {debtorSource === 'qr-self' && (
+            <div className="message error">
+              <p style={{ margin: 0 }}>{tr('cannotBillSelf')}</p>
+              <button type="button" className="link-button" style={{ fontSize: '0.8rem', marginTop: 6 }} onClick={clearDebtor}>
+                {tr('clearDebtor')}
+              </button>
+            </div>
+          )}
+
+          {/* T015 / T016: expired or error banner */}
+          {(debtorSource === 'qr-expired' || debtorSource === 'qr-error') && (
+            <div className="message error">
+              <p style={{ margin: 0 }}>{tr('qrExpiredAskRefresh')}</p>
+              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                <button type="button" className="link-button" style={{ fontSize: '0.8rem' }} onClick={() => navigate('/qr')}>
+                  {language === 'ar' ? 'مسح من جديد' : 'Rescan'}
+                </button>
+                <button type="button" className="link-button" style={{ fontSize: '0.8rem' }} onClick={clearDebtor}>
+                  {tr('clearDebtor')}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* T011: debtor name locked when QR-resolved, editable otherwise */}
+          {debtorSource === 'qr-resolved' ? (
+            <Input label={`${tr('debtorName')} — ${tr('scannedDebtorLabel')}`} value={debtForm.debtor_name} onChange={() => {}} disabled />
+          ) : (
+            <Input label={tr('debtorName')} value={debtForm.debtor_name} onChange={(v) => setDebtForm({ ...debtForm, debtor_name: v })} disabled={debtorSource === 'qr-resolving'} />
+          )}
+          {/* Hide debtor_id field when QR-resolved (it's set internally) */}
+          {debtorSource !== 'qr-resolved' && (
+            <Input label={tr('debtorId')} value={debtForm.debtor_id} onChange={(v) => setDebtForm({ ...debtForm, debtor_id: v })} placeholder={language === 'ar' ? 'معرف المدين (اختياري)' : 'Debtor user ID (optional)'} disabled={debtorSource === 'qr-resolving'} />
+          )}
+          <Input label={tr('amount')} value={debtForm.amount} onChange={(v) => setDebtForm({ ...debtForm, amount: v })} disabled={debtorSource === 'qr-resolving'} />
+          <Input label={tr('currency')} value={debtForm.currency} onChange={(v) => setDebtForm({ ...debtForm, currency: v })} disabled={debtorSource === 'qr-resolving'} />
+          <Input label={tr('description')} value={debtForm.description} onChange={(v) => setDebtForm({ ...debtForm, description: v })} disabled={debtorSource === 'qr-resolving'} />
+          <Input label={tr('dueDate')} type="date" value={debtForm.due_date} onChange={(v) => setDebtForm({ ...debtForm, due_date: v })} disabled={debtorSource === 'qr-resolving'} />
 
           <div className="reminder-picker">
             <label>{tr('reminderDates')}</label>
@@ -476,13 +613,16 @@ export function DebtsPage({ language }: Props) {
             onItemsChange={setReceiptItems}
           />
 
-          <button
-            className="primary-button"
-            onClick={() => void createDebtWithReceipts()}
-          >
-            <CreditCard size={18} />
-            <span>{tr('create')}</span>
-          </button>
+          {/* T017/T019: hide submit entirely in error/self/resolving states */}
+          {(debtorSource === 'manual' || debtorSource === 'qr-resolved') && (
+            <button
+              className="primary-button"
+              onClick={() => void createDebtWithReceipts()}
+            >
+              <CreditCard size={18} />
+              <span>{tr('create')}</span>
+            </button>
+          )}
         </Panel>
       )}
 

@@ -22,7 +22,7 @@ Amount, currency, debtor, description, due date are required; receipt photo and 
 - Tables: `debts` (with `reminder_dates date[]`), `attachments`, storage buckets `receipts` + `voice-notes`.
 - Frontend: `frontend/src/pages/DebtsPage.tsx` (list + create flow), `frontend/src/components/AttachmentUploader.tsx`.
 - Notes: receipt uploads are attached after debt creation, expose 1-hour access links, move to archived retention for 6 months after payment, and failed uploads can be retried from the debt card.
-- **Remaining gaps**: QR-scanner → create-debt prefill not wired; voice-note attachment UI not built.
+- **Remaining gaps**: voice-note attachment UI not built.
 
 ## UC3 — Bilateral confirm (accept / request-edit) · debtor · ✅
 
@@ -33,14 +33,14 @@ Debtor accepts → `active`. Debtor requests edit → `edit_requested`. Creditor
 - Tables: `debts`, `debt_events` (audit trail).
 - Frontend: inline edit-request thread on debt details page.
 
-## UC4 — QR identification · shared · 🟡
+## UC4 — QR identification · shared · ✅
 
-Rotating short-lived QR (default TTL 10 min) for debtors; creditor scanner resolves to a profile preview.
+Rotating short-lived QR (default TTL 10 min) for debtors; creditor scanner resolves to a profile preview, then navigates to Create Debt with debtor prefilled and locked.
 
 - Endpoints: `GET /qr/current`, `POST /qr/rotate`, `GET /qr/resolve/{token}`.
 - Tables: `qr_tokens`.
-- Frontend: `frontend/src/pages/QRPage.tsx` (debtor display + creditor scanner — split components).
-- **Gap**: hand-off from scanner to `POST /debts` with prefilled `debtor_id` not wired.
+- Frontend: `frontend/src/pages/QRPage.tsx` (debtor display + creditor scanner confirm step), `frontend/src/pages/DebtsPage.tsx` (QR prefill + locked field + submit-time re-resolve).
+- **Shipped (PR #8 → spec 001)**: scanner confirm step in `QRPage.tsx`; `/debts?qr_token=<token>` deep-link; `DebtsPage.tsx` resolves token on mount, prefills and locks debtor name/ID, re-resolves at submit, strips URL on success; expired/self-scan/error banners; backend 409 self-billing guard in `POST /debts`; 2 integration tests (`test_create_debt_with_debtor_id.py`); bilingual strings (AR+EN).
 
 ## UC5 — Payment (mark paid → confirm receipt) · shared · ✅
 

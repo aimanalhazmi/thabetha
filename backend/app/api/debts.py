@@ -42,6 +42,8 @@ def create_debt(
     repo: Annotated[Repository, Depends(get_repository)],
 ) -> DebtOut:
     repo.ensure_profile(user)
+    if payload.debtor_id is not None and payload.debtor_id == user.id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="cannot_bill_self")
     return repo.create_debt(user.id, payload)
 
 
