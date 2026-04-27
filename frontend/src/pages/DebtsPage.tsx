@@ -1,10 +1,11 @@
-import { Check, CreditCard, Pencil, WalletCards, X } from 'lucide-react';
+import { Check, CreditCard, ExternalLink, FileText, Image as ImageIcon, Pencil, RotateCcw, WalletCards, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { AttachmentUploader } from '../components/AttachmentUploader';
 import { Input, Panel } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../lib/api';
 import { t } from '../lib/i18n';
-import type { Debt, DebtEvent, DebtStatus, Language } from '../lib/types';
+import type { Attachment, Debt, DebtEvent, DebtStatus, Language, ReceiptUploadItem } from '../lib/types';
 
 interface PendingEditRequest {
   message: string;
@@ -32,6 +33,12 @@ interface DebtorEditThread {
   appliedAmount?: string;
   appliedDueDate?: string;
   appliedDescription?: string;
+}
+
+interface DebtAttachmentState {
+  items: Attachment[];
+  loading: boolean;
+  error?: string;
 }
 
 interface Props { language: Language }
@@ -66,10 +73,13 @@ function addDays(iso: string, days: number): string {
 export function DebtsPage({ language }: Props) {
   const tr = (key: Parameters<typeof t>[1]) => t(language, key);
   const { user } = useAuth();
-  const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both';
+  const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both' || user?.account_type === 'business';
   const [debts, setDebts] = useState<Debt[]>([]);
   const [message, setMessage] = useState('');
   const [filter, setFilter] = useState<DebtStatus | 'all'>('all');
+  const [receiptItems, setReceiptItems] = useState<ReceiptUploadItem[]>([]);
+  const [attachmentsByDebt, setAttachmentsByDebt] = useState<Record<string, DebtAttachmentState>>({});
+  const [failedReceiptItemsByDebt, setFailedReceiptItemsByDebt] = useState<Record<string, ReceiptUploadItem[]>>({});
   const [debtForm, setDebtForm] = useState({
     debtor_name: '',
     debtor_id: '',
@@ -116,8 +126,26 @@ export function DebtsPage({ language }: Props) {
     try {
       const data = await apiRequest<Debt[]>('/debts');
       setDebts(data);
+      void loadAttachmentsForDebts(data);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Failed to load');
+    }
+  }
+
+  async function loadAttachmentsForDebts(targetDebts: Debt[]) {
+    await Promise.all(targetDebts.map((debt) => loadAttachmentsForDebt(debt.id)));
+  }
+
+  async function loadAttachmentsForDebt(debtId: string) {
+    setAttachmentsByDebt((prev) => ({ ...prev, [debtId]: { items: prev[debtId]?.items ?? [], loading: true } }));
+    try {
+      const items = await apiRequest<Attachment[]>(`/debts/${debtId}/attachments`);
+      setAttachmentsByDebt((prev) => ({ ...prev, [debtId]: { items, loading: false } }));
+    } catch {
+      setAttachmentsByDebt((prev) => ({
+        ...prev,
+        [debtId]: { items: prev[debtId]?.items ?? [], loading: false, error: tr('receiptLoadFailed') },
+      }));
     }
   }
 
@@ -307,6 +335,81 @@ export function DebtsPage({ language }: Props) {
     }
   }
 
+  function canUploadReceipt(item: ReceiptUploadItem): boolean {
+    return item.status === 'ready' || item.status === 'warning' || item.status === 'failed';
+  }
+
+  async function uploadReceiptForDebt(debtId: string, item: ReceiptUploadItem): Promise<Attachment> {
+    const formData = new FormData();
+    formData.append('file', item.uploadFile, item.name);
+    return apiRequest<Attachment>(`/debts/${debtId}/attachments?attachment_type=invoice`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  function patchReceiptItem(id: string, patch: Partial<ReceiptUploadItem>) {
+    setReceiptItems((prev) => prev.map((item) => item.id === id ? { ...item, ...patch } : item));
+  }
+
+  async function createDebtWithReceipts() {
+    try {
+      const created = await apiRequest<Debt>('/debts', {
+        method: 'POST',
+        body: JSON.stringify({ ...debtForm, reminder_dates: reminderDates }),
+      });
+
+      const uploadable = receiptItems.filter(canUploadReceipt);
+      const failed: ReceiptUploadItem[] = [];
+      for (const item of uploadable) {
+        patchReceiptItem(item.id, { status: 'uploading', error: undefined });
+        try {
+          await uploadReceiptForDebt(created.id, item);
+          patchReceiptItem(item.id, { status: 'uploaded', error: undefined });
+        } catch (err) {
+          failed.push({ ...item, status: 'failed', error: err instanceof Error ? err.message : tr('receiptUploadFailed') });
+          patchReceiptItem(item.id, { status: 'failed', error: err instanceof Error ? err.message : tr('receiptUploadFailed') });
+        }
+      }
+
+      if (failed.length > 0) {
+        setFailedReceiptItemsByDebt((prev) => ({ ...prev, [created.id]: failed }));
+        setReceiptItems(failed);
+        setMessage(tr('receiptUploadFailed'));
+      } else {
+        setReceiptItems([]);
+        setMessage(language === 'ar' ? 'تم إنشاء الدين' : 'Debt created');
+      }
+      await load();
+      await loadAttachmentsForDebt(created.id);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Action failed');
+    }
+  }
+
+  async function retryFailedReceipt(debtId: string, item: ReceiptUploadItem) {
+    setFailedReceiptItemsByDebt((prev) => ({
+      ...prev,
+      [debtId]: (prev[debtId] ?? []).map((candidate) => candidate.id === item.id ? { ...candidate, status: 'uploading', error: undefined } : candidate),
+    }));
+    try {
+      await uploadReceiptForDebt(debtId, item);
+      setFailedReceiptItemsByDebt((prev) => ({
+        ...prev,
+        [debtId]: (prev[debtId] ?? []).filter((candidate) => candidate.id !== item.id),
+      }));
+      setMessage(language === 'ar' ? 'تم رفع الإيصال' : 'Receipt uploaded');
+      await loadAttachmentsForDebt(debtId);
+    } catch (err) {
+      const error = err instanceof Error ? err.message : tr('receiptUploadFailed');
+      setFailedReceiptItemsByDebt((prev) => ({
+        ...prev,
+        [debtId]: (prev[debtId] ?? []).map((candidate) => candidate.id === item.id ? { ...candidate, status: 'failed', error } : candidate),
+      }));
+      setMessage(error);
+    }
+  }
+
   const filtered = useMemo(() =>
     filter === 'all' ? debts : debts.filter(d => d.status === filter),
     [debts, filter]
@@ -367,15 +470,15 @@ export function DebtsPage({ language }: Props) {
             )}
           </div>
 
+          <AttachmentUploader
+            language={language}
+            items={receiptItems}
+            onItemsChange={setReceiptItems}
+          />
+
           <button
             className="primary-button"
-            onClick={() => void runAction(
-              () => apiRequest<Debt>('/debts', {
-                method: 'POST',
-                body: JSON.stringify({ ...debtForm, reminder_dates: reminderDates }),
-              }),
-              language === 'ar' ? 'تم إنشاء الدين' : 'Debt created',
-            )}
+            onClick={() => void createDebtWithReceipts()}
           >
             <CreditCard size={18} />
             <span>{tr('create')}</span>
@@ -440,6 +543,57 @@ export function DebtsPage({ language }: Props) {
                   <button onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/cancel`, { method: 'POST', body: JSON.stringify({ message: 'Cancelled' }) }), language === 'ar' ? 'تم إلغاء الدين' : 'Debt cancelled')}>
                     <X size={16} /><span>{tr('cancel')}</span>
                   </button>
+                )}
+              </div>
+
+              <div className="receipt-section">
+                <div className="receipt-section-header">
+                  <strong>{tr('receiptList')}</strong>
+                  {attachmentsByDebt[debt.id]?.loading && <span>{tr('receiptLoading')}</span>}
+                  {attachmentsByDebt[debt.id]?.error && (
+                    <button type="button" onClick={() => void loadAttachmentsForDebt(debt.id)}>
+                      <RotateCcw size={14} />
+                      <span>{tr('receiptRetry')}</span>
+                    </button>
+                  )}
+                </div>
+                {(attachmentsByDebt[debt.id]?.items.length ?? 0) === 0 && !attachmentsByDebt[debt.id]?.loading && !attachmentsByDebt[debt.id]?.error && (
+                  <span className="receipt-empty">{tr('receiptNone')}</span>
+                )}
+                {(attachmentsByDebt[debt.id]?.items ?? []).map((attachment) => (
+                  <div key={attachment.id} className="receipt-row">
+                    <div className="receipt-thumb" aria-hidden="true">
+                      {attachment.content_type?.startsWith('image/') ? <ImageIcon size={18} /> : <FileText size={18} />}
+                    </div>
+                    <div className="receipt-meta">
+                      <strong>{attachment.file_name}</strong>
+                      <span>{attachment.retention_state === 'archived' ? tr('receiptArchived') : tr('receiptAvailable')}</span>
+                    </div>
+                    <a className="receipt-open" href={attachment.url} target="_blank" rel="noreferrer">
+                      <ExternalLink size={14} />
+                      <span>{tr('receiptOpen')}</span>
+                    </a>
+                  </div>
+                ))}
+                {(failedReceiptItemsByDebt[debt.id] ?? []).length > 0 && (
+                  <div className="receipt-retry-panel">
+                    <strong>{tr('receiptUploadRetry')}</strong>
+                    {(failedReceiptItemsByDebt[debt.id] ?? []).map((item) => (
+                      <div key={item.id} className={`receipt-row failed ${item.status}`}>
+                        <div className="receipt-thumb" aria-hidden="true">
+                          {item.previewUrl ? <img src={item.previewUrl} alt="" /> : <FileText size={18} />}
+                        </div>
+                        <div className="receipt-meta">
+                          <strong>{item.name}</strong>
+                          {item.error && <span className="receipt-error">{item.error}</span>}
+                        </div>
+                        <button type="button" className="ghost-button" disabled={item.status === 'uploading'} onClick={() => void retryFailedReceipt(debt.id, item)}>
+                          <RotateCcw size={14} />
+                          <span>{item.status === 'uploading' ? tr('receiptUploading') : tr('receiptRetry')}</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 

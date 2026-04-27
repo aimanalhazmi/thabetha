@@ -14,14 +14,15 @@ Email + password via Supabase Auth, with name, phone, account type. Optional bus
 - Frontend: `frontend/src/pages/AuthPage.tsx`, `ProfilePage.tsx`, `SettingsPage.tsx`.
 - Notes: `tax_id` on signup auto-promotes `account_type=creditor`, otherwise `debtor` (`backend/app/api/auth.py:43`).
 
-## UC2 — Create debt · creditor · 🟡
+## UC2 — Create debt · creditor · ✅
 
 Amount, currency, debtor, description, due date are required; receipt photo and voice note optional; reminder dates configurable.
 
-- Endpoints: `POST /debts` (`DebtCreate`), `POST /debts/{id}/attachments` (multipart).
+- Endpoints: `POST /debts` (`DebtCreate`), `POST /debts/{id}/attachments` (multipart image/PDF invoice receipts), `GET /debts/{id}/attachments`.
 - Tables: `debts` (with `reminder_dates date[]`), `attachments`, storage buckets `receipts` + `voice-notes`.
-- Frontend: `frontend/src/pages/DebtsPage.tsx` (list + create flow).
-- **Gaps**: receipt upload UI not wired into create flow; QR-scanner → create-debt prefill not wired; voice-note attachment UI not built.
+- Frontend: `frontend/src/pages/DebtsPage.tsx` (list + create flow), `frontend/src/components/AttachmentUploader.tsx`.
+- Notes: receipt uploads are attached after debt creation, expose 1-hour access links, move to archived retention for 6 months after payment, and failed uploads can be retried from the debt card.
+- **Remaining gaps**: QR-scanner → create-debt prefill not wired; voice-note attachment UI not built.
 
 ## UC3 — Bilateral confirm (accept / request-edit) · debtor · ✅
 

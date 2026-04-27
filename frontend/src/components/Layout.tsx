@@ -13,7 +13,7 @@ const navItems: NavItem[] = [
   { path: '/profile', icon: UserRound, label: 'profile' },
   { path: '/qr', icon: QrCode, label: 'qr' }, // creditor: scanner; debtor: own QR
   { path: '/groups', icon: Users, label: 'groups', roles: ['debtor', 'both'] },
-  { path: '/ai', icon: Bot, label: 'ai', roles: ['creditor', 'both'] },
+  { path: '/ai', icon: Bot, label: 'ai', roles: ['creditor', 'both', 'business'] },
   { path: '/notifications', icon: Bell, label: 'notifications' },
   { path: '/settings', icon: Settings, label: 'settings' },
 ];
@@ -40,7 +40,7 @@ export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel
     ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
     : '?';
 
-  const roleLabel = user?.account_type === 'creditor'
+  const roleLabel = user?.account_type === 'creditor' || user?.account_type === 'business'
     ? tr('creditor')
     : user?.account_type === 'both'
       ? tr('both')

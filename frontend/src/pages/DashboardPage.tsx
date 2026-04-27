@@ -37,7 +37,7 @@ export function DashboardPage({ language, message }: Props) {
     return () => clearInterval(interval);
   }, []);
 
-  const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both';
+  const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both' || user?.account_type === 'business';
   const isDebtor = user?.account_type === 'debtor' || user?.account_type === 'both';
 
   // Calculate stats

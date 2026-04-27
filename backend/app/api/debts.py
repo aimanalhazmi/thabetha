@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from app.core.security import AuthenticatedUser, get_current_user
 from app.repositories import Repository, get_repository
@@ -18,6 +18,21 @@ from app.schemas.domain import (
 )
 
 router = APIRouter()
+
+RECEIPT_MAX_BYTES = 5 * 1024 * 1024
+RECEIPT_ALLOWED_MIME_TYPES = {"application/pdf"}
+RECEIPT_ALLOWED_MIME_PREFIXES = ("image/",)
+
+
+async def validate_receipt_file(file: UploadFile) -> None:
+    content_type = file.content_type or ""
+    if content_type not in RECEIPT_ALLOWED_MIME_TYPES and not any(content_type.startswith(prefix) for prefix in RECEIPT_ALLOWED_MIME_PREFIXES):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Receipt must be an image or PDF")
+
+    content = await file.read()
+    if len(content) > RECEIPT_MAX_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Receipt file must be 5 MB or smaller")
+    await file.seek(0)
 
 
 @router.post("", response_model=DebtOut, status_code=status.HTTP_201_CREATED)
@@ -140,9 +155,11 @@ async def upload_attachment(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     repo: Annotated[Repository, Depends(get_repository)],
     file: Annotated[UploadFile, File()],
-    attachment_type: Annotated[AttachmentType, Query()] = AttachmentType.other,
+    attachment_type: Annotated[AttachmentType, Query()] = AttachmentType.invoice,
 ) -> AttachmentOut:
     repo.ensure_profile(user)
+    if attachment_type == AttachmentType.invoice:
+        await validate_receipt_file(file)
     return await repo.add_attachment(user.id, debt_id, attachment_type, file)
 
 

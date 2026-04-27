@@ -14,7 +14,7 @@ export function ProfilePage({ language }: Props) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [message, setMessage] = useState('');
 
-  const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both';
+  const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both' || user?.account_type === 'business';
 
   useEffect(() => {
     void apiRequest<Profile>('/profiles/me').then(setProfile).catch(() => {});

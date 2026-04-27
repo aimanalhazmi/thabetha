@@ -38,6 +38,12 @@ class AttachmentType(StrEnum):
     other = "other"
 
 
+class AttachmentRetentionState(StrEnum):
+    available = "available"
+    archived = "archived"
+    retention_expired = "retention_expired"
+
+
 class NotificationType(StrEnum):
     debt_created = "debt_created"
     debt_confirmed = "debt_confirmed"
@@ -208,6 +214,9 @@ class AttachmentOut(BaseModel):
     file_name: str
     content_type: str | None = None
     url: str
+    url_expires_at: datetime | None = None
+    retention_state: AttachmentRetentionState = AttachmentRetentionState.available
+    retention_expires_at: datetime | None = None
     created_at: datetime
 
 

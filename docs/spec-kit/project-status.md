@@ -33,7 +33,7 @@ deefc60 feat: implement debt edit request flow and commitment indicator logic
 
 - Polished bilingual UI (Arabic-first, English toggle) — strings exist in `lib/i18n.ts`, but coverage and RTL polish are not complete.
 - End-to-end demo path: signup → create debt → bilateral confirm → mark-paid → confirm → indicator updates.
-- **Receipt upload on Create Debt** (UC2) — backend endpoint exists (`POST /debts/{id}/attachments`), not yet wired into the create-debt UI.
+- **Receipt upload on Create Debt** (UC2) — create-debt UI accepts image/PDF receipts, uploads them after debt creation, lists signed receipt links on debt cards, and preserves failed uploads for retry.
 - **QR scanner pass-through on Create Debt** (UC4 → UC2) — scanner page exists, hand-off to create-debt with prefilled `debtor_id` is not wired.
 - Cancel-non-binding-debt UX (creditor) — backend endpoint exists, UI partial.
 - Per-creditor WhatsApp opt-out enforcement on the actual sender (currently mock provider).
@@ -49,7 +49,7 @@ deefc60 feat: implement debt edit request flow and commitment indicator logic
 ## Known technical debt / risks
 
 - **Backend runs as Postgres role**, so RLS is bypassed at runtime. Defence-in-depth is in handler code; switch to scoped JWTs is on the post-MVP roadmap.
-- **Storage buckets duplication** — migration 001 created a legacy `thabetha-attachments` bucket; 002 added the canonical `receipts` and `voice-notes`. Legacy bucket still exists.
+- **Storage buckets duplication** — migration 001 created a legacy `thabetha-attachments` bucket; receipt upload now defaults to canonical `receipts`, and the legacy bucket still exists.
 - **Migration 004** is largely a no-op safety net (idempotent enum adds) added before 005/006; safe to keep.
 - `frontend/src/lib/types.ts` mirrors backend enums **manually** — drift is possible when adding new enum values.
 

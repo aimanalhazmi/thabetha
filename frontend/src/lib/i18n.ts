@@ -143,7 +143,26 @@ export type TranslationKey =
   | 'forCreditors'
   | 'forDebtors'
   | 'creditorPitch'
-  | 'debtorPitch';
+  | 'debtorPitch'
+  | 'receiptUpload'
+  | 'receiptUploadHint'
+  | 'receiptAdd'
+  | 'receiptRemove'
+  | 'receiptRetry'
+  | 'receiptOpen'
+  | 'receiptList'
+  | 'receiptNone'
+  | 'receiptLoading'
+  | 'receiptLoadFailed'
+  | 'receiptUploadFailed'
+  | 'receiptUploadRetry'
+  | 'receiptUploading'
+  | 'receiptUploaded'
+  | 'receiptTooLarge'
+  | 'receiptUnsupported'
+  | 'receiptLargeWarning'
+  | 'receiptArchived'
+  | 'receiptAvailable';
 
 type Translations = Record<TranslationKey, string>;
 
@@ -290,6 +309,25 @@ const ar: Translations = {
   forDebtors: 'للمدينين',
   creditorPitch: 'أنشئ ديونًا، امسح QR العميل، استلم تأكيد الدفع، وراقب المستحقات والمتأخر.',
   debtorPitch: 'تابع ديونك في مكان واحد، أكد القبول، اطلب تعديلًا، وأخطر دائنك عند السداد.',
+  receiptUpload: 'إيصالات الدين',
+  receiptUploadHint: 'أرفق صورًا أو ملفات PDF حتى ٥ م.ب لكل ملف',
+  receiptAdd: 'إضافة إيصال',
+  receiptRemove: 'إزالة',
+  receiptRetry: 'إعادة المحاولة',
+  receiptOpen: 'فتح',
+  receiptList: 'الإيصالات',
+  receiptNone: 'لا توجد إيصالات',
+  receiptLoading: 'جاري تحميل الإيصالات...',
+  receiptLoadFailed: 'تعذر تحميل الإيصالات',
+  receiptUploadFailed: 'فشل رفع بعض الإيصالات. يمكنك إعادة المحاولة من بطاقة الدين.',
+  receiptUploadRetry: 'إعادة رفع الإيصالات الفاشلة',
+  receiptUploading: 'جاري الرفع',
+  receiptUploaded: 'تم الرفع',
+  receiptTooLarge: 'الحد الأقصى للملف ٥ م.ب',
+  receiptUnsupported: 'ارفع صورة أو ملف PDF فقط',
+  receiptLargeWarning: 'ملف كبير، قد يستغرق الرفع وقتًا أطول',
+  receiptArchived: 'مؤرشف',
+  receiptAvailable: 'متاح',
 };
 
 const en: Translations = {
@@ -435,6 +473,25 @@ const en: Translations = {
   forDebtors: 'For debtors',
   creditorPitch: 'Create debts, scan a customer QR, confirm receipt of payments, and track receivables and overdue alerts.',
   debtorPitch: 'See every debt in one place, accept or request an edit, and notify the creditor when you pay.',
+  receiptUpload: 'Debt receipts',
+  receiptUploadHint: 'Attach images or PDFs up to 5 MB each',
+  receiptAdd: 'Add receipt',
+  receiptRemove: 'Remove',
+  receiptRetry: 'Retry',
+  receiptOpen: 'Open',
+  receiptList: 'Receipts',
+  receiptNone: 'No receipts',
+  receiptLoading: 'Loading receipts...',
+  receiptLoadFailed: 'Could not load receipts',
+  receiptUploadFailed: 'Some receipts failed to upload. Retry them from the debt card.',
+  receiptUploadRetry: 'Retry failed receipt uploads',
+  receiptUploading: 'Uploading',
+  receiptUploaded: 'Uploaded',
+  receiptTooLarge: 'File limit is 5 MB',
+  receiptUnsupported: 'Upload an image or PDF only',
+  receiptLargeWarning: 'Large file, upload may take longer',
+  receiptArchived: 'Archived',
+  receiptAvailable: 'Available',
 };
 
 const translations: Record<Language, Translations> = { ar, en };

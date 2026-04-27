@@ -6,7 +6,7 @@ const API_BASE = '/api/v1';
  * Thin wrapper around `fetch` that:
  *  - prepends the API base path
  *  - injects the Bearer token from Supabase session
- *  - sets JSON content-type for requests with a body
+ *  - sets JSON content-type for JSON requests with a body
  *  - throws on non-2xx responses
  */
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -17,7 +17,8 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     headers.set('Authorization', `Bearer ${session.access_token}`);
   }
 
-  if (init?.body && !headers.has('Content-Type')) {
+  const isFormDataBody = typeof FormData !== 'undefined' && init?.body instanceof FormData;
+  if (init?.body && !isFormDataBody && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
 
