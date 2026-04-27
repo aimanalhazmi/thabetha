@@ -30,6 +30,12 @@ export type TranslationKey =
   | 'dueDate'
   | 'create'
   | 'cancel'
+  | 'cancel_debt'
+  | 'cancel_debt_confirm_title'
+  | 'cancel_debt_confirm_body'
+  | 'cancel_message_optional'
+  | 'cancelled_successfully'
+  | 'cancel_debt_state_changed'
   | 'active'
   | 'paid'
   | 'accept'
@@ -200,6 +206,12 @@ const ar: Translations = {
   dueDate: 'تاريخ الاستحقاق',
   create: 'إنشاء',
   cancel: 'إلغاء',
+  cancel_debt: 'إلغاء الدين',
+  cancel_debt_confirm_title: 'إلغاء هذا الدين؟',
+  cancel_debt_confirm_body: 'سيتم إخطار المَدين. لا يمكن التراجع عن هذا الإجراء.',
+  cancel_message_optional: 'أضف سببًا اختياريًا (200 حرفًا كحد أقصى)',
+  cancelled_successfully: 'تم إلغاء الدين',
+  cancel_debt_state_changed: 'لم يعد بالإمكان إلغاء هذا الدين — تغيّرت حالته.',
   active: 'نشط',
   paid: 'مدفوع',
   accept: 'قبول',
@@ -369,6 +381,12 @@ const en: Translations = {
   dueDate: 'Due Date',
   create: 'Create',
   cancel: 'Cancel',
+  cancel_debt: 'Cancel debt',
+  cancel_debt_confirm_title: 'Cancel this debt?',
+  cancel_debt_confirm_body: 'The debtor will be notified. This cannot be undone.',
+  cancel_message_optional: 'Add an optional reason (max 200 characters)',
+  cancelled_successfully: 'Debt cancelled',
+  cancel_debt_state_changed: 'This debt can no longer be cancelled — its status changed.',
   active: 'Active',
   paid: 'Paid',
   accept: 'Accept',

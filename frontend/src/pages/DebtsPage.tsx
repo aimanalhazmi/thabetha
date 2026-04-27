@@ -2,6 +2,7 @@ import { Check, CreditCard, ExternalLink, FileText, Image as ImageIcon, Pencil, 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AttachmentUploader } from '../components/AttachmentUploader';
+import { CancelDebtDialog } from '../components/CancelDebtDialog';
 import { Input, Panel } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../lib/api';
@@ -111,6 +112,7 @@ export function DebtsPage({ language }: Props) {
 
   // Debtor: id of the debt whose edit-request form is open, plus its draft fields.
   const [editingDebtId, setEditingDebtId] = useState<string | null>(null);
+  const [cancelDialogDebtId, setCancelDialogDebtId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ message: string; requested_amount: string; requested_due_date: string; requested_description: string }>({
     message: '',
     requested_amount: '',
@@ -680,8 +682,8 @@ export function DebtsPage({ language }: Props) {
                   </button>
                 )}
                 {isCreditor && (debt.status === 'pending_confirmation' || debt.status === 'edit_requested') && (
-                  <button onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/cancel`, { method: 'POST', body: JSON.stringify({ message: 'Cancelled' }) }), language === 'ar' ? 'تم إلغاء الدين' : 'Debt cancelled')}>
-                    <X size={16} /><span>{tr('cancel')}</span>
+                  <button onClick={() => setCancelDialogDebtId(debt.id)}>
+                    <X size={16} /><span>{tr('cancel_debt')}</span>
                   </button>
                 )}
               </div>
@@ -902,6 +904,22 @@ export function DebtsPage({ language }: Props) {
           {filtered.length === 0 && <p className="empty">{tr('noDebtsYet')}</p>}
         </div>
       </Panel>
+
+      {cancelDialogDebtId !== null && (() => {
+        const cancelDebt = debts.find(d => d.id === cancelDialogDebtId);
+        if (!cancelDebt) return null;
+        return (
+          <CancelDebtDialog
+            debt={cancelDebt}
+            language={language}
+            onCancelled={(updated) => {
+              setDebts(prev => prev.map(d => d.id === updated.id ? updated : d));
+              setMessage(tr('cancelled_successfully'));
+            }}
+            onClose={() => setCancelDialogDebtId(null)}
+          />
+        );
+      })()}
     </section>
   );
 }

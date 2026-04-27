@@ -32,6 +32,7 @@ Debtor accepts → `active`. Debtor requests edit → `edit_requested`. Creditor
 - Schemas: `DebtEditRequest`, `DebtEditApproval`, `ActionMessageIn` (`backend/app/schemas/domain.py:132-156`).
 - Tables: `debts`, `debt_events` (audit trail).
 - Frontend: inline edit-request thread on debt details page.
+- **Cancel non-binding debt (creditor side) ✅** — Two-tap confirmation dialog with optional message. Available when `status ∈ {pending_confirmation, edit_requested}`. Hidden for all other states and for the debtor. On success, debt moves to `cancelled`, debtor receives `debt_cancelled` notification with the optional message body, page stays on debt details. Implemented in `002-cancel-non-binding-debt-ux`.
 
 ## UC4 — QR identification · shared · ✅
 
