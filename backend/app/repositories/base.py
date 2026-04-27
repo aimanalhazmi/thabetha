@@ -107,6 +107,12 @@ class Repository(ABC):
     @abstractmethod
     def list_events(self, user_id: str, debt_id: str) -> list[DebtEventOut]: ...
 
+    # Attachment implementations must only expose files to users who can view
+    # the parent debt. Uploads should persist a canonical storage path, emit an
+    # `attachment_uploaded` debt event, and return a URL that expires after the
+    # configured receipt TTL. Paid debts move receipt metadata to `archived`
+    # until the configured retention window ends; expired attachments should not
+    # be returned from user-facing lists.
     @abstractmethod
     async def add_attachment(self, user_id: str, debt_id: str, attachment_type: AttachmentType, file: UploadFile) -> AttachmentOut: ...
 

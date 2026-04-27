@@ -11,8 +11,12 @@ from fastapi import HTTPException, UploadFile, status
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
+from app.core.config import get_settings
 from app.core.security import AuthenticatedUser
+from app.db.supabase import get_supabase_client, unwrap_response
+from app.repositories.attachment_retention import apply_attachment_access_metadata, retention_for_debt
 from app.repositories.base import Repository
+from app.repositories.local_receipt_store import create_local_receipt_url, has_local_receipt, save_local_receipt
 from app.schemas.domain import (
     AttachmentOut,
     AttachmentType,
@@ -764,10 +768,12 @@ class PostgresRepository(Repository):
             ]
 
     async def add_attachment(self, user_id: str, debt_id: str, attachment_type: AttachmentType, file: UploadFile) -> AttachmentOut:
-        self.get_authorized_debt(user_id, debt_id)
+        debt = self.get_authorized_debt(user_id, debt_id)
         att_id = str(uuid4())
         file_name = file.filename or "attachment"
-        storage_path = f"attachments/{debt_id}/{att_id}-{file_name}"
+        safe_file_name = file_name.replace("/", "_").replace("\\", "_")
+        storage_path = f"{debt_id}/{att_id}-{safe_file_name}"
+        signed_url = await self._store_receipt_and_sign(storage_path, file)
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
             conn.execute(
@@ -775,39 +781,92 @@ class PostgresRepository(Repository):
                 INSERT INTO attachments (id, debt_id, uploader_id, attachment_type, file_name, content_type, storage_path, public_url, created_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now())
                 """,
-                (att_id, debt_id, user_id, attachment_type.value, file_name, file.content_type, storage_path, f"mock://{storage_path}"),
+                (att_id, debt_id, user_id, attachment_type.value, file_name, file.content_type, storage_path, signed_url),
+            )
+            self._add_event_raw(
+                conn,
+                debt_id,
+                user_id,
+                "attachment_uploaded",
+                "Receipt attachment uploaded",
+                {
+                    "attachment_id": att_id,
+                    "attachment_type": attachment_type.value,
+                    "file_name": file_name,
+                    "content_type": file.content_type,
+                    "storage_path": storage_path,
+                },
             )
             conn.commit()
-        await file.close()
-        return AttachmentOut(
+        attachment = AttachmentOut(
             id=att_id,
             debt_id=debt_id,
             uploader_id=user_id,
             attachment_type=attachment_type,
             file_name=file_name,
             content_type=file.content_type,
-            url=f"mock://{storage_path}",
+            url=signed_url,
             created_at=utcnow(),
         )
+        return apply_attachment_access_metadata(attachment, debt, signed_url)
 
     def list_attachments(self, user_id: str, debt_id: str) -> list[AttachmentOut]:
-        self.get_authorized_debt(user_id, debt_id)
+        debt = self.get_authorized_debt(user_id, debt_id)
+        retention_state, _ = retention_for_debt(debt)
+        if retention_state.value == "retention_expired":
+            return []
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
             rows = conn.execute("SELECT * FROM attachments WHERE debt_id = %s ORDER BY created_at", (debt_id,)).fetchall()
             return [
-                AttachmentOut(
-                    id=str(r["id"]),
-                    debt_id=str(r["debt_id"]),
-                    uploader_id=str(r["uploader_id"]),
-                    attachment_type=r["attachment_type"],
-                    file_name=r["file_name"],
-                    content_type=r.get("content_type"),
-                    url=r.get("public_url") or r["storage_path"],
-                    created_at=r["created_at"],
-                )
+                apply_attachment_access_metadata(self._attachment_from_row(r), debt, self._signed_receipt_url(r["storage_path"]))
                 for r in rows
             ]
+
+    async def _store_receipt_and_sign(self, storage_path: str, file: UploadFile) -> str:
+        settings = get_settings()
+        bucket_name = settings.supabase_storage_bucket
+        client = get_supabase_client()
+        content = await file.read()
+        await file.close()
+        if client is None:
+            return save_local_receipt(storage_path, content, file.content_type, file.filename or "attachment")
+
+        bucket = client.storage.from_(bucket_name)
+        bucket.upload(
+            storage_path,
+            content,
+            {"content-type": file.content_type or "application/octet-stream", "upsert": "false"},
+        )
+        return self._signed_receipt_url(storage_path)
+
+    def _signed_receipt_url(self, storage_path: str) -> str:
+        settings = get_settings()
+        client = get_supabase_client()
+        if client is None:
+            if has_local_receipt(storage_path):
+                return create_local_receipt_url(storage_path)
+            return f"{settings.api_prefix}/receipt-files/missing/receipt"
+        response = client.storage.from_(settings.supabase_storage_bucket).create_signed_url(
+            storage_path,
+            settings.receipt_signed_url_ttl_seconds,
+        )
+        data = unwrap_response(response)
+        if isinstance(data, dict):
+            return data.get("signedURL") or data.get("signedUrl") or data.get("signed_url") or data.get("url") or f"mock://{settings.supabase_storage_bucket}/{storage_path}"
+        return str(data)
+
+    def _attachment_from_row(self, row: dict) -> AttachmentOut:
+        return AttachmentOut(
+            id=str(row["id"]),
+            debt_id=str(row["debt_id"]),
+            uploader_id=str(row["uploader_id"]),
+            attachment_type=row["attachment_type"],
+            file_name=row["file_name"],
+            content_type=row.get("content_type"),
+            url=row.get("public_url") or row["storage_path"],
+            created_at=row["created_at"],
+        )
 
     # ── Dashboards ────────────────────────────────────────────────────
 

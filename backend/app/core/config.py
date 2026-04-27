@@ -15,7 +15,9 @@ class Settings(BaseSettings):
     supabase_anon_key: str | None = None
     supabase_service_role_key: str | None = None
     supabase_jwt_secret: str | None = None
-    supabase_storage_bucket: str = "thabetha-attachments"
+    supabase_storage_bucket: str = "receipts"
+    receipt_signed_url_ttl_seconds: int = 3600
+    receipt_archive_retention_months: int = 6
 
     openai_api_key: str | None = None
     whatsapp_provider: str = "mock"

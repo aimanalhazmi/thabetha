@@ -8,7 +8,9 @@ from uuid import uuid4
 from fastapi import HTTPException, UploadFile, status
 
 from app.core.security import AuthenticatedUser
+from app.repositories.attachment_retention import apply_attachment_access_metadata, retention_for_debt
 from app.repositories.base import Repository
+from app.repositories.local_receipt_store import save_local_receipt
 from app.schemas.domain import (
     AccountType,
     AttachmentOut,
@@ -400,24 +402,48 @@ class InMemoryRepository(Repository):
 
     async def add_attachment(self, user_id: str, debt_id: str, attachment_type: AttachmentType, file: UploadFile) -> AttachmentOut:
         with self._lock:
-            self.get_authorized_debt(user_id, debt_id)
+            debt = self.get_authorized_debt(user_id, debt_id)
+            file_name = file.filename or "attachment"
+            storage_id = uuid4()
+            content = await file.read()
+            storage_path = f"{debt_id}/{storage_id}-{file_name}"
             attachment = AttachmentOut(
                 id=str(uuid4()),
                 debt_id=debt_id,
                 uploader_id=user_id,
                 attachment_type=attachment_type,
-                file_name=file.filename or "attachment",
+                file_name=file_name,
                 content_type=file.content_type,
-                url=f"mock://attachments/{debt_id}/{uuid4()}-{file.filename or 'attachment'}",
+                url=save_local_receipt(storage_path, content, file.content_type, file_name),
                 created_at=utcnow(),
             )
+            attachment = apply_attachment_access_metadata(attachment, debt)
             self.attachments.append(attachment)
+            self._add_event(
+                debt_id,
+                user_id,
+                "attachment_uploaded",
+                "Receipt attachment uploaded",
+                {
+                    "attachment_id": attachment.id,
+                    "attachment_type": attachment_type.value,
+                    "file_name": file_name,
+                    "content_type": file.content_type,
+                },
+            )
             await file.close()
             return attachment
 
     def list_attachments(self, user_id: str, debt_id: str) -> list[AttachmentOut]:
-        self.get_authorized_debt(user_id, debt_id)
-        return [attachment for attachment in self.attachments if attachment.debt_id == debt_id]
+        debt = self.get_authorized_debt(user_id, debt_id)
+        retention_state, _ = retention_for_debt(debt)
+        if retention_state.value == "retention_expired":
+            return []
+        return [
+            apply_attachment_access_metadata(attachment, debt)
+            for attachment in self.attachments
+            if attachment.debt_id == debt_id
+        ]
 
     def debtor_dashboard(self, user_id: str) -> DebtorDashboardOut:
         self._refresh_overdue()
@@ -667,4 +693,3 @@ repository = InMemoryRepository()
 
 def get_repository() -> InMemoryRepository:
     return repository
-

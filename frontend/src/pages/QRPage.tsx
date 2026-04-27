@@ -12,7 +12,7 @@ interface Props { language: Language }
 export function QRPage({ language }: Props) {
   const tr = (key: Parameters<typeof t>[1]) => t(language, key);
   const { user } = useAuth();
-  const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both';
+  const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both' || user?.account_type === 'business';
   const [qr, setQr] = useState<QRToken | null>(null);
   const [message, setMessage] = useState("");
   const [scanToken, setScanToken] = useState("");

@@ -87,6 +87,43 @@ export interface DebtEvent {
   created_at: string;
 }
 
+export type AttachmentType = 'invoice' | 'voice_note' | 'other';
+export type AttachmentRetentionState = 'available' | 'archived' | 'retention_expired';
+
+export interface Attachment {
+  id: string;
+  debt_id: string;
+  uploader_id: string;
+  attachment_type: AttachmentType;
+  file_name: string;
+  content_type?: string | null;
+  url: string;
+  url_expires_at?: string | null;
+  retention_state: AttachmentRetentionState;
+  retention_expires_at?: string | null;
+  created_at: string;
+}
+
+export type ReceiptUploadStatus = 'ready' | 'warning' | 'uploading' | 'uploaded' | 'failed';
+
+export interface ReceiptUploadItem {
+  id: string;
+  file: File;
+  uploadFile: File;
+  name: string;
+  size: number;
+  contentType: string;
+  status: ReceiptUploadStatus;
+  error?: string;
+  warning?: string;
+  previewUrl?: string;
+}
+
+export const RECEIPT_WARN_BYTES = 4 * 1024 * 1024;
+export const RECEIPT_MAX_BYTES = 5 * 1024 * 1024;
+export const RECEIPT_IMAGE_MAX_EDGE = 2048;
+export const RECEIPT_ACCEPT = 'image/*,application/pdf';
+
 export interface NotificationItem {
   id: string;
   title: string;

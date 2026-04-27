@@ -1,0 +1,233 @@
+openapi: 3.0.3
+info:
+  title: Receipt Upload on Create Debt Contract
+  version: 0.1.0
+  description: Contract for creating a debt, attaching invoice receipts, listing receipt attachments, and reading audit events.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /debts:
+    post:
+      summary: Create a debt before attaching receipts
+      operationId: createDebt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DebtCreate"
+      responses:
+        "201":
+          description: Debt created in pending confirmation state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DebtOut"
+        "401":
+          description: Missing or invalid authentication
+  /debts/{debt_id}/attachments:
+    post:
+      summary: Attach one receipt file to an existing debt
+      operationId: uploadDebtReceipt
+      parameters:
+        - $ref: "#/components/parameters/DebtId"
+        - name: attachment_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [invoice]
+          description: Phase 1 create-debt receipt uploads always use invoice.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Image or PDF receipt. Frontend rejects unsupported types and files over 5 MB.
+      responses:
+        "201":
+          description: Receipt attachment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachmentOut"
+        "400":
+          description: Invalid file type, size, or attachment type
+        "401":
+          description: Missing or invalid authentication
+        "403":
+          description: Authenticated user is not a party to the debt
+        "404":
+          description: Debt not found
+    get:
+      summary: List receipt attachments for a debt
+      operationId: listDebtReceipts
+      parameters:
+        - $ref: "#/components/parameters/DebtId"
+      responses:
+        "200":
+          description: Authorized user's visible receipt attachments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttachmentOut"
+        "401":
+          description: Missing or invalid authentication
+        "403":
+          description: Authenticated user is not a party to the debt
+        "404":
+          description: Debt not found
+  /debts/{debt_id}/events:
+    get:
+      summary: List debt audit events
+      operationId: listDebtEvents
+      parameters:
+        - $ref: "#/components/parameters/DebtId"
+      responses:
+        "200":
+          description: Debt event history, including successful attachment events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DebtEventOut"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    DebtId:
+      name: debt_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Debt identifier.
+  schemas:
+    DebtCreate:
+      type: object
+      required: [debtor_name, amount, currency, description, due_date]
+      properties:
+        debtor_name:
+          type: string
+          minLength: 1
+        debtor_id:
+          type: string
+          nullable: true
+        amount:
+          type: string
+          pattern: "^[0-9]+(\\.[0-9]{1,2})?$"
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        description:
+          type: string
+          minLength: 1
+        due_date:
+          type: string
+          format: date
+        reminder_dates:
+          type: array
+          items:
+            type: string
+            format: date
+        notes:
+          type: string
+          nullable: true
+        group_id:
+          type: string
+          nullable: true
+    DebtOut:
+      allOf:
+        - $ref: "#/components/schemas/DebtCreate"
+        - type: object
+          required: [id, creditor_id, status, created_at, updated_at]
+          properties:
+            id:
+              type: string
+            creditor_id:
+              type: string
+            status:
+              type: string
+              enum: [pending_confirmation, active, edit_requested, overdue, payment_pending_confirmation, paid, cancelled]
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+            paid_at:
+              type: string
+              format: date-time
+              nullable: true
+    AttachmentOut:
+      type: object
+      required: [id, debt_id, uploader_id, attachment_type, file_name, url, created_at, retention_state]
+      properties:
+        id:
+          type: string
+        debt_id:
+          type: string
+        uploader_id:
+          type: string
+        attachment_type:
+          type: string
+          enum: [invoice, voice_note, other]
+        file_name:
+          type: string
+        content_type:
+          type: string
+          nullable: true
+        url:
+          type: string
+          description: Signed URL scoped to the authorized request; expires after 1 hour.
+        url_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        retention_state:
+          type: string
+          enum: [available, archived, retention_expired]
+        retention_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    DebtEventOut:
+      type: object
+      required: [id, debt_id, actor_id, event_type, metadata, created_at]
+      properties:
+        id:
+          type: string
+        debt_id:
+          type: string
+        actor_id:
+          type: string
+        event_type:
+          type: string
+          description: Includes debt_created and attachment_uploaded for this feature.
+        message:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
