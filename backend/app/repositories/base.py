@@ -21,6 +21,7 @@ from app.schemas.domain import (
     CreditorDashboardOut,
     DebtChangeRequest,
     DebtCreate,
+    DebtEditApproval,
     DebtEventOut,
     DebtorDashboardOut,
     DebtOut,
@@ -84,10 +85,13 @@ class Repository(ABC):
     def accept_debt(self, user_id: str, debt_id: str) -> DebtOut: ...
 
     @abstractmethod
-    def reject_debt(self, user_id: str, debt_id: str, message: str | None = None) -> DebtOut: ...
+    def request_debt_change(self, user_id: str, debt_id: str, payload: DebtChangeRequest) -> DebtOut: ...
 
     @abstractmethod
-    def request_debt_change(self, user_id: str, debt_id: str, payload: DebtChangeRequest) -> DebtOut: ...
+    def approve_edit_request(self, user_id: str, debt_id: str, payload: DebtEditApproval) -> DebtOut: ...
+
+    @abstractmethod
+    def reject_edit_request(self, user_id: str, debt_id: str, message: str | None = None) -> DebtOut: ...
 
     @abstractmethod
     def mark_paid(self, user_id: str, debt_id: str, payload: PaymentRequest) -> PaymentConfirmationOut: ...

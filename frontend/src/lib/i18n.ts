@@ -33,8 +33,40 @@ export type TranslationKey =
   | 'active'
   | 'paid'
   | 'accept'
-  | 'reject'
   | 'requestEdit'
+  | 'approveEdit'
+  | 'rejectEdit'
+  | 'editReason'
+  | 'editReasonPlaceholder'
+  | 'proposedAmount'
+  | 'proposedDueDate'
+  | 'optional'
+  | 'sendEditRequest'
+  | 'editRequestFromDebtor'
+  | 'noEditRequestDetails'
+  | 'creditorReply'
+  | 'creditorReplyPlaceholder'
+  | 'currentValue'
+  | 'requestedValue'
+  | 'proposedDescription'
+  | 'finalAmount'
+  | 'finalDueDate'
+  | 'finalDescription'
+  | 'approveAndSave'
+  | 'debtorProposed'
+  | 'awaitingCreditor'
+  | 'yourEditRequest'
+  | 'creditorApprovedEdit'
+  | 'creditorRejectedEdit'
+  | 'newTerms'
+  | 'reviewAndAccept'
+  | 'reminderDates'
+  | 'addReminder'
+  | 'reminderPresetOnDue'
+  | 'reminderPresetPlus1'
+  | 'reminderPresetPlus3'
+  | 'reminderPresetPlus7'
+  | 'reminderPresetPlus14'
   | 'markPaid'
   | 'confirmPayment'
   | 'save'
@@ -70,7 +102,6 @@ export type TranslationKey =
   | 'dontHaveAccount'
   | 'pendingConfirmation'
   | 'editRequested'
-  | 'rejected'
   | 'paymentPendingConfirmation'
   | 'cancelled'
   | 'checkEmail'
@@ -148,8 +179,40 @@ const ar: Translations = {
   active: 'نشط',
   paid: 'مدفوع',
   accept: 'قبول',
-  reject: 'رفض',
   requestEdit: 'طلب تعديل',
+  approveEdit: 'الموافقة على التعديل',
+  rejectEdit: 'رفض التعديل',
+  editReason: 'سبب طلب التعديل',
+  editReasonPlaceholder: 'اكتب سبب طلبك للتعديل ليطّلع عليه الدائن',
+  proposedAmount: 'المبلغ المقترح',
+  proposedDueDate: 'تاريخ الاستحقاق المقترح',
+  optional: 'اختياري',
+  sendEditRequest: 'إرسال طلب التعديل',
+  editRequestFromDebtor: 'طلب تعديل من المدين',
+  noEditRequestDetails: 'لا توجد تفاصيل لطلب التعديل',
+  creditorReply: 'رسالتك للمدين',
+  creditorReplyPlaceholder: 'اشرح قرارك ليتلقّاه المدين مع التعديلات',
+  currentValue: 'الحالي',
+  requestedValue: 'المقترح',
+  proposedDescription: 'الوصف المقترح',
+  finalAmount: 'المبلغ النهائي',
+  finalDueDate: 'تاريخ الاستحقاق النهائي',
+  finalDescription: 'الوصف النهائي',
+  approveAndSave: 'الموافقة وحفظ التعديلات',
+  debtorProposed: 'اقتراح المدين',
+  awaitingCreditor: 'بانتظار رد الدائن',
+  yourEditRequest: 'طلب التعديل الخاص بك',
+  creditorApprovedEdit: 'وافق الدائن على التعديل',
+  creditorRejectedEdit: 'رفض الدائن التعديل',
+  newTerms: 'الشروط الجديدة',
+  reviewAndAccept: 'راجع الشروط وأكّدها',
+  reminderDates: 'تواريخ التذكير',
+  addReminder: 'إضافة تذكير',
+  reminderPresetOnDue: 'في تاريخ الاستحقاق',
+  reminderPresetPlus1: 'بعد يوم',
+  reminderPresetPlus3: 'بعد ٣ أيام',
+  reminderPresetPlus7: 'بعد ٧ أيام',
+  reminderPresetPlus14: 'بعد ١٤ يومًا',
   markPaid: 'تحديد كمدفوع',
   confirmPayment: 'تأكيد استلام الدفع',
   save: 'حفظ',
@@ -185,7 +248,6 @@ const ar: Translations = {
   dontHaveAccount: 'ليس لديك حساب؟',
   pendingConfirmation: 'بانتظار التأكيد',
   editRequested: 'طلب تعديل',
-  rejected: 'مرفوض',
   paymentPendingConfirmation: 'بانتظار تأكيد الدفع',
   cancelled: 'ملغي',
   checkEmail: 'تحقق من بريدك الإلكتروني',
@@ -262,8 +324,40 @@ const en: Translations = {
   active: 'Active',
   paid: 'Paid',
   accept: 'Accept',
-  reject: 'Reject',
   requestEdit: 'Request edit',
+  approveEdit: 'Approve edit',
+  rejectEdit: 'Reject edit',
+  editReason: 'Reason for the edit',
+  editReasonPlaceholder: 'Explain why you want this debt edited — the creditor will see this message',
+  proposedAmount: 'Proposed amount',
+  proposedDueDate: 'Proposed due date',
+  optional: 'optional',
+  sendEditRequest: 'Send edit request',
+  editRequestFromDebtor: 'Edit request from debtor',
+  noEditRequestDetails: 'No details available for this edit request',
+  creditorReply: 'Your reply to the debtor',
+  creditorReplyPlaceholder: 'Explain your decision — the debtor will receive this with the updated terms',
+  currentValue: 'Current',
+  requestedValue: 'Requested',
+  proposedDescription: 'Proposed description',
+  finalAmount: 'Final amount',
+  finalDueDate: 'Final due date',
+  finalDescription: 'Final description',
+  approveAndSave: 'Approve & save changes',
+  debtorProposed: "Debtor's proposal",
+  awaitingCreditor: "Awaiting creditor's reply",
+  yourEditRequest: 'Your edit request',
+  creditorApprovedEdit: 'Creditor approved your edit',
+  creditorRejectedEdit: 'Creditor declined your edit',
+  newTerms: 'New terms',
+  reviewAndAccept: 'Review the terms and confirm',
+  reminderDates: 'Reminders',
+  addReminder: 'Add reminder',
+  reminderPresetOnDue: 'On due date',
+  reminderPresetPlus1: '+1 day',
+  reminderPresetPlus3: '+3 days',
+  reminderPresetPlus7: '+7 days',
+  reminderPresetPlus14: '+14 days',
   markPaid: 'Mark paid',
   confirmPayment: 'Confirm payment',
   save: 'Save',
@@ -299,7 +393,6 @@ const en: Translations = {
   dontHaveAccount: "Don't have an account?",
   pendingConfirmation: 'Pending confirmation',
   editRequested: 'Edit requested',
-  rejected: 'Rejected',
   paymentPendingConfirmation: 'Payment pending confirmation',
   cancelled: 'Cancelled',
   checkEmail: 'Check Your Email',
