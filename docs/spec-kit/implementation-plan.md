@@ -1,6 +1,6 @@
 # Thabetha — Implementation Plan (Spec-Kit Phased Roadmap)
 
-> **Snapshot date:** 2026-04-27 · **Branch:** `feature/debt-edit-request` → merging into `develop`
+> **Snapshot date:** 2026-04-27 · **Branch:** `develop`
 > **Purpose:** Continue from the current state toward MVP-complete + post-MVP, structured as discrete spec-kit features. Each phase below is sized for one `/specify → /clarify → /plan → /tasks → /implement` cycle.
 
 ---
@@ -9,13 +9,12 @@
 
 Each **phase** below is one feature for spec-kit. The flow per phase is:
 
-1**`/specify "<problem statement>"`** — paste the *Problem Statement* from the phase. spec-kit will produce `spec.md` in a new `specs/NNN-<slug>/` folder.
-2**`/clarify`** — let spec-kit ask its clarification questions. Use the *Pre-answered clarifications* in each phase to answer quickly and consistently.
-3**`/plan`** — feed in the *Technical context* from the phase (stack, constraints, files to touch). spec-kit produces `plan.md` + design artifacts.
-4**`/tasks`** — produces an ordered, dependency-aware task list.
-5**`/analyze`** (optional) — cross-check spec/plan/tasks consistency before coding.
-6**`/implement`** or hand tasks to a teammate. Each phase lists *Acceptance signals* — these are what closes the phase.
-7**After merge:** update `claude-handoff/project-status.md` and the relevant row in `claude-handoff/use-cases.md`. Tick the phase below.
+1**`/clarify`** — let spec-kit ask its clarification questions. Use the *Pre-answered clarifications* in each phase to answer quickly and consistently.
+2**`/plan`** — feed in the *Technical context* from the phase (stack, constraints, files to touch). spec-kit produces `plan.md` + design artifacts.
+3**`/tasks`** — produces an ordered, dependency-aware task list.
+4**`/analyze`** (optional) — cross-check spec/plan/tasks consistency before coding.
+5**`/implement`** or hand tasks to a teammate. Each phase lists *Acceptance signals* — these are what closes the phase.
+6**After merge:** update `claude-handoff/project-status.md` and the relevant row in `claude-handoff/use-cases.md`. Tick the phase below.
 
 **Branching:** one branch per phase, named `NNN-<slug>` to mirror spec-kit's folder. Rebase on `develop` before opening the PR. Don't combine phases — the small surface area is the point.
 
