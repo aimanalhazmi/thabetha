@@ -10,7 +10,6 @@ export type DebtStatus =
   | 'pending_confirmation'
   | 'active'
   | 'edit_requested'
-  | 'rejected'
   | 'overdue'
   | 'payment_pending_confirmation'
   | 'paid'
@@ -50,6 +49,7 @@ export interface Debt {
   currency: string;
   description: string;
   due_date: string;
+  reminder_dates: string[];
   status: DebtStatus;
   notes?: string;
   created_at: string;
@@ -75,6 +75,16 @@ export interface CreditorDashboard {
   paid_count: number;
   alerts: string[];
   debts: Debt[];
+}
+
+export interface DebtEvent {
+  id: string;
+  debt_id: string;
+  actor_id: string;
+  event_type: string;
+  message?: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
 }
 
 export interface NotificationItem {

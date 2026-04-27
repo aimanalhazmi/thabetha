@@ -15,6 +15,9 @@ Full product context: [`docs/product-requirements.md`](./docs/product-requiremen
 - **Use the term "commitment indicator / مؤشر الالتزام"**, never "credit score" / "trust score". The indicator is internal to Thabetha and visible only in bilateral context.
 - **Per-user data isolation.** A user only ever sees debts where they are creditor, debtor, or accepted group member. Enforced both in API handlers and by Postgres RLS.
 - **Arabic-first.** New strings must land in `frontend/src/lib/i18n.ts` for both languages.
+- **Debtor cannot reject.** The only debtor pushback on a `pending_confirmation` debt is `request_edit`. The creditor then approves (debt updates → `pending_confirmation` for re-acceptance) or rejects (original terms stand → `pending_confirmation`). The `rejected` status no longer exists.
+- **Commitment indicator (`profiles.commitment_score`, 0–100, default 50) is automatic.** On creditor-confirmed payment: `+3` if paid before `due_date`, `+1` if on `due_date`, otherwise `−2 × 2^N` where N is the count of already-applied missed-reminder events for that debt. Each creditor-configured reminder date that passes unpaid fires its own `−2 × 2^N` penalty exactly once via the lazy sweeper that already runs on debt-list / dashboard reads. Events are recorded in `commitment_score_events` (with `reminder_date` for idempotency); score is clamped 0–100.
+- **Creditor configures reminders per debt** (`debts.reminder_dates date[]`) at creation time — UI offers presets (`on due`, `+1d`, `+3d`, `+7d`, `+14d`) plus custom dates.
 
 ## Actors
 
