@@ -135,10 +135,20 @@ class DebtEditRequest(BaseModel):
     message: str = Field(min_length=1)
     requested_amount: Decimal | None = Field(default=None, gt=Decimal("0"))
     requested_due_date: date | None = None
+    requested_description: str | None = Field(default=None, min_length=1)
 
 
 # Back-compat alias — old import name still resolves.
 DebtChangeRequest = DebtEditRequest
+
+
+class DebtEditApproval(BaseModel):
+    """Creditor decision on a debtor's edit request — may override the debtor's proposal."""
+
+    message: str = Field(min_length=1)
+    amount: Decimal | None = Field(default=None, gt=Decimal("0"))
+    due_date: date | None = None
+    description: str | None = Field(default=None, min_length=1)
 
 
 class ActionMessageIn(BaseModel):

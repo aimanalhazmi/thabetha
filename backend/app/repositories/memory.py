@@ -19,6 +19,7 @@ from app.schemas.domain import (
     CreditorDashboardOut,
     DebtChangeRequest,
     DebtCreate,
+    DebtEditApproval,
     DebtEventOut,
     DebtorDashboardOut,
     DebtOut,
@@ -265,29 +266,39 @@ class InMemoryRepository(Repository):
             self._notify(debt.creditor_id, NotificationType.debt_edit_requested, "Debt change requested", payload.message, debt.id)
             return debt
 
-    def approve_edit_request(self, user_id: str, debt_id: str, message: str | None = None) -> DebtOut:
+    def approve_edit_request(self, user_id: str, debt_id: str, payload: DebtEditApproval) -> DebtOut:
         with self._lock:
             debt = self.get_authorized_debt(user_id, debt_id)
             if debt.creditor_id != user_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the creditor can decide on an edit request")
             if debt.status != DebtStatus.edit_requested:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No edit request awaits a decision")
-            payload = self._edit_request_payloads.pop(debt_id, {})
+            requested = self._edit_request_payloads.pop(debt_id, {})
+
             update: dict[str, object] = {"status": DebtStatus.pending_confirmation, "updated_at": utcnow()}
-            if "requested_amount" in payload and payload["requested_amount"] is not None:
-                update["amount"] = Decimal(str(payload["requested_amount"]))
-            if "requested_due_date" in payload and payload["requested_due_date"] is not None:
-                value = payload["requested_due_date"]
+            if payload.amount is not None:
+                update["amount"] = payload.amount
+            elif requested.get("requested_amount") is not None:
+                update["amount"] = Decimal(str(requested["requested_amount"]))
+            if payload.due_date is not None:
+                update["due_date"] = payload.due_date
+            elif requested.get("requested_due_date") is not None:
+                value = requested["requested_due_date"]
                 update["due_date"] = value if isinstance(value, date) else date.fromisoformat(str(value))
+            if payload.description is not None:
+                update["description"] = payload.description
+            elif isinstance(requested.get("requested_description"), str):
+                update["description"] = requested["requested_description"]
+
             debt = debt.model_copy(update=update)
             self.debts[debt_id] = debt
-            self._add_event(debt.id, user_id, "debt_edit_approved", message, payload)
+            self._add_event(debt.id, user_id, "debt_edit_approved", payload.message, {"requested": requested})
             if debt.debtor_id:
                 self._notify(
                     debt.debtor_id,
                     NotificationType.debt_edit_approved,
                     "Edit approved",
-                    message or f"{debt.amount} {debt.currency} updated; please re-confirm",
+                    payload.message,
                     debt.id,
                     merchant_id=debt.creditor_id,
                 )

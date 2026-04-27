@@ -9,6 +9,7 @@ from app.schemas.domain import (
     AttachmentOut,
     AttachmentType,
     DebtCreate,
+    DebtEditApproval,
     DebtEditRequest,
     DebtEventOut,
     DebtOut,
@@ -82,12 +83,12 @@ def request_edit(
 @router.post("/{debt_id}/edit-request/approve", response_model=DebtOut)
 def approve_edit_request(
     debt_id: str,
-    payload: ActionMessageIn,
+    payload: DebtEditApproval,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     repo: Annotated[Repository, Depends(get_repository)],
 ) -> DebtOut:
     repo.ensure_profile(user)
-    return repo.approve_edit_request(user.id, debt_id, payload.message)
+    return repo.approve_edit_request(user.id, debt_id, payload)
 
 
 @router.post("/{debt_id}/edit-request/reject", response_model=DebtOut)

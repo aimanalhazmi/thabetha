@@ -36,6 +36,30 @@ export type TranslationKey =
   | 'requestEdit'
   | 'approveEdit'
   | 'rejectEdit'
+  | 'editReason'
+  | 'editReasonPlaceholder'
+  | 'proposedAmount'
+  | 'proposedDueDate'
+  | 'optional'
+  | 'sendEditRequest'
+  | 'editRequestFromDebtor'
+  | 'noEditRequestDetails'
+  | 'creditorReply'
+  | 'creditorReplyPlaceholder'
+  | 'currentValue'
+  | 'requestedValue'
+  | 'proposedDescription'
+  | 'finalAmount'
+  | 'finalDueDate'
+  | 'finalDescription'
+  | 'approveAndSave'
+  | 'debtorProposed'
+  | 'awaitingCreditor'
+  | 'yourEditRequest'
+  | 'creditorApprovedEdit'
+  | 'creditorRejectedEdit'
+  | 'newTerms'
+  | 'reviewAndAccept'
   | 'reminderDates'
   | 'addReminder'
   | 'reminderPresetOnDue'
@@ -158,6 +182,30 @@ const ar: Translations = {
   requestEdit: 'طلب تعديل',
   approveEdit: 'الموافقة على التعديل',
   rejectEdit: 'رفض التعديل',
+  editReason: 'سبب طلب التعديل',
+  editReasonPlaceholder: 'اكتب سبب طلبك للتعديل ليطّلع عليه الدائن',
+  proposedAmount: 'المبلغ المقترح',
+  proposedDueDate: 'تاريخ الاستحقاق المقترح',
+  optional: 'اختياري',
+  sendEditRequest: 'إرسال طلب التعديل',
+  editRequestFromDebtor: 'طلب تعديل من المدين',
+  noEditRequestDetails: 'لا توجد تفاصيل لطلب التعديل',
+  creditorReply: 'رسالتك للمدين',
+  creditorReplyPlaceholder: 'اشرح قرارك ليتلقّاه المدين مع التعديلات',
+  currentValue: 'الحالي',
+  requestedValue: 'المقترح',
+  proposedDescription: 'الوصف المقترح',
+  finalAmount: 'المبلغ النهائي',
+  finalDueDate: 'تاريخ الاستحقاق النهائي',
+  finalDescription: 'الوصف النهائي',
+  approveAndSave: 'الموافقة وحفظ التعديلات',
+  debtorProposed: 'اقتراح المدين',
+  awaitingCreditor: 'بانتظار رد الدائن',
+  yourEditRequest: 'طلب التعديل الخاص بك',
+  creditorApprovedEdit: 'وافق الدائن على التعديل',
+  creditorRejectedEdit: 'رفض الدائن التعديل',
+  newTerms: 'الشروط الجديدة',
+  reviewAndAccept: 'راجع الشروط وأكّدها',
   reminderDates: 'تواريخ التذكير',
   addReminder: 'إضافة تذكير',
   reminderPresetOnDue: 'في تاريخ الاستحقاق',
@@ -279,6 +327,30 @@ const en: Translations = {
   requestEdit: 'Request edit',
   approveEdit: 'Approve edit',
   rejectEdit: 'Reject edit',
+  editReason: 'Reason for the edit',
+  editReasonPlaceholder: 'Explain why you want this debt edited — the creditor will see this message',
+  proposedAmount: 'Proposed amount',
+  proposedDueDate: 'Proposed due date',
+  optional: 'optional',
+  sendEditRequest: 'Send edit request',
+  editRequestFromDebtor: 'Edit request from debtor',
+  noEditRequestDetails: 'No details available for this edit request',
+  creditorReply: 'Your reply to the debtor',
+  creditorReplyPlaceholder: 'Explain your decision — the debtor will receive this with the updated terms',
+  currentValue: 'Current',
+  requestedValue: 'Requested',
+  proposedDescription: 'Proposed description',
+  finalAmount: 'Final amount',
+  finalDueDate: 'Final due date',
+  finalDescription: 'Final description',
+  approveAndSave: 'Approve & save changes',
+  debtorProposed: "Debtor's proposal",
+  awaitingCreditor: "Awaiting creditor's reply",
+  yourEditRequest: 'Your edit request',
+  creditorApprovedEdit: 'Creditor approved your edit',
+  creditorRejectedEdit: 'Creditor declined your edit',
+  newTerms: 'New terms',
+  reviewAndAccept: 'Review the terms and confirm',
   reminderDates: 'Reminders',
   addReminder: 'Add reminder',
   reminderPresetOnDue: 'On due date',

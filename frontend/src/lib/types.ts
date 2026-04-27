@@ -77,6 +77,16 @@ export interface CreditorDashboard {
   debts: Debt[];
 }
 
+export interface DebtEvent {
+  id: string;
+  debt_id: string;
+  actor_id: string;
+  event_type: string;
+  message?: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface NotificationItem {
   id: string;
   title: string;
