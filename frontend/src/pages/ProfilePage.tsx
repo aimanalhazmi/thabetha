@@ -25,7 +25,7 @@ export function ProfilePage({ language }: Props) {
     try {
       const updated = await apiRequest<Profile>('/profiles/me', { method: 'PATCH', body: JSON.stringify(profile) });
       setProfile(updated);
-      setMessage(language === 'ar' ? 'تم حفظ الملف الشخصي' : 'Profile saved');
+      setMessage(tr('toastProfileSaved'));
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Failed');
     }

@@ -31,7 +31,7 @@ deefc60 feat: implement debt edit request flow and commitment indicator logic
 
 ## In progress / pending (MVP)
 
-- Polished bilingual UI (Arabic-first, English toggle) — strings exist in `lib/i18n.ts`, but full coverage and RTL audit deferred to Phase 5 (bilingual coverage audit).
+- ~~Polished bilingual UI (Arabic-first, English toggle)~~ ✅ **Shipped** (Phase 5 — branch `004-bilingual-coverage-audit`) — full AR/EN coverage sweep (25 Blocker/Major findings, all fixed), ESLint v9 flat config with `react/jsx-no-literals` + custom `no-untranslated-jsx` prop rule (19/20 calibration catch rate), Vitest per-page locale tests (18 passing), `profiles.preferred_language` persisted to Supabase, `<html lang dir>` set without first-paint flicker.
 - **Receipt upload on Create Debt** (UC2) — create-debt UI accepts image/PDF receipts, uploads them after debt creation, lists signed receipt links on debt cards, and preserves failed uploads for retry.
 - ~~**QR scanner pass-through on Create Debt**~~ ✅ **Shipped** (UC4 → UC2) — scanner confirm step, `/debts?qr_token=` deep link, prefilled-and-locked debtor identity, re-resolve on submit, expired/self/error handling, bilingual strings (AR+EN), backend self-billing 409 guard, integration test.
 - ~~**Cancel non-binding debt UX (creditor)**~~ ✅ **Shipped** (Phase 3) — two-tap confirmation dialog with optional message (≤ 200 chars), hidden for all non-cancellable states and for the debtor, post-cancel page stays on debt details, 8 backend tests, 6 AR+EN i18n keys.

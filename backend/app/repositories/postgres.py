@@ -63,6 +63,7 @@ def _profile_from_row(row: dict) -> ProfileOut:
         whatsapp_enabled=row["whatsapp_enabled"],
         ai_enabled=row["ai_enabled"],
         commitment_score=row["commitment_score"],
+        preferred_language=row.get("preferred_language", "ar"),
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
     )

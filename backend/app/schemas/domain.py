@@ -75,6 +75,7 @@ class ProfileUpdate(BaseModel):
     shop_description: str | None = None
     whatsapp_enabled: bool | None = None
     ai_enabled: bool | None = None
+    preferred_language: str | None = Field(default=None, pattern=r"^(ar|en)$")
 
 
 class ProfileOut(BaseModel):
@@ -92,6 +93,7 @@ class ProfileOut(BaseModel):
     whatsapp_enabled: bool = True
     ai_enabled: bool = False
     commitment_score: int = Field(default=50, ge=0, le=100)
+    preferred_language: str = "ar"
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

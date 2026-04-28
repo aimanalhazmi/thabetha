@@ -180,7 +180,26 @@ export type TranslationKey =
   | 'cannotBillSelf'
   | 'clearDebtor'
   | 'scannedDebtorLabel'
-  | 'createDebtForPerson';
+  | 'createDebtForPerson'
+  | 'languageLabel'
+  | 'switchLanguage'
+  | 'navMenu'
+  | 'debtTrackerSubtitle'
+  | 'toastEditRequestSent'
+  | 'toastDebtAccepted'
+  | 'toastEditApproved'
+  | 'originalTermsStand'
+  | 'toastEditRejected'
+  | 'toastDebtCreated'
+  | 'toastReceiptUploaded'
+  | 'rescan'
+  | 'debtorIdPlaceholder'
+  | 'toastPaymentRequested'
+  | 'toastPaymentConfirmed'
+  | 'toastProfileSaved'
+  | 'inbucketDevHint'
+  | 'phonePlaceholder'
+  | 'reminderDatePlaceholder';
 
 type Translations = Record<TranslationKey, string>;
 
@@ -364,6 +383,25 @@ const ar: Translations = {
   clearDebtor: 'تغيير المدين',
   scannedDebtorLabel: 'تم التحقق عبر QR',
   createDebtForPerson: 'إنشاء دين لهذا الشخص',
+  languageLabel: 'اللغة',
+  switchLanguage: 'English',
+  navMenu: 'القائمة',
+  debtTrackerSubtitle: 'متتبع الديون',
+  toastEditRequestSent: 'تم إرسال طلب التعديل',
+  toastDebtAccepted: 'تم قبول الدين',
+  toastEditApproved: 'تمت الموافقة على التعديل',
+  originalTermsStand: 'الشروط الأصلية سارية',
+  toastEditRejected: 'تم رفض التعديل',
+  toastDebtCreated: 'تم إنشاء الدين',
+  toastReceiptUploaded: 'تم رفع الإيصال',
+  rescan: 'مسح من جديد',
+  debtorIdPlaceholder: 'معرف المدين (اختياري)',
+  toastPaymentRequested: 'تم طلب تأكيد الدفع',
+  toastPaymentConfirmed: 'تم تأكيد الدفع',
+  toastProfileSaved: 'تم حفظ الملف الشخصي',
+  inbucketDevHint: '📧 تحقق من Inbucket على المنفذ 55324',
+  phonePlaceholder: '+966XXXXXXXXX',
+  reminderDatePlaceholder: 'YYYY-MM-DD, YYYY-MM-DD',
 };
 
 const en: Translations = {
@@ -546,6 +584,25 @@ const en: Translations = {
   clearDebtor: 'Change debtor',
   scannedDebtorLabel: 'Verified via QR',
   createDebtForPerson: 'Create debt for this person',
+  languageLabel: 'Language',
+  switchLanguage: 'العربية',
+  navMenu: 'Menu',
+  debtTrackerSubtitle: 'Debt Tracker',
+  toastEditRequestSent: 'Edit request sent',
+  toastDebtAccepted: 'Debt accepted',
+  toastEditApproved: 'Edit approved',
+  originalTermsStand: 'Original terms stand',
+  toastEditRejected: 'Edit rejected',
+  toastDebtCreated: 'Debt created',
+  toastReceiptUploaded: 'Receipt uploaded',
+  rescan: 'Rescan',
+  debtorIdPlaceholder: 'Debtor user ID (optional)',
+  toastPaymentRequested: 'Payment requested',
+  toastPaymentConfirmed: 'Payment confirmed',
+  toastProfileSaved: 'Profile saved',
+  inbucketDevHint: '📧 Check Inbucket at localhost:55324',
+  phonePlaceholder: '+966500000000',
+  reminderDatePlaceholder: 'YYYY-MM-DD, YYYY-MM-DD',
 };
 
 const translations: Record<Language, Translations> = { ar, en };
@@ -553,4 +610,33 @@ const translations: Record<Language, Translations> = { ar, en };
 /** Return the translated string for the given language and key. */
 export function t(language: Language, key: TranslationKey): string {
   return translations[language]?.[key] ?? key;
+}
+
+/** @internal — exposed for key-parity tests only. */
+export function _getTranslationKeys(locale: Language): string[] {
+  return Object.keys(translations[locale]);
+}
+
+/** Format a date value using the active locale. Gregorian calendar only. */
+export function formatDate(value: string | Date, locale: Language): string {
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (isNaN(d.getTime())) return String(value);
+  return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-SA' : 'en-SA', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    calendar: 'gregory',
+  }).format(d);
+}
+
+/** Format a SAR (or other) currency amount using the active locale. */
+export function formatCurrency(amount: number | string, locale: Language, currency = 'SAR'): string {
+  const n = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(n)) return String(amount);
+  return new Intl.NumberFormat(locale === 'ar' ? 'ar-SA' : 'en-SA', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n);
 }

@@ -46,7 +46,7 @@ export function CancelDebtDialog({ debt, language, onCancelled, onClose }: Props
       if (status === 409) {
         setError(tr('cancel_debt_state_changed'));
       } else {
-        setError(language === 'ar' ? 'حدث خطأ، حاول مرة أخرى' : 'Something went wrong, please try again.');
+        setError(tr('errorGeneric'));
       }
       setSubmitting(false);
     }

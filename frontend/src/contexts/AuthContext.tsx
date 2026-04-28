@@ -8,6 +8,9 @@ import {
   signOut as authSignOut,
   getCurrentUser,
 } from '../lib/auth';
+import { loadInitialLocale } from '../lib/localePersistence';
+import type { Language } from '../lib/types';
+import { apiRequest } from '../lib/api';
 
 interface AuthState {
   user: AuthUser | null;
@@ -19,6 +22,8 @@ interface AuthContextValue extends AuthState {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (data: SignUpData) => Promise<{ needsVerification: boolean }>;
   signOut: () => Promise<void>;
+  /** Locale synced from the authenticated profile — undefined while loading. */
+  profileLocale: Language | undefined;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -28,12 +33,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: null,
     isLoading: true,
   });
+  const [profileLocale, setProfileLocale] = useState<Language | undefined>(undefined);
 
   // Listen for Supabase auth state changes
   useEffect(() => {
     // Check initial session
     getCurrentUser().then((user) => {
       setState({ user, isLoading: false });
+      if (user) {
+        apiRequest<{ preferred_language: string }>('/profiles/me').then((profile) => {
+          const locale = loadInitialLocale(profile.preferred_language);
+          setProfileLocale(locale);
+          localStorage.setItem('thabetha.locale', locale);
+        }).catch(() => {});
+      }
     });
 
     // Subscribe to auth changes
@@ -84,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signUp,
         signOut,
+        profileLocale,
       }}
     >
       {children}

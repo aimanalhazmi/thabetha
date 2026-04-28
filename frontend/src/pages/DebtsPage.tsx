@@ -178,7 +178,6 @@ export function DebtsPage({ language }: Props) {
         setDebtorSource('qr-expired');
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function load() {
@@ -335,7 +334,7 @@ export function DebtsPage({ language }: Props) {
     if (editForm.requested_description.trim()) body.requested_description = editForm.requested_description.trim();
     await runAction(
       () => apiRequest(`/debts/${debtId}/edit-request`, { method: 'POST', body: JSON.stringify(body) }),
-      language === 'ar' ? 'تم إرسال طلب التعديل' : 'Edit request sent',
+      tr('toastEditRequestSent'),
     );
     setEditingDebtId(null);
     clearDebtorThread(debtId);
@@ -344,7 +343,7 @@ export function DebtsPage({ language }: Props) {
   async function debtorAcceptDebt(debtId: string) {
     await runAction(
       () => apiRequest(`/debts/${debtId}/accept`, { method: 'POST' }),
-      language === 'ar' ? 'تم قبول الدين' : 'Debt accepted',
+      tr('toastDebtAccepted'),
     );
     clearDebtorThread(debtId);
   }
@@ -364,7 +363,7 @@ export function DebtsPage({ language }: Props) {
     if (draft.description.trim() && draft.description.trim() !== debt.description) body.description = draft.description.trim();
     await runAction(
       () => apiRequest(`/debts/${debtId}/edit-request/approve`, { method: 'POST', body: JSON.stringify(body) }),
-      language === 'ar' ? 'تمت الموافقة على التعديل' : 'Edit approved',
+      tr('toastEditApproved'),
     );
     clearDecisionState(debtId);
   }
@@ -372,10 +371,10 @@ export function DebtsPage({ language }: Props) {
   async function rejectEditRequest(debtId: string) {
     const draft = creditorDrafts[debtId];
     const reply = draft?.message.trim();
-    const body = JSON.stringify({ message: reply || (language === 'ar' ? 'الشروط الأصلية سارية' : 'Original terms stand') });
+    const body = JSON.stringify({ message: reply || tr('originalTermsStand') });
     await runAction(
       () => apiRequest(`/debts/${debtId}/edit-request/reject`, { method: 'POST', body }),
-      language === 'ar' ? 'تم رفض التعديل' : 'Edit rejected',
+      tr('toastEditRejected'),
     );
     clearDecisionState(debtId);
   }
@@ -455,7 +454,7 @@ export function DebtsPage({ language }: Props) {
         setMessage(tr('receiptUploadFailed'));
       } else {
         setReceiptItems([]);
-        setMessage(language === 'ar' ? 'تم إنشاء الدين' : 'Debt created');
+        setMessage(tr('toastDebtCreated'));
       }
       // T013: strip qr_token from URL after success (client-side single-use)
       if (qrToken) {
@@ -482,7 +481,7 @@ export function DebtsPage({ language }: Props) {
         ...prev,
         [debtId]: (prev[debtId] ?? []).filter((candidate) => candidate.id !== item.id),
       }));
-      setMessage(language === 'ar' ? 'تم رفع الإيصال' : 'Receipt uploaded');
+      setMessage(tr('toastReceiptUploaded'));
       await loadAttachmentsForDebt(debtId);
     } catch (err) {
       const error = err instanceof Error ? err.message : tr('receiptUploadFailed');
@@ -565,7 +564,7 @@ export function DebtsPage({ language }: Props) {
               <p style={{ margin: 0 }}>{tr('qrExpiredAskRefresh')}</p>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                 <button type="button" className="link-button" style={{ fontSize: '0.8rem' }} onClick={() => navigate('/qr')}>
-                  {language === 'ar' ? 'مسح من جديد' : 'Rescan'}
+                  {tr('rescan')}
                 </button>
                 <button type="button" className="link-button" style={{ fontSize: '0.8rem' }} onClick={clearDebtor}>
                   {tr('clearDebtor')}
@@ -582,7 +581,7 @@ export function DebtsPage({ language }: Props) {
           )}
           {/* Hide debtor_id field when QR-resolved (it's set internally) */}
           {debtorSource !== 'qr-resolved' && (
-            <Input label={tr('debtorId')} value={debtForm.debtor_id} onChange={(v) => setDebtForm({ ...debtForm, debtor_id: v })} placeholder={language === 'ar' ? 'معرف المدين (اختياري)' : 'Debtor user ID (optional)'} disabled={debtorSource === 'qr-resolving'} />
+            <Input label={tr('debtorId')} value={debtForm.debtor_id} onChange={(v) => setDebtForm({ ...debtForm, debtor_id: v })} placeholder={tr('debtorIdPlaceholder')} disabled={debtorSource === 'qr-resolving'} />
           )}
           <Input label={tr('amount')} value={debtForm.amount} onChange={(v) => setDebtForm({ ...debtForm, amount: v })} disabled={debtorSource === 'qr-resolving'} />
           <Input label={tr('currency')} value={debtForm.currency} onChange={(v) => setDebtForm({ ...debtForm, currency: v })} disabled={debtorSource === 'qr-resolving'} />
@@ -607,7 +606,7 @@ export function DebtsPage({ language }: Props) {
               label={tr('addReminder')}
               value={reminderCustom}
               onChange={setReminderCustom}
-              placeholder="YYYY-MM-DD, YYYY-MM-DD"
+              placeholder={tr('reminderDatePlaceholder')}
             />
             {reminderDates.length > 0 && (
               <div className="reminder-list">{reminderDates.join(', ')}</div>
@@ -677,12 +676,12 @@ export function DebtsPage({ language }: Props) {
                   </button>
                 )}
                 {!isCreditor && (debt.status === 'active' || debt.status === 'overdue') && (
-                  <button disabled={actionInFlight} onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/mark-paid`, { method: 'POST', body: JSON.stringify({ note: 'Paid' }) }), language === 'ar' ? 'تم طلب تأكيد الدفع' : 'Payment requested')}>
+                  <button disabled={actionInFlight} onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/mark-paid`, { method: 'POST', body: JSON.stringify({ note: 'Paid' }) }), tr('toastPaymentRequested'))}>
                     <WalletCards size={16} /><span>{actionInFlight ? '…' : tr('markPaid')}</span>
                   </button>
                 )}
                 {isCreditor && debt.status === 'payment_pending_confirmation' && (
-                  <button disabled={actionInFlight} onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/confirm-payment`, { method: 'POST' }), language === 'ar' ? 'تم تأكيد الدفع' : 'Payment confirmed')}>
+                  <button disabled={actionInFlight} onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/confirm-payment`, { method: 'POST' }), tr('toastPaymentConfirmed'))}>
                     <Check size={16} /><span>{actionInFlight ? '…' : tr('confirmPayment')}</span>
                   </button>
                 )}
