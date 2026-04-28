@@ -56,7 +56,7 @@ export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel
             </div>
             <div className="brand-text">
               <strong>{tr('appName')}</strong>
-              <span>Debt Tracker</span>
+              <span>{tr('debtTrackerSubtitle')}</span>
             </div>
           </div>
         </div>
@@ -75,7 +75,7 @@ export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel
         )}
 
         <nav className="nav-section">
-          <div className="nav-label">{language === 'ar' ? 'القائمة' : 'Menu'}</div>
+          <div className="nav-label">{tr('navMenu')}</div>
           <div className="nav-list">
             {navItems
               .filter((item) => !item.roles || (user && item.roles.includes(user.account_type)))
@@ -98,7 +98,7 @@ export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel
         <div className="sidebar-footer">
           <button className="nav-item" onClick={onToggleLanguage}>
             <Languages size={18} />
-            <span>{language === 'ar' ? 'English' : 'العربية'}</span>
+            <span>{tr('switchLanguage')}</span>
           </button>
           <button className="nav-item signout-btn" onClick={() => void handleSignOut()}>
             <LogOut size={18} />

@@ -33,6 +33,8 @@ export interface Profile {
   commitment_score: number;
   ai_enabled: boolean;
   whatsapp_enabled: boolean;
+  /** User's preferred locale — persisted across devices for signed-in users. Default 'ar'. */
+  preferred_language: Language;
 }
 
 export interface QRToken {

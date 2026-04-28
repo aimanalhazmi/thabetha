@@ -20,7 +20,7 @@ export function LandingPage({ language, onToggleLanguage }: Props) {
         </div>
         <button className="ghost-button" onClick={onToggleLanguage}>
           <Languages size={16} />
-          <span>{language === 'ar' ? 'English' : 'العربية'}</span>
+          <span>{tr('switchLanguage')}</span>
         </button>
       </header>
 

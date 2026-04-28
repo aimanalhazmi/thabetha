@@ -157,3 +157,9 @@ Tests use `FastAPI.TestClient` via the `client` fixture. `conftest.py` forces `R
 | `SEED_DEMO_DATA` | In-memory only — seeds demo users / debts at boot. |
 | `OPENAI_API_KEY` | Optional; AI voice / chat stubs. |
 | `WHATSAPP_PROVIDER` | `mock` (default). Real provider config is post-MVP. |
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+at `specs/004-bilingual-coverage-audit/plan.md`.
+<!-- SPECKIT END -->

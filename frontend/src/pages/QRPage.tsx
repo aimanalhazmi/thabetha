@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { Input, Panel } from "../components/Layout";
 import { useAuth } from "../contexts/AuthContext";
 import { apiRequest } from "../lib/api";
+import { humanizeError } from "../lib/errors";
 import { t } from "../lib/i18n";
 import type { Language, Profile, QRToken } from "../lib/types";
 
@@ -33,7 +34,7 @@ export function QRPage({ language }: Props) {
       setQr(updated);
       setMessage("QR rotated");
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Failed");
+      setMessage(humanizeError(err, language, 'generic'));
     }
   }
 
@@ -48,7 +49,7 @@ export function QRPage({ language }: Props) {
       setScanned(profile);
       setResolvedToken(token);
     } catch (err) {
-      setScanError(err instanceof Error ? err.message : "Lookup failed");
+      setScanError(humanizeError(err, language, 'qrResolve'));
     }
   }
 
@@ -82,7 +83,7 @@ export function QRPage({ language }: Props) {
             </div>
           </div>
         ) : (
-          <p className="empty">{tr("noData")}</p>
+          <p className="empty">{tr("loading")}</p>
         )}
       </Panel>
 

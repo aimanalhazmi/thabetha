@@ -2,6 +2,7 @@ import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Panel } from "../components/Layout";
 import { apiRequest } from "../lib/api";
+import { humanizeError } from "../lib/errors";
 import { t } from "../lib/i18n";
 import type { Language, NotificationItem } from "../lib/types";
 
@@ -11,20 +12,27 @@ export function NotificationsPage({ language }: Props) {
   const tr = (key: Parameters<typeof t>[1]) => t(language, key);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [message, setMessage] = useState("");
+  const [markingRead, setMarkingRead] = useState(false);
 
   async function load() {
-    try { setNotifications(await apiRequest<NotificationItem[]>("/notifications")); } catch { /* ignored */ }
+    try {
+      setNotifications(await apiRequest<NotificationItem[]>("/notifications"));
+    } catch (err) {
+      setMessage(humanizeError(err, language, 'loadNotifications'));
+    }
   }
 
   useEffect(() => { void load(); }, []);
 
   async function markRead(id: string) {
+    setMarkingRead(true);
     try {
       await apiRequest(`/notifications/${id}/read`, { method: "POST" });
-      setMessage("Notification read");
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Failed");
+      setMessage(humanizeError(err, language, 'transition'));
+    } finally {
+      setMarkingRead(false);
     }
   }
 
@@ -38,12 +46,12 @@ export function NotificationsPage({ language }: Props) {
               <strong>{item.title}</strong>
               <span>{item.body}</span>
             </div>
-            <button onClick={() => void markRead(item.id)}>
-              <Check size={16} /><span>{tr("save")}</span>
+            <button disabled={markingRead} onClick={() => void markRead(item.id)}>
+              <Check size={16} /><span>{markingRead ? '…' : tr("save")}</span>
             </button>
           </article>
         ))}
-        {notifications.length === 0 && <p className="empty">{tr("noData")}</p>}
+        {notifications.length === 0 && <p className="empty">{tr("noNotificationsYet")}</p>}
       </div>
     </Panel>
   );

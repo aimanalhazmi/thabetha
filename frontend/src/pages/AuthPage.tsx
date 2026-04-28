@@ -92,9 +92,7 @@ export function AuthPage({ language, onToggleLanguage }: Props) {
             <h2>{tr('emailVerification')}</h2>
             <p>{tr('emailVerificationDesc')}</p>
             <p style={{ fontSize: '0.8rem', color: '#64748b' }}>
-              {language === 'ar'
-                ? `📧 تحقق من Inbucket على المنفذ 55324`
-                : `📧 Check Inbucket at localhost:55324`}
+              {tr('inbucketDevHint')}
             </p>
             <button
               className="primary-button"
@@ -184,7 +182,7 @@ export function AuthPage({ language, onToggleLanguage }: Props) {
                 </label>
                 <label className="field">
                   <span>{tr('phone')}</span>
-                  <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+966500000000" />
+                  <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={tr('phonePlaceholder')} />
                 </label>
                 <label className="field">
                   <span>{tr('email')}</span>
@@ -198,11 +196,11 @@ export function AuthPage({ language, onToggleLanguage }: Props) {
                 {accountType === 'creditor' && (
                   <>
                     <label className="field">
-                      <span>{tr('taxId')} ({language === 'ar' ? 'اختياري' : 'optional'})</span>
+                      <span>{tr('taxId')} ({tr('optional')})</span>
                       <input type="text" value={taxId} onChange={(e) => setTaxId(e.target.value)} />
                     </label>
                     <label className="field">
-                      <span>{tr('commercialRegistration')} ({language === 'ar' ? 'اختياري' : 'optional'})</span>
+                      <span>{tr('commercialRegistration')} ({tr('optional')})</span>
                       <input type="text" value={commercialReg} onChange={(e) => setCommercialReg(e.target.value)} />
                     </label>
                   </>
@@ -231,7 +229,7 @@ export function AuthPage({ language, onToggleLanguage }: Props) {
         )}
 
         <button className="ghost-button lang-toggle" onClick={onToggleLanguage}>
-          {language === 'ar' ? 'English' : 'العربية'}
+          {tr('switchLanguage')}
         </button>
       </div>
     </div>

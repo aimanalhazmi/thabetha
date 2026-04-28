@@ -17,10 +17,10 @@ export function SettingsPage({ language, onToggleLanguage }: Props) {
     <section className="split">
       <Panel title={tr('settings')}>
         <div className="settings-row">
-          <span>{language === 'ar' ? 'اللغة' : 'Language'}</span>
+          <span>{tr('languageLabel')}</span>
           <button className="ghost-button" onClick={onToggleLanguage}>
             <Languages size={16} />
-            <span>{language === 'ar' ? 'English' : 'العربية'}</span>
+            <span>{tr('switchLanguage')}</span>
           </button>
         </div>
         <div className="settings-row">

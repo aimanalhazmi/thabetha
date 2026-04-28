@@ -233,7 +233,7 @@ Block 1 (Phases 1–5) closes the MVP. Block 2 (Phases 6–10) is post-MVP harde
 
 ### Branch & PR
 
-- Branch: `005-bilingual-coverage-audit`
+- Branch: `004-bilingual-coverage-audit`
 - Updates: `project-status.md` "Polished bilingual UI" → ✅.
 
 ---

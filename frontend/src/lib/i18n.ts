@@ -30,6 +30,12 @@ export type TranslationKey =
   | 'dueDate'
   | 'create'
   | 'cancel'
+  | 'cancel_debt'
+  | 'cancel_debt_confirm_title'
+  | 'cancel_debt_confirm_body'
+  | 'cancel_message_optional'
+  | 'cancelled_successfully'
+  | 'cancel_debt_state_changed'
   | 'active'
   | 'paid'
   | 'accept'
@@ -116,7 +122,14 @@ export type TranslationKey =
   | 'recentDebts'
   | 'allStatuses'
   | 'noDebtsYet'
+  | 'noNotificationsYet'
   | 'loading'
+  | 'errorGeneric'
+  | 'errorLoadDebts'
+  | 'errorLoadDashboard'
+  | 'errorLoadNotifications'
+  | 'errorTransitionStateChanged'
+  | 'errorTransitionForbidden'
   | 'selectAccountType'
   | 'selectAccountTypeDesc'
   | 'shopOwner'
@@ -167,7 +180,26 @@ export type TranslationKey =
   | 'cannotBillSelf'
   | 'clearDebtor'
   | 'scannedDebtorLabel'
-  | 'createDebtForPerson';
+  | 'createDebtForPerson'
+  | 'languageLabel'
+  | 'switchLanguage'
+  | 'navMenu'
+  | 'debtTrackerSubtitle'
+  | 'toastEditRequestSent'
+  | 'toastDebtAccepted'
+  | 'toastEditApproved'
+  | 'originalTermsStand'
+  | 'toastEditRejected'
+  | 'toastDebtCreated'
+  | 'toastReceiptUploaded'
+  | 'rescan'
+  | 'debtorIdPlaceholder'
+  | 'toastPaymentRequested'
+  | 'toastPaymentConfirmed'
+  | 'toastProfileSaved'
+  | 'inbucketDevHint'
+  | 'phonePlaceholder'
+  | 'reminderDatePlaceholder';
 
 type Translations = Record<TranslationKey, string>;
 
@@ -200,6 +232,12 @@ const ar: Translations = {
   dueDate: 'تاريخ الاستحقاق',
   create: 'إنشاء',
   cancel: 'إلغاء',
+  cancel_debt: 'إلغاء الدين',
+  cancel_debt_confirm_title: 'إلغاء هذا الدين؟',
+  cancel_debt_confirm_body: 'سيتم إخطار المَدين. لا يمكن التراجع عن هذا الإجراء.',
+  cancel_message_optional: 'أضف سببًا اختياريًا (200 حرفًا كحد أقصى)',
+  cancelled_successfully: 'تم إلغاء الدين',
+  cancel_debt_state_changed: 'لم يعد بالإمكان إلغاء هذا الدين — تغيّرت حالته.',
   active: 'نشط',
   paid: 'مدفوع',
   accept: 'قبول',
@@ -286,6 +324,13 @@ const ar: Translations = {
   recentDebts: 'الديون الأخيرة',
   allStatuses: 'جميع الحالات',
   noDebtsYet: 'لا توجد ديون حتى الآن',
+  noNotificationsYet: 'لا توجد إشعارات حتى الآن',
+  errorGeneric: 'حدث خطأ، حاول مرة أخرى.',
+  errorLoadDebts: 'تعذّر تحميل الديون. حاول مرة أخرى.',
+  errorLoadDashboard: 'تعذّر تحميل لوحة التحكم. حاول مرة أخرى.',
+  errorLoadNotifications: 'تعذّر تحميل الإشعارات. حاول مرة أخرى.',
+  errorTransitionStateChanged: 'تغيّرت حالة هذا الدين — يرجى التحديث.',
+  errorTransitionForbidden: 'غير مسموح لك بتنفيذ هذا الإجراء.',
   loading: 'جاري التحميل...',
   selectAccountType: 'اختر نوع الحساب',
   selectAccountTypeDesc: 'كيف ستستخدم ثبتها؟',
@@ -338,6 +383,25 @@ const ar: Translations = {
   clearDebtor: 'تغيير المدين',
   scannedDebtorLabel: 'تم التحقق عبر QR',
   createDebtForPerson: 'إنشاء دين لهذا الشخص',
+  languageLabel: 'اللغة',
+  switchLanguage: 'English',
+  navMenu: 'القائمة',
+  debtTrackerSubtitle: 'متتبع الديون',
+  toastEditRequestSent: 'تم إرسال طلب التعديل',
+  toastDebtAccepted: 'تم قبول الدين',
+  toastEditApproved: 'تمت الموافقة على التعديل',
+  originalTermsStand: 'الشروط الأصلية سارية',
+  toastEditRejected: 'تم رفض التعديل',
+  toastDebtCreated: 'تم إنشاء الدين',
+  toastReceiptUploaded: 'تم رفع الإيصال',
+  rescan: 'مسح من جديد',
+  debtorIdPlaceholder: 'معرف المدين (اختياري)',
+  toastPaymentRequested: 'تم طلب تأكيد الدفع',
+  toastPaymentConfirmed: 'تم تأكيد الدفع',
+  toastProfileSaved: 'تم حفظ الملف الشخصي',
+  inbucketDevHint: '📧 تحقق من Inbucket على المنفذ 55324',
+  phonePlaceholder: '+966XXXXXXXXX',
+  reminderDatePlaceholder: 'YYYY-MM-DD, YYYY-MM-DD',
 };
 
 const en: Translations = {
@@ -369,6 +433,12 @@ const en: Translations = {
   dueDate: 'Due Date',
   create: 'Create',
   cancel: 'Cancel',
+  cancel_debt: 'Cancel debt',
+  cancel_debt_confirm_title: 'Cancel this debt?',
+  cancel_debt_confirm_body: 'The debtor will be notified. This cannot be undone.',
+  cancel_message_optional: 'Add an optional reason (max 200 characters)',
+  cancelled_successfully: 'Debt cancelled',
+  cancel_debt_state_changed: 'This debt can no longer be cancelled — its status changed.',
   active: 'Active',
   paid: 'Paid',
   accept: 'Accept',
@@ -455,6 +525,13 @@ const en: Translations = {
   recentDebts: 'Recent Debts',
   allStatuses: 'All Statuses',
   noDebtsYet: 'No debts yet',
+  noNotificationsYet: 'No notifications yet',
+  errorGeneric: 'Something went wrong, please try again.',
+  errorLoadDebts: "Couldn't load your debts. Please retry.",
+  errorLoadDashboard: "Couldn't load your dashboard. Please retry.",
+  errorLoadNotifications: "Couldn't load your notifications. Please retry.",
+  errorTransitionStateChanged: "This debt's status changed — please refresh.",
+  errorTransitionForbidden: "You're not allowed to perform this action.",
   loading: 'Loading...',
   selectAccountType: 'Select Account Type',
   selectAccountTypeDesc: 'How will you use Thabetha?',
@@ -507,6 +584,25 @@ const en: Translations = {
   clearDebtor: 'Change debtor',
   scannedDebtorLabel: 'Verified via QR',
   createDebtForPerson: 'Create debt for this person',
+  languageLabel: 'Language',
+  switchLanguage: 'العربية',
+  navMenu: 'Menu',
+  debtTrackerSubtitle: 'Debt Tracker',
+  toastEditRequestSent: 'Edit request sent',
+  toastDebtAccepted: 'Debt accepted',
+  toastEditApproved: 'Edit approved',
+  originalTermsStand: 'Original terms stand',
+  toastEditRejected: 'Edit rejected',
+  toastDebtCreated: 'Debt created',
+  toastReceiptUploaded: 'Receipt uploaded',
+  rescan: 'Rescan',
+  debtorIdPlaceholder: 'Debtor user ID (optional)',
+  toastPaymentRequested: 'Payment requested',
+  toastPaymentConfirmed: 'Payment confirmed',
+  toastProfileSaved: 'Profile saved',
+  inbucketDevHint: '📧 Check Inbucket at localhost:55324',
+  phonePlaceholder: '+966500000000',
+  reminderDatePlaceholder: 'YYYY-MM-DD, YYYY-MM-DD',
 };
 
 const translations: Record<Language, Translations> = { ar, en };
@@ -514,4 +610,33 @@ const translations: Record<Language, Translations> = { ar, en };
 /** Return the translated string for the given language and key. */
 export function t(language: Language, key: TranslationKey): string {
   return translations[language]?.[key] ?? key;
+}
+
+/** @internal — exposed for key-parity tests only. */
+export function _getTranslationKeys(locale: Language): string[] {
+  return Object.keys(translations[locale]);
+}
+
+/** Format a date value using the active locale. Gregorian calendar only. */
+export function formatDate(value: string | Date, locale: Language): string {
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (isNaN(d.getTime())) return String(value);
+  return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-SA' : 'en-SA', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    calendar: 'gregory',
+  }).format(d);
+}
+
+/** Format a SAR (or other) currency amount using the active locale. */
+export function formatCurrency(amount: number | string, locale: Language, currency = 'SAR'): string {
+  const n = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(n)) return String(amount);
+  return new Intl.NumberFormat(locale === 'ar' ? 'ar-SA' : 'en-SA', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n);
 }

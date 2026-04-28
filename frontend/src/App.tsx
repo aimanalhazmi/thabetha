@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { Layout } from "./components/Layout";
@@ -15,6 +15,7 @@ import { LandingPage } from "./pages/LandingPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import type { TranslationKey } from "./lib/i18n";
 import type { Language } from "./lib/types";
+import { loadInitialLocale, persistLocale } from "./lib/localePersistence";
 
 const routeLabels: Record<string, TranslationKey> = {
   "/dashboard": "dashboard",
@@ -68,24 +69,42 @@ function RootRoute({ language, onToggleLanguage }: ShellProps) {
   return <LandingPage language={language} onToggleLanguage={onToggleLanguage} />;
 }
 
-export default function App() {
-  const [language, setLanguage] = useState<Language>("ar");
+function AppContent() {
+  const { isAuthenticated, profileLocale } = useAuth();
+  const [language, setLanguage] = useState<Language>(() => loadInitialLocale());
 
-  const toggleLanguage = () => setLanguage((l) => (l === "ar" ? "en" : "ar"));
+  // When the user signs in and the profile locale loads, sync the app state.
+  useLayoutEffect(() => {
+    if (profileLocale) setLanguage(profileLocale);
+  }, [profileLocale]);
 
-  useEffect(() => {
+  const toggleLanguage = () => {
+    setLanguage((l) => {
+      const next = l === "ar" ? "en" : "ar";
+      void persistLocale(next, isAuthenticated);
+      return next;
+    });
+  };
+
+  useLayoutEffect(() => {
     document.documentElement.lang = language;
     document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
   }, [language]);
 
   return (
+    <Routes>
+      <Route path="/" element={<RootRoute language={language} onToggleLanguage={toggleLanguage} />} />
+      <Route path="/auth" element={<AuthPage language={language} onToggleLanguage={toggleLanguage} />} />
+      <Route path="/*" element={<AppShell language={language} onToggleLanguage={toggleLanguage} />} />
+    </Routes>
+  );
+}
+
+export default function App() {
+  return (
     <AuthProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<RootRoute language={language} onToggleLanguage={toggleLanguage} />} />
-          <Route path="/auth" element={<AuthPage language={language} onToggleLanguage={toggleLanguage} />} />
-          <Route path="/*" element={<AppShell language={language} onToggleLanguage={toggleLanguage} />} />
-        </Routes>
+        <AppContent />
       </BrowserRouter>
     </AuthProvider>
   );
