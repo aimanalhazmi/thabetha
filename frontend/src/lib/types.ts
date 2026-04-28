@@ -154,6 +154,7 @@ export interface NotificationItem {
   whatsapp_delivered?: boolean | null;
   whatsapp_failed_reason?: WhatsAppFailedReason | null;
   whatsapp_status?: WhatsAppDeliveryStatus;
+  whatsapp_status_received_at?: string | null;
 }
 
 export interface Group {

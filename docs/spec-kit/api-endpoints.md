@@ -74,9 +74,18 @@ Both also drive the lazy sweeper for overdue / missed-reminder events.
 
 | Method | Path | Body | Response | Notes |
 |---|---|---|---|---|
-| GET | `/notifications` | — | `list[NotificationOut]` | Caller-scoped. |
-| POST | `/notifications/{id}/read` | — | `NotificationOut` | Idempotent. |
+| GET | `/notifications` | — | `list[NotificationOut\|NotificationOutCreditor]` | Caller-scoped. Creditor/business callers receive `NotificationOutCreditor` (includes WhatsApp delivery columns). Debtors receive `NotificationOut` (no delivery columns — Q1). |
+| POST | `/notifications/{id}/read` | — | `NotificationOut\|NotificationOutCreditor` | Idempotent; same projection rules as GET. |
 | PATCH | `/notifications/preferences` | `NotificationPreferenceIn` | `NotificationPreferenceOut` | Per-creditor WhatsApp opt-out (caller is the debtor; `merchant_id` is the creditor). |
+
+## Webhooks (WhatsApp delivery callbacks)
+
+No Supabase JWT — authenticated via HMAC SHA-256 (`X-Hub-Signature-256` header) keyed by `WHATSAPP_WEBHOOK_SECRET`. Meta calls these directly.
+
+| Method | Path | Body | Response | Notes |
+|---|---|---|---|---|
+| POST | `/webhooks/whatsapp` | Meta delivery-status JSON | `WebhookReceiptOut` (200) | Verifies `X-Hub-Signature-256`; 403 on failure. Idempotently applies `StatusUpdate`s keyed on `whatsapp_provider_ref`. Returns `{"received": true, "applied": N}`. |
+| GET | `/webhooks/whatsapp` | — | challenge (plain text, 200) | Meta subscription handshake. Checks `hub.verify_token == WHATSAPP_VERIFY_TOKEN`; else 403. |
 
 ## Groups (post-MVP — surfaced behind feature flag)
 

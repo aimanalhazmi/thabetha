@@ -51,15 +51,15 @@ Debtor marks paid → `payment_pending_confirmation`. Creditor confirms receipt 
 - Tables: `debts`, `payment_confirmations`, `commitment_score_events`, `debt_events`.
 - Frontend: debt details page + creditor confirmation page.
 
-## UC6 — Notifications · debtor · 🟡
+## UC6 — Notifications · debtor · ✅
 
-In-app notifications on every transition. Per-creditor WhatsApp opt-out (debtor-controlled).
+In-app notifications on every transition. Per-creditor WhatsApp opt-out (debtor-controlled). Real WhatsApp Business API delivery (branch `006-whatsapp-business-integration`).
 
-- Endpoints: `GET /notifications`, `POST /notifications/{id}/read`, `PATCH /notifications/preferences`.
-- Tables: `notifications`, `merchant_notification_preferences`.
+- Endpoints: `GET /notifications`, `POST /notifications/{id}/read`, `PATCH /notifications/preferences`, `POST /webhooks/whatsapp`, `GET /webhooks/whatsapp`.
+- Tables: `notifications` (+ migration 009 delivery columns), `merchant_notification_preferences`.
 - Enum: `NotificationType` covers `debt_created`, `debt_confirmed`, `debt_edit_{requested,approved,rejected}`, `debt_cancelled`, `due_soon`, `overdue`, `payment_requested`, `payment_confirmed`.
-- Frontend: `frontend/src/pages/NotificationsPage.tsx`.
-- **Gap**: WhatsApp provider is mocked; `whatsapp_attempted` flag exists but no real send. Mock-WhatsApp-preview pane (Could-Have) not built.
+- Frontend: `frontend/src/pages/NotificationsPage.tsx` + `WhatsAppDeliveryBadge.tsx` (creditor-only delivery badge).
+- **Shipped (US1+US2+US3)**: real WhatsApp Cloud API provider behind `WhatsAppProvider` ABC; opt-out enforcement (global + per-creditor); per-message delivery state (`attempted_unknown / delivered / failed`) visible to creditor; HMAC-verified inbound webhook; idempotent status updates; `whatsapp_status_received_at` tracked.
 
 ## UC7 — Commitment indicator · debtor · ✅
 

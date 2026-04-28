@@ -11,7 +11,7 @@ Full product context: [`docs/product-requirements.md`](./docs/product-requiremen
 ## Core product rules
 
 - **Bilateral confirmation is the differentiator.** A debt is binding only after the debtor accepts. A debt is `paid` only after the creditor confirms receipt.
-- **Use the canonical 8-state debt lifecycle.** See [`docs/debt-lifecycle.md`](./docs/debt-lifecycle.md). The string identifiers in code, DB, and UI must match exactly.
+- **Use the canonical 7-state debt lifecycle.** See [`docs/debt-lifecycle.md`](./docs/debt-lifecycle.md). The string identifiers in code, DB, and UI must match exactly.
 - **Use the term "commitment indicator / مؤشر الالتزام"**, never "credit score" / "trust score". The indicator is internal to Thabetha and visible only in bilateral context.
 - **Per-user data isolation.** A user only ever sees debts where they are creditor, debtor, or accepted group member. Enforced both in API handlers and by Postgres RLS.
 - **Arabic-first.** New strings must land in `frontend/src/lib/i18n.ts` for both languages.
@@ -135,7 +135,7 @@ Tests use `FastAPI.TestClient` via the `client` fixture. `conftest.py` forces `R
 - [`docs/product-requirements.md`](./docs/product-requirements.md) — problem, solution, actors, features.
 - [`docs/product-requirements-ar.md`](./docs/product-requirements-ar.md) — Arabic mirror.
 - [`docs/pages-and-use-cases.md`](./docs/pages-and-use-cases.md) — actor → page → UC mapping.
-- [`docs/debt-lifecycle.md`](./docs/debt-lifecycle.md) — canonical 8-state machine.
+- [`docs/debt-lifecycle.md`](./docs/debt-lifecycle.md) — canonical 7-state machine.
 - [`docs/mvp-scope.md`](./docs/mvp-scope.md) — MoSCoW.
 - [`docs/roadmap.md`](./docs/roadmap.md) — hackathon, post-MVP, future.
 - [`docs/user-flows.md`](./docs/user-flows.md) — creditor / debtor / shared flows.

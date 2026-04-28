@@ -32,6 +32,7 @@ def _project_notification(
     attempted = bool(state.get("attempted", notification.whatsapp_attempted))
     delivered = state.get("delivered")
     failed_reason = state.get("failed_reason")
+    status_received_at = state.get("status_received_at")
     return NotificationOutCreditor(
         **notification.model_dump(),
         whatsapp_delivered=delivered if isinstance(delivered, bool) else None,
@@ -41,6 +42,7 @@ def _project_notification(
             whatsapp_delivered=delivered if isinstance(delivered, bool) else None,
             whatsapp_failed_reason=failed_reason if isinstance(failed_reason, str) else None,
         ),
+        whatsapp_status_received_at=status_received_at if hasattr(status_received_at, "isoformat") else None,
     )
 
 

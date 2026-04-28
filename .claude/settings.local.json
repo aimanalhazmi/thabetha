@@ -20,7 +20,9 @@
       "Bash(npx vitest *)",
       "Bash(git commit *)",
       "Bash(git fetch *)",
-      "PowerShell(cd D:\\\\Salamhackthon\\\\thabetha; $env:GIT_BRANCH_NAME = \"006-whatsapp-business-integration\"; .\\\\.specify\\\\extensions\\\\git\\\\scripts\\\\powershell\\\\create-new-feature.ps1 -Json -ShortName \"whatsapp-business-integration\" \"Real WhatsApp Business API integration\")"
+      "PowerShell(cd D:\\\\Salamhackthon\\\\thabetha; $env:GIT_BRANCH_NAME = \"006-whatsapp-business-integration\"; .\\\\.specify\\\\extensions\\\\git\\\\scripts\\\\powershell\\\\create-new-feature.ps1 -Json -ShortName \"whatsapp-business-integration\" \"Real WhatsApp Business API integration\")",
+      "Bash(pwsh .specify/scripts/powershell/check-prerequisites.ps1 -Json -RequireTasks -IncludeTasks)",
+      "Bash(python3 *)"
     ]
   }
 }

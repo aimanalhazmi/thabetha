@@ -128,9 +128,28 @@ def build_default_template_params(
     }
 
 
+def verify_whatsapp_signature(raw_body: bytes, signature_header: str | None) -> bool:
+    """Verify a Meta webhook signature.
+
+    Delegates to the active provider so the webhook router stays decoupled from
+    any specific implementation. Returns False on any error or missing header.
+    Placed here (services layer) rather than in core.security to avoid an
+    illegal upward dependency from core/ into services/.
+    """
+    if not signature_header:
+        return False
+    try:
+        from app.services.whatsapp import get_provider
+
+        return get_provider().verify_webhook_signature(raw_body, signature_header)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 __all__ = [
     "DispatchContext",
     "dispatch_notification",
     "build_default_template_params",
+    "verify_whatsapp_signature",
     "NotificationType",
 ]

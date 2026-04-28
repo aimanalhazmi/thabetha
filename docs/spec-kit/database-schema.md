@@ -13,6 +13,7 @@ State of the Supabase Postgres database after all migrations (`supabase/migratio
 | `005_repository_alignment.sql` | Adds `notifications`, `payment_confirmations`, `attachments`, `group_settlements`. RLS for all four. |
 | `006_lifecycle_and_reminders.sql` | Removes `rejected` from `debt_status` (rebuilds enum). Adds `debts.reminder_dates date[]` and `commitment_score_events.reminder_date` + partial unique index `commitment_score_events_missed_reminder_uniq`. |
 | `007_business_profile_rls.sql` | Adds owner-scoped policy on `business_profiles` (RLS was enabled in 001 without a policy, blocking access). |
+| `009_whatsapp_delivery.sql` | Adds five delivery-state columns to `notifications` (`whatsapp_attempted`, `whatsapp_delivered`, `whatsapp_provider_ref`, `whatsapp_failed_reason`, `whatsapp_status_received_at`) plus unique partial index on `whatsapp_provider_ref` for idempotency. RLS unchanged — handler code provides the additional column-level access restriction (creditor-only). |
 
 ## Enums
 
@@ -141,12 +142,16 @@ Standard ownership-and-membership shape. `group_members` has `(group_id, user_id
 | `notification_type` | text NOT NULL | Mirrors `NotificationType` enum |
 | `title`, `body` | text NOT NULL | |
 | `debt_id` | uuid | FK → `debts(id)` ON DELETE CASCADE |
-| `whatsapp_attempted` | boolean NOT NULL DEFAULT `true` | Mock for now |
+| `whatsapp_attempted` | boolean NOT NULL DEFAULT `false` | `true` when a provider call was made (migration 009) |
+| `whatsapp_delivered` | boolean | tristate: NULL = unknown/in-flight, true = delivered, false = failed (migration 009) |
+| `whatsapp_provider_ref` | text | Meta `messages[0].id`; webhook lookup key (migration 009) |
+| `whatsapp_failed_reason` | text | short machine-friendly failure code (migration 009) |
+| `whatsapp_status_received_at` | timestamptz | timestamp of first forward-status webhook callback (migration 009) |
 | `read_at` | timestamptz | |
 | `created_at` | timestamptz | |
 
-Index: `notifications_user_created_idx` on `(user_id, created_at desc)`.
-RLS: select + update where `auth.uid() = user_id`.
+Indexes: `notifications_user_created_idx` on `(user_id, created_at desc)`; `notifications_whatsapp_provider_ref_key` unique partial on `whatsapp_provider_ref WHERE NOT NULL` (idempotency); `notifications_whatsapp_provider_ref_idx` on `whatsapp_provider_ref`.
+RLS: select + update where `auth.uid() = user_id`. Handler code additionally restricts WhatsApp delivery columns to the sending creditor's view (`NotificationOutCreditor` vs `NotificationOut`).
 
 ### `public.payment_confirmations`
 

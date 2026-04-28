@@ -1,4 +1,11 @@
-"""T012 — provider failure must NOT roll back the underlying transition (FR-005)."""
+"""T012 — provider failure must NOT roll back the underlying transition (FR-005).
+
+Four failure modes are exercised to satisfy SC-003's injected-failure test suite:
+  1. Provider raises an exception  → failed_reason="provider_5xx"
+  2. Provider returns blocked      → failed_reason="recipient_blocked"
+  3. Provider returns error        → failed_reason="network_error"
+  4. Recipient has no phone number → failed_reason="no_phone_number" (no provider call)
+"""
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -78,3 +85,35 @@ def test_provider_blocked_outcome_persists_failed_reason(
     notif = next(n for n in repo.notifications if n.user_id == "debtor-bk")
     state = repo.get_whatsapp_state(notif.id)
     assert state["failed_reason"] == "recipient_blocked"
+
+
+def test_provider_error_outcome_persists_network_error(
+    client: TestClient, mock_whatsapp: MockWhatsAppProvider
+) -> None:
+    """Failure mode 3: provider returns error (network_error) — transition must still commit."""
+    creditor = auth_headers("creditor-ne", "Shop")
+    debtor = auth_headers("debtor-ne", "Customer")
+    client.get("/api/v1/profiles/me", headers=creditor)
+    client.get("/api/v1/profiles/me", headers=debtor)
+
+    mock_whatsapp.set_next_outcome(SendOutcome.error, "network_error")
+    resp = client.post(
+        "/api/v1/debts",
+        headers=creditor,
+        json={
+            "debtor_name": "Customer",
+            "debtor_id": "debtor-ne",
+            "amount": "7.50",
+            "currency": "SAR",
+            "description": "Net error test",
+            "due_date": str(date.today() + timedelta(days=3)),
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["status"] == "pending_confirmation"
+    repo = get_repository()
+    notif = next(n for n in repo.notifications if n.user_id == "debtor-ne")
+    state = repo.get_whatsapp_state(notif.id)
+    assert state is not None
+    assert state["attempted"] is True
+    assert state["failed_reason"] == "network_error"

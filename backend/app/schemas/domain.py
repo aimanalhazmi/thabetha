@@ -264,6 +264,12 @@ class NotificationOutCreditor(NotificationOut):
     whatsapp_delivered: bool | None = None
     whatsapp_failed_reason: str | None = None
     whatsapp_status: WhatsAppDeliveryStatus = WhatsAppDeliveryStatus.not_attempted
+    whatsapp_status_received_at: datetime | None = None
+
+
+class WebhookReceiptOut(BaseModel):
+    received: bool
+    applied: int
 
 
 class NotificationPreferenceIn(BaseModel):

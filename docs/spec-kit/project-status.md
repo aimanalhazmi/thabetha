@@ -36,11 +36,10 @@ deefc60 feat: implement debt edit request flow and commitment indicator logic
 - ~~**QR scanner pass-through on Create Debt**~~ ✅ **Shipped** (UC4 → UC2) — scanner confirm step, `/debts?qr_token=` deep link, prefilled-and-locked debtor identity, re-resolve on submit, expired/self/error handling, bilingual strings (AR+EN), backend self-billing 409 guard, integration test.
 - ~~**Cancel non-binding debt UX (creditor)**~~ ✅ **Shipped** (Phase 3) — two-tap confirmation dialog with optional message (≤ 200 chars), hidden for all non-cancellable states and for the debtor, post-cancel page stays on debt details, 8 backend tests, 6 AR+EN i18n keys.
 - ~~**End-to-end demo path**~~ ✅ **Shipped** (Phase 4) — `humanizeError` helper eliminates raw API errors from all four MVP pages, loading states on all transition buttons, translated empty-states, canonical happy-path + edit-request-branch integration tests (`commitment_score == 53`), self-serve demo script at `docs/demo-script.md`.
-- Per-creditor WhatsApp opt-out enforcement on the actual sender (currently mock provider).
+- ~~Per-creditor WhatsApp opt-out enforcement on the actual sender (currently mock provider).~~ ✅ **Shipped** (Phase 6 — branch `006-whatsapp-business-integration`)
+- ~~**Real WhatsApp Business API integration**~~ ✅ **Shipped** (Phase 6 — branch `006-whatsapp-business-integration`) — `WhatsAppProvider` ABC; `MockWhatsAppProvider` (tests/dev) + `CloudAPIWhatsAppProvider` (Meta Graph API); opt-out enforcement (global + per-creditor); per-message delivery state; HMAC-verified idempotent webhook; `WebhookReceiptOut` response model; 26 new tests; delivery badge on creditor notifications view; AR+EN i18n for all failure reason codes.
 
 ## Out of scope for MVP (per `../mvp-scope.md`)
-
-- Real WhatsApp Business API integration (mock provider only today).
 - Real payment gateway / settlement.
 - Group debt with auto-netting (UC9 — endpoints exist, no MVP nav).
 - Advanced AI (behaviour analysis, fraud detection, payment-likelihood prediction).

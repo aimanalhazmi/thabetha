@@ -17,9 +17,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.core.config import Settings, get_settings
-from app.core.security import verify_whatsapp_signature
 from app.repositories import Repository, get_repository
+from app.schemas.domain import WebhookReceiptOut
 from app.services.whatsapp import get_provider
+from app.services.whatsapp.dispatch import verify_whatsapp_signature
 
 logger = logging.getLogger(__name__)
 
@@ -39,18 +40,22 @@ def verify_subscription(
     return Response(status_code=status.HTTP_403_FORBIDDEN)
 
 
-@router.post("/webhooks/whatsapp")
+@router.post("/webhooks/whatsapp", response_model=WebhookReceiptOut)
 async def receive_status(
     request: Request,
     repo: Annotated[Repository, Depends(get_repository)],
-) -> dict[str, object]:
+) -> WebhookReceiptOut:
     raw = await request.body()
     signature = request.headers.get("X-Hub-Signature-256", "")
     if not verify_whatsapp_signature(raw, signature):
+        # Structured audit log — never log the body (PII).
         logger.warning(
-            "[whatsapp.webhook] signature failure signature_present=%s body_len=%d",
+            "[whatsapp.webhook] signature_rejected signature_present=%s body_len=%d "
+            "user_agent=%r remote=%s",
             bool(signature),
             len(raw),
+            request.headers.get("user-agent", ""),
+            request.client.host if request.client else "unknown",
         )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
@@ -73,14 +78,14 @@ async def receive_status(
                 )
             else:
                 logger.info(
-                    "[whatsapp.webhook] unknown provider_ref=%s status=%s",
+                    "[whatsapp.webhook] unknown_ref provider_ref=%s status=%s applied=0",
                     update.provider_ref,
                     update.status,
                 )
         except Exception:  # noqa: BLE001
             logger.exception(
-                "[whatsapp.webhook] db error applying provider_ref=%s",
+                "[whatsapp.webhook] db_error provider_ref=%s",
                 update.provider_ref,
             )
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR) from None
-    return {"received": True, "applied": applied}
+    return WebhookReceiptOut(received=True, applied=applied)
