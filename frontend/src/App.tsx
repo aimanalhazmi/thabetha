@@ -13,6 +13,7 @@ import { AIPage } from "./pages/AIPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { LandingPage } from "./pages/LandingPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import PaymentReturnPage from "./pages/PaymentReturnPage";
 import type { TranslationKey } from "./lib/i18n";
 import type { Language } from "./lib/types";
 import { loadInitialLocale, persistLocale } from "./lib/localePersistence";
@@ -55,6 +56,7 @@ function AppShell({ language, onToggleLanguage }: ShellProps) {
           <Route path="/ai" element={<AIPage language={language} key={refreshKey} />} />
           <Route path="/notifications" element={<NotificationsPage language={language} key={refreshKey} />} />
           <Route path="/settings" element={<SettingsPage language={language} onToggleLanguage={onToggleLanguage} key={refreshKey} />} />
+          <Route path="/payment/return" element={<PaymentReturnPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Layout>

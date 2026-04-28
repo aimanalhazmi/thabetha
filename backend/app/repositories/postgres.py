@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -38,7 +38,9 @@ from app.schemas.domain import (
     NotificationPreferenceIn,
     NotificationPreferenceOut,
     PaymentConfirmationOut,
+    PaymentIntentOut,
     PaymentRequest,
+    PayOnlineOut,
     ProfileOut,
     ProfileUpdate,
     SettlementCreate,
@@ -1280,3 +1282,228 @@ class PostgresRepository(Repository):
             "paid_count": dashboard.paid_count,
             "alerts": dashboard.alerts,
         }
+
+    # ── Payment intents ───────────────────────────────────────────────
+
+    def _intent_from_row(self, row: dict) -> PaymentIntentOut:
+        amount = Decimal(str(row["amount"]))
+        fee = Decimal(str(row["fee"]))
+        return PaymentIntentOut(
+            id=str(row["id"]),
+            debt_id=str(row["debt_id"]),
+            provider=row["provider"],
+            provider_ref=row.get("provider_ref"),
+            checkout_url=row.get("checkout_url"),
+            status=row["status"],
+            amount=amount,
+            fee=fee,
+            net_amount=amount - fee,
+            created_at=row["created_at"],
+            expires_at=row["expires_at"],
+            completed_at=row.get("completed_at"),
+        )
+
+    def create_payment_intent(
+        self,
+        debt_id: str,
+        provider: str,
+        amount: Decimal,
+        fee: Decimal,
+        checkout_url: str,
+        provider_ref: str | None,
+        expires_at: datetime,
+    ) -> PaymentIntentOut:
+        intent_id = str(uuid4())
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            conn.execute(
+                """
+                INSERT INTO payment_intents
+                  (id, debt_id, provider, provider_ref, checkout_url, status, amount, fee, expires_at)
+                VALUES (%s, %s, %s, %s, %s, 'pending', %s, %s, %s)
+                """,
+                (intent_id, debt_id, provider, provider_ref, checkout_url, amount, fee, expires_at),
+            )
+            conn.commit()
+            row = conn.execute("SELECT * FROM payment_intents WHERE id = %s", (intent_id,)).fetchone()
+            return self._intent_from_row(row)
+
+    def get_active_payment_intent(self, debt_id: str) -> PaymentIntentOut | None:
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            conn.execute(
+                """
+                UPDATE payment_intents
+                   SET status = 'expired', completed_at = now()
+                 WHERE debt_id = %s AND status = 'pending' AND expires_at <= now()
+                """,
+                (debt_id,),
+            )
+            conn.commit()
+            row = conn.execute(
+                "SELECT * FROM payment_intents WHERE debt_id = %s AND status = 'pending' LIMIT 1",
+                (debt_id,),
+            ).fetchone()
+            return self._intent_from_row(row) if row else None
+
+    def get_payment_intent_by_ref(self, provider_ref: str) -> PaymentIntentOut | None:
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            row = conn.execute(
+                "SELECT * FROM payment_intents WHERE provider_ref = %s LIMIT 1",
+                (provider_ref,),
+            ).fetchone()
+            return self._intent_from_row(row) if row else None
+
+    def update_payment_intent_status(
+        self, intent_id: str, status: str, completed_at: datetime | None = None
+    ) -> None:
+        with self._pool.connection() as conn:
+            if completed_at is not None:
+                conn.execute(
+                    "UPDATE payment_intents SET status = %s, completed_at = %s WHERE id = %s",
+                    (status, completed_at, intent_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE payment_intents SET status = %s WHERE id = %s",
+                    (status, intent_id),
+                )
+            conn.commit()
+
+    def create_payment_intent_and_transition(
+        self,
+        user_id: str,
+        debt_id: str,
+        checkout_url: str,
+        provider_ref: str | None,
+        provider: str,
+        amount: Decimal,
+        fee: Decimal,
+        expires_at: datetime,
+    ) -> PayOnlineOut:
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            row = self._can_view_debt(conn, user_id, debt_id)
+            if not row:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
+            if str(row["creditor_id"]) == user_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the debtor can initiate online payment")
+            if row["status"] not in ("active", "overdue"):
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt must be active or overdue to pay online")
+            # Lazy-expire and check pending intents
+            conn.execute(
+                "UPDATE payment_intents SET status = 'expired', completed_at = now() WHERE debt_id = %s AND status = 'pending' AND expires_at <= now()",
+                (debt_id,),
+            )
+            existing = conn.execute(
+                "SELECT id FROM payment_intents WHERE debt_id = %s AND status = 'pending' LIMIT 1",
+                (debt_id,),
+            ).fetchone()
+            if existing:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="payment_in_progress")
+            # Create intent and transition debt atomically
+            intent_id = str(uuid4())
+            conn.execute(
+                """
+                INSERT INTO payment_intents
+                  (id, debt_id, provider, provider_ref, checkout_url, status, amount, fee, expires_at)
+                VALUES (%s, %s, %s, %s, %s, 'pending', %s, %s, %s)
+                """,
+                (intent_id, debt_id, provider, provider_ref, checkout_url, amount, fee, expires_at),
+            )
+            conn.execute(
+                "UPDATE debts SET status = 'payment_pending_confirmation', updated_at = now() WHERE id = %s",
+                (debt_id,),
+            )
+            self._add_event_raw(conn, debt_id, user_id, "payment_initiated", None, {
+                "intent_id": intent_id, "provider": provider, "amount": str(amount), "fee": str(fee)
+            })
+            conn.commit()
+            return PayOnlineOut(
+                payment_intent_id=intent_id,
+                checkout_url=checkout_url,
+                amount=amount,
+                fee=fee,
+                net_amount=amount - fee,
+                currency=row["currency"].strip(),
+                expires_at=expires_at,
+            )
+
+    def confirm_payment_gateway(self, provider_ref: str) -> DebtOut:
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            intent_row = conn.execute(
+                "SELECT * FROM payment_intents WHERE provider_ref = %s LIMIT 1",
+                (provider_ref,),
+            ).fetchone()
+            if not intent_row:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment intent not found")
+            # Idempotency: already succeeded
+            if intent_row["status"] == "succeeded":
+                debt_row = conn.execute("SELECT * FROM debts WHERE id = %s", (intent_row["debt_id"],)).fetchone()
+                if not debt_row:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
+                return _debt_from_row(debt_row)
+            intent_id = str(intent_row["id"])
+            debt_id = str(intent_row["debt_id"])
+            conn.execute(
+                "UPDATE payment_intents SET status = 'succeeded', completed_at = now() WHERE id = %s",
+                (intent_id,),
+            )
+            debt_row = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
+            if not debt_row:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
+            if debt_row["status"] == "paid":
+                conn.commit()
+                return _debt_from_row(debt_row)
+            if debt_row["status"] != "payment_pending_confirmation":
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt is not awaiting payment confirmation")
+            conn.execute("UPDATE debts SET status = 'paid', paid_at = now(), updated_at = now() WHERE id = %s", (debt_id,))
+            self._add_event_raw(conn, debt_id, "system", "payment_confirmed", None, {
+                "intent_id": intent_id, "provider_ref": provider_ref, "gateway": True
+            })
+            debtor_id = str(debt_row["debtor_id"]) if debt_row.get("debtor_id") else None
+            if debtor_id:
+                today = utcnow().date()
+                if today < debt_row["due_date"]:
+                    self._change_commitment_score_raw(conn, debtor_id, 3, "paid_early", debt_id)
+                elif today == debt_row["due_date"]:
+                    self._change_commitment_score_raw(conn, debtor_id, 1, "paid_on_time", debt_id)
+                else:
+                    missed_row = conn.execute(
+                        "SELECT COUNT(*) AS n FROM commitment_score_events WHERE debt_id = %s AND reason = 'missed_reminder'",
+                        (debt_id,),
+                    ).fetchone()
+                    missed = int(missed_row["n"]) if missed_row else 0
+                    self._change_commitment_score_raw(conn, debtor_id, _late_penalty(missed), "paid_late", debt_id)
+                self._notify_raw(conn, debtor_id, "payment_confirmed", "Payment confirmed",
+                                 f"{debt_row['amount']} {debt_row['currency'].strip()} was confirmed as paid", debt_id)
+            self._notify_raw(conn, str(debt_row["creditor_id"]), "payment_confirmed", "Payment confirmed",
+                             f"{debt_row['debtor_name']} paid {debt_row['amount']} {debt_row['currency'].strip()} online", debt_id)
+            conn.commit()
+            updated = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
+            return _debt_from_row(updated)
+
+    def record_payment_failure(self, provider_ref: str) -> None:
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            intent_row = conn.execute(
+                "SELECT * FROM payment_intents WHERE provider_ref = %s AND status = 'pending' LIMIT 1",
+                (provider_ref,),
+            ).fetchone()
+            if not intent_row:
+                return
+            intent_id = str(intent_row["id"])
+            debt_id = str(intent_row["debt_id"])
+            conn.execute(
+                "UPDATE payment_intents SET status = 'failed', completed_at = now() WHERE id = %s",
+                (intent_id,),
+            )
+            self._add_event_raw(conn, debt_id, "system", "payment_failed", None, {"provider_ref": provider_ref})
+            debt_row = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
+            debtor_id = str(debt_row["debtor_id"]) if debt_row and debt_row.get("debtor_id") else None
+            if debtor_id:
+                self._notify_raw(conn, debtor_id, "payment_failed", "Payment failed",
+                                 f"Payment of {debt_row['amount']} {debt_row['currency'].strip()} failed — you can try again", debt_id)
+            conn.commit()

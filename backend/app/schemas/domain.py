@@ -55,6 +55,14 @@ class NotificationType(StrEnum):
     overdue = "overdue"
     payment_requested = "payment_requested"
     payment_confirmed = "payment_confirmed"
+    payment_failed = "payment_failed"
+
+
+class PaymentIntentStatus(StrEnum):
+    pending = "pending"
+    succeeded = "succeeded"
+    failed = "failed"
+    expired = "expired"
 
 
 class GroupMemberStatus(StrEnum):
@@ -270,6 +278,31 @@ class NotificationOutCreditor(NotificationOut):
 class WebhookReceiptOut(BaseModel):
     received: bool
     applied: int
+
+
+class PaymentIntentOut(BaseModel):
+    id: str
+    debt_id: str
+    provider: str
+    provider_ref: str | None = None
+    checkout_url: str | None = None
+    status: PaymentIntentStatus
+    amount: Decimal
+    fee: Decimal
+    net_amount: Decimal
+    created_at: datetime
+    expires_at: datetime
+    completed_at: datetime | None = None
+
+
+class PayOnlineOut(BaseModel):
+    payment_intent_id: str
+    checkout_url: str
+    amount: Decimal
+    fee: Decimal
+    net_amount: Decimal
+    currency: str
+    expires_at: datetime
 
 
 class NotificationPreferenceIn(BaseModel):

@@ -1,7 +1,10 @@
+from datetime import timedelta
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
+from app.core.config import get_settings
 from app.core.security import AuthenticatedUser, get_current_user
 from app.repositories import Repository, get_repository
 from app.schemas.domain import (
@@ -14,8 +17,12 @@ from app.schemas.domain import (
     DebtEventOut,
     DebtOut,
     PaymentConfirmationOut,
+    PaymentIntentOut,
     PaymentRequest,
+    PayOnlineOut,
+    utcnow,
 )
+from app.services.payments import get_payment_provider
 
 router = APIRouter()
 
@@ -173,3 +180,54 @@ def list_attachments(
 ) -> list[AttachmentOut]:
     repo.ensure_profile(user)
     return repo.list_attachments(user.id, debt_id)
+
+
+@router.post("/{debt_id}/pay-online", response_model=PayOnlineOut)
+def pay_online(
+    debt_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> PayOnlineOut:
+    repo.ensure_profile(user)
+    settings = get_settings()
+    try:
+        provider = get_payment_provider()
+        debt = repo.get_authorized_debt(user.id, debt_id)
+        fee = provider.calculate_fee(debt.amount)
+        redirect_url = f"{settings.payment_redirect_base_url}/payment/return?debt_id={debt_id}"
+        checkout = provider.create_checkout(
+            debt_id=debt_id,
+            amount=debt.amount,
+            currency=debt.currency,
+            redirect_url=redirect_url,
+            order_ref=str(uuid4()),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Payment gateway unavailable") from exc
+    expires_at = utcnow() + timedelta(minutes=30)
+    return repo.create_payment_intent_and_transition(
+        user_id=user.id,
+        debt_id=debt_id,
+        checkout_url=checkout.checkout_url,
+        provider_ref=checkout.provider_ref,
+        provider=settings.payment_provider,
+        amount=debt.amount,
+        fee=fee,
+        expires_at=expires_at,
+    )
+
+
+@router.get("/{debt_id}/payment-intent", response_model=PaymentIntentOut)
+def get_payment_intent(
+    debt_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> PaymentIntentOut:
+    repo.ensure_profile(user)
+    repo.get_authorized_debt(user.id, debt_id)
+    intent = repo.get_active_payment_intent(debt_id)
+    if not intent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active payment intent for this debt")
+    return intent

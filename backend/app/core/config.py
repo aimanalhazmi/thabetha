@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     whatsapp_webhook_secret: str | None = None
     whatsapp_verify_token: str | None = None
 
+    payment_provider: str = "mock"
+    tap_secret_key: str | None = None
+    tap_webhook_secret: str | None = None
+    tap_fee_percent: float = 2.75
+    payment_redirect_base_url: str = "http://localhost:5173"
+
     database_url: str | None = None
     repository_type: str = "postgres"
 

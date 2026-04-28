@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from threading import RLock
 from uuid import uuid4
@@ -36,7 +36,10 @@ from app.schemas.domain import (
     NotificationPreferenceOut,
     NotificationType,
     PaymentConfirmationOut,
+    PaymentIntentOut,
+    PaymentIntentStatus,
     PaymentRequest,
+    PayOnlineOut,
     ProfileOut,
     ProfileUpdate,
     SettlementCreate,
@@ -87,6 +90,7 @@ class InMemoryRepository(Repository):
             self._overdue_penalties: set[str] = set()
             self._edit_request_payloads: dict[str, dict[str, object]] = {}
             self._original_terms: dict[str, dict[str, object]] = {}
+            self.payment_intents: dict[str, PaymentIntentOut] = {}
 
     def ensure_profile(self, user: AuthenticatedUser) -> ProfileOut:
         with self._lock:
@@ -633,6 +637,157 @@ class InMemoryRepository(Repository):
             "paid_count": dashboard.paid_count,
             "alerts": dashboard.alerts,
         }
+
+    # ── Payment intents ───────────────────────────────────────────────
+
+    def create_payment_intent(
+        self,
+        debt_id: str,
+        provider: str,
+        amount: Decimal,
+        fee: Decimal,
+        checkout_url: str,
+        provider_ref: str | None,
+        expires_at: datetime,
+    ) -> PaymentIntentOut:
+        intent = PaymentIntentOut(
+            id=str(uuid4()),
+            debt_id=debt_id,
+            provider=provider,
+            provider_ref=provider_ref,
+            checkout_url=checkout_url,
+            status=PaymentIntentStatus.pending,
+            amount=amount,
+            fee=fee,
+            net_amount=amount - fee,
+            created_at=utcnow(),
+            expires_at=expires_at,
+        )
+        self.payment_intents[intent.id] = intent
+        return intent
+
+    def get_active_payment_intent(self, debt_id: str) -> PaymentIntentOut | None:
+        now = utcnow()
+        for intent in list(self.payment_intents.values()):
+            if intent.debt_id != debt_id or intent.status != PaymentIntentStatus.pending:
+                continue
+            if intent.expires_at <= now:
+                self.payment_intents[intent.id] = intent.model_copy(
+                    update={"status": PaymentIntentStatus.expired, "completed_at": now}
+                )
+                return None
+            return intent
+        return None
+
+    def get_payment_intent_by_ref(self, provider_ref: str) -> PaymentIntentOut | None:
+        for intent in self.payment_intents.values():
+            if intent.provider_ref == provider_ref:
+                return intent
+        return None
+
+    def update_payment_intent_status(
+        self, intent_id: str, status: str, completed_at: datetime | None = None
+    ) -> None:
+        intent = self.payment_intents.get(intent_id)
+        if intent:
+            update: dict[str, object] = {"status": status}
+            if completed_at is not None:
+                update["completed_at"] = completed_at
+            self.payment_intents[intent_id] = intent.model_copy(update=update)
+
+    def create_payment_intent_and_transition(
+        self,
+        user_id: str,
+        debt_id: str,
+        checkout_url: str,
+        provider_ref: str | None,
+        provider: str,
+        amount: Decimal,
+        fee: Decimal,
+        expires_at: datetime,
+    ) -> PayOnlineOut:
+        with self._lock:
+            debt = self.get_authorized_debt(user_id, debt_id)
+            if debt.creditor_id == user_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the debtor can initiate online payment")
+            if debt.status not in {DebtStatus.active, DebtStatus.overdue}:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt must be active or overdue to pay online")
+            existing = self.get_active_payment_intent(debt_id)
+            if existing:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="payment_in_progress")
+            intent = self.create_payment_intent(debt_id, provider, amount, fee, checkout_url, provider_ref, expires_at)
+            now = utcnow()
+            debt = debt.model_copy(update={"status": DebtStatus.payment_pending_confirmation, "updated_at": now})
+            self.debts[debt_id] = debt
+            self._add_event(debt_id, user_id, "payment_initiated", None, {
+                "intent_id": intent.id, "provider": provider, "amount": str(amount), "fee": str(fee)
+            })
+            return PayOnlineOut(
+                payment_intent_id=intent.id,
+                checkout_url=checkout_url,
+                amount=amount,
+                fee=fee,
+                net_amount=amount - fee,
+                currency=debt.currency,
+                expires_at=expires_at,
+            )
+
+    def confirm_payment_gateway(self, provider_ref: str) -> DebtOut:
+        with self._lock:
+            intent = self.get_payment_intent_by_ref(provider_ref)
+            if not intent:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment intent not found")
+            if intent.status == PaymentIntentStatus.succeeded:
+                debt = self.debts.get(intent.debt_id)
+                if not debt:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
+                return debt
+            now = utcnow()
+            self.update_payment_intent_status(intent.id, PaymentIntentStatus.succeeded, now)
+            debt = self.debts.get(intent.debt_id)
+            if not debt:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debt not found")
+            if debt.status == DebtStatus.paid:
+                return debt
+            if debt.status != DebtStatus.payment_pending_confirmation:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debt is not awaiting payment confirmation")
+            debt = debt.model_copy(update={"status": DebtStatus.paid, "paid_at": now, "updated_at": now})
+            self.debts[intent.debt_id] = debt
+            self._add_event(intent.debt_id, "system", "payment_confirmed", None, {
+                "intent_id": intent.id, "provider_ref": provider_ref, "gateway": True
+            })
+            if debt.debtor_id:
+                today = now.date()
+                if today < debt.due_date:
+                    self._change_commitment_score(debt.debtor_id, 3, "paid_early", debt.id)
+                elif today == debt.due_date:
+                    self._change_commitment_score(debt.debtor_id, 1, "paid_on_time", debt.id)
+                else:
+                    missed = sum(
+                        1 for ev in self.commitment_score_events
+                        if ev.debt_id == debt.id and ev.reason == "missed_reminder"
+                    )
+                    self._change_commitment_score(debt.debtor_id, _late_penalty(missed), "paid_late", debt.id)
+                self._notify(debt.debtor_id, NotificationType.payment_confirmed, "Payment confirmed",
+                             f"{debt.amount} {debt.currency} was confirmed as paid", debt.id)
+            self._notify(debt.creditor_id, NotificationType.payment_confirmed, "Payment confirmed",
+                         f"{debt.debtor_name} paid {debt.amount} {debt.currency} online", debt.id)
+            return debt
+
+    def record_payment_failure(self, provider_ref: str) -> None:
+        with self._lock:
+            intent = self.get_payment_intent_by_ref(provider_ref)
+            if not intent:
+                return
+            if intent.status != PaymentIntentStatus.pending:
+                return
+            now = utcnow()
+            self.update_payment_intent_status(intent.id, PaymentIntentStatus.failed, now)
+            self._add_event(intent.debt_id, "system", "payment_failed", None, {"provider_ref": provider_ref})
+            debt = self.debts.get(intent.debt_id)
+            if debt and debt.debtor_id:
+                self._notify(debt.debtor_id, NotificationType.payment_failed, "Payment failed",
+                             f"Payment of {debt.amount} {debt.currency} failed — you can try again", debt.id)
 
     def _add_event(self, debt_id: str, actor_id: str, event_type: str, message: str | None = None, metadata: dict[str, object] | None = None) -> DebtEventOut:
         event = DebtEventOut(

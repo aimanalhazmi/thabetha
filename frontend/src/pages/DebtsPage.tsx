@@ -5,10 +5,10 @@ import { AttachmentUploader } from '../components/AttachmentUploader';
 import { CancelDebtDialog } from '../components/CancelDebtDialog';
 import { Input, Panel } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
-import { apiRequest } from '../lib/api';
+import { apiRequest, payOnline } from '../lib/api';
 import { humanizeError } from '../lib/errors';
 import { t } from '../lib/i18n';
-import type { Attachment, Debt, DebtEvent, DebtStatus, Language, Profile, ReceiptUploadItem } from '../lib/types';
+import type { Attachment, Debt, DebtEvent, DebtStatus, Language, PayOnlineResult, Profile, ReceiptUploadItem } from '../lib/types';
 
 type DebtorSource = 'manual' | 'qr-resolving' | 'qr-resolved' | 'qr-expired' | 'qr-self' | 'qr-error';
 
@@ -115,6 +115,8 @@ export function DebtsPage({ language }: Props) {
   const [editingDebtId, setEditingDebtId] = useState<string | null>(null);
   const [cancelDialogDebtId, setCancelDialogDebtId] = useState<string | null>(null);
   const [actionInFlight, setActionInFlight] = useState(false);
+  const [payOnlineResult, setPayOnlineResult] = useState<PayOnlineResult | null>(null);
+  const [payOnlineDebtId, setPayOnlineDebtId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ message: string; requested_amount: string; requested_due_date: string; requested_description: string }>({
     message: '',
     requested_amount: '',
@@ -679,6 +681,41 @@ export function DebtsPage({ language }: Props) {
                   <button disabled={actionInFlight} onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/mark-paid`, { method: 'POST', body: JSON.stringify({ note: 'Paid' }) }), tr('toastPaymentRequested'))}>
                     <WalletCards size={16} /><span>{actionInFlight ? '…' : tr('markPaid')}</span>
                   </button>
+                )}
+                {!isCreditor && (debt.status === 'active' || debt.status === 'overdue') && (
+                  <button
+                    disabled={actionInFlight}
+                    onClick={() => {
+                      setActionInFlight(true);
+                      payOnline(debt.id)
+                        .then((result) => { setPayOnlineResult(result); setPayOnlineDebtId(debt.id); })
+                        .catch((err: unknown) => { setMessage(humanizeError(err, language, 'transition')); })
+                        .finally(() => { setActionInFlight(false); });
+                    }}
+                  >
+                    <CreditCard size={16} /><span>{actionInFlight ? '…' : tr('payOnline')}</span>
+                  </button>
+                )}
+                {payOnlineResult && payOnlineDebtId === debt.id && (
+                  <div className="pay-online-callout">
+                    <div className="pay-online-amounts">
+                      <div><span>{tr('grossAmount')}</span><span>{payOnlineResult.amount} {payOnlineResult.currency}</span></div>
+                      <div><span>{tr('feeLabel')}</span><span>{payOnlineResult.fee} {payOnlineResult.currency}</span></div>
+                      <div className="pay-online-net"><span>{tr('creditorReceives')}</span><span>{payOnlineResult.net_amount} {payOnlineResult.currency}</span></div>
+                    </div>
+                    <button
+                      className="pay-online-proceed"
+                      onClick={() => { window.location.href = payOnlineResult.checkout_url; }}
+                    >
+                      <ExternalLink size={14} /><span>{tr('payOnline')}</span>
+                    </button>
+                    <button
+                      className="pay-online-cancel"
+                      onClick={() => { setPayOnlineResult(null); setPayOnlineDebtId(null); }}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 )}
                 {isCreditor && debt.status === 'payment_pending_confirmation' && (
                   <button disabled={actionInFlight} onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/confirm-payment`, { method: 'POST' }), tr('toastPaymentConfirmed'))}>

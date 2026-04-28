@@ -172,3 +172,28 @@ export interface VoiceDraft {
   description: string | null;
   due_date: string | null;
 }
+
+export interface PayOnlineResult {
+  payment_intent_id: string;
+  checkout_url: string;
+  amount: string;
+  fee: string;
+  net_amount: string;
+  currency: string;
+  expires_at: string;
+}
+
+export interface PaymentIntent {
+  id: string;
+  debt_id: string;
+  provider: string;
+  provider_ref: string | null;
+  checkout_url: string | null;
+  status: 'pending' | 'succeeded' | 'failed' | 'expired';
+  amount: string;
+  fee: string;
+  net_amount: string;
+  created_at: string;
+  expires_at: string;
+  completed_at: string | null;
+}

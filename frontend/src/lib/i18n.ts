@@ -211,7 +211,18 @@ export type TranslationKey =
   | 'whatsapp_failed_reason_provider_5xx'
   | 'whatsapp_failed_reason_network_error'
   | 'whatsapp_failed_reason_no_template'
-  | 'whatsapp_failed_reason_no_phone_number';
+  | 'whatsapp_failed_reason_no_phone_number'
+  | 'payOnline'
+  | 'creditorReceives'
+  | 'paymentProcessing'
+  | 'paymentInProgress'
+  | 'paymentFailed'
+  | 'paymentSucceeded'
+  | 'gatewayUnavailable'
+  | 'paymentPendingTitle'
+  | 'paymentPendingBody'
+  | 'feeLabel'
+  | 'grossAmount';
 
 type Translations = Record<TranslationKey, string>;
 
@@ -426,6 +437,17 @@ const ar: Translations = {
   whatsapp_failed_reason_network_error: 'خطأ في الشبكة',
   whatsapp_failed_reason_no_template: 'لا يوجد قالب لهذا الإشعار',
   whatsapp_failed_reason_no_phone_number: 'لا يوجد رقم جوال للمستلم',
+  payOnline: 'ادفع إلكترونيًا',
+  creditorReceives: 'سيستلم الدائن',
+  paymentProcessing: 'جاري معالجة الدفع...',
+  paymentInProgress: 'لديك عملية دفع جارية، يرجى الانتظار.',
+  paymentFailed: 'فشلت عملية الدفع — يمكنك إعادة المحاولة.',
+  paymentSucceeded: 'تم الدفع بنجاح!',
+  gatewayUnavailable: 'بوابة الدفع غير متاحة حاليًا، حاول لاحقًا.',
+  paymentPendingTitle: 'الدفع قيد المعالجة',
+  paymentPendingBody: 'لم يُؤكَّد الدفع بعد — ستُحدَّث الحالة تلقائيًا عند وصول التأكيد.',
+  feeLabel: 'رسوم البوابة',
+  grossAmount: 'المبلغ الإجمالي',
 };
 
 const en: Translations = {
@@ -639,6 +661,17 @@ const en: Translations = {
   whatsapp_failed_reason_network_error: 'Network error',
   whatsapp_failed_reason_no_template: 'No template for this notification',
   whatsapp_failed_reason_no_phone_number: 'Recipient has no phone number',
+  payOnline: 'Pay online',
+  creditorReceives: 'Creditor receives',
+  paymentProcessing: 'Processing payment...',
+  paymentInProgress: 'A payment is already in progress — please wait.',
+  paymentFailed: 'Payment failed — you can try again.',
+  paymentSucceeded: 'Payment successful!',
+  gatewayUnavailable: 'Payment gateway is unavailable, please try again later.',
+  paymentPendingTitle: 'Payment processing',
+  paymentPendingBody: "Payment not confirmed yet — status will update automatically when confirmation arrives.",
+  feeLabel: 'Gateway fee',
+  grossAmount: 'Gross amount',
 };
 
 const translations: Record<Language, Translations> = { ar, en };

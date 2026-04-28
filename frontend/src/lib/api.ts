@@ -1,3 +1,4 @@
+import type { PaymentIntent, PayOnlineResult } from './types';
 import { supabase } from './supabaseClient';
 
 const API_BASE = '/api/v1';
@@ -37,4 +38,12 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   }
 
   return response.json() as Promise<T>;
+}
+
+export async function payOnline(debtId: string): Promise<PayOnlineResult> {
+  return apiRequest<PayOnlineResult>(`/debts/${debtId}/pay-online`, { method: 'POST' });
+}
+
+export async function getPaymentIntent(debtId: string): Promise<PaymentIntent> {
+  return apiRequest<PaymentIntent>(`/debts/${debtId}/payment-intent`);
 }

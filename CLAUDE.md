@@ -161,5 +161,5 @@ Tests use `FastAPI.TestClient` via the `client` fixture. `conftest.py` forces `R
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at `specs/006-whatsapp-business-integration/plan.md`.
+at `specs/007-payment-gateway-settlement/plan.md`.
 <!-- SPECKIT END -->
