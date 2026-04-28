@@ -136,8 +136,8 @@ Web app layout — `frontend/src/` and `backend/` at repo root, per plan.md → 
 
 - [x] T023 [P] Run `cd frontend && npm run typecheck` and `cd frontend && npm run build`; confirm both pass with zero errors.
 - [x] T024 [P] Run `cd backend && uv run ruff check .` and `cd backend && uv run pytest -q`; confirm ruff is clean and the only failure is the pre-existing `test_late_payment_penalty_doubles_per_missed_reminder` (which is not in scope).
-- [ ] T025 Update `claude-handoff/project-status.md` (or `docs/spec-kit/project-status.md` if that is the canonical location) — mark the "End-to-end demo path" entry as ✅ shipped.
-- [ ] T026 Compile the "Phase 5 hand-off — untranslated strings" inventory from T011 into the PR description. Format each entry as `frontend/src/pages/<file>:<line> — "<literal>"`.
+- [x] T025 Update `claude-handoff/project-status.md` (or `docs/spec-kit/project-status.md` if that is the canonical location) — mark the "End-to-end demo path" entry as ✅ shipped.
+- [x] T026 Compile the "Phase 5 hand-off — untranslated strings" inventory from T011 into the PR description. Format each entry as `frontend/src/pages/<file>:<line> — "<literal>"`.
 - [ ] T027 Run the full quickstart.md verification (sections A through F) end-to-end; tick each section in the PR description.
 - [ ] T028 Open PR titled `feat(uc1-uc6): end-to-end demo polish` against `develop`. Populate the per-phase deliverable checklist from `docs/spec-kit/implementation-plan.md` Phase 4 entry. Body must include: median demo timing from T022, the untranslated-strings inventory, the test runtime from T018.
 
