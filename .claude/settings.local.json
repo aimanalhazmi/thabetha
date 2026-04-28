@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(.specify/scripts/powershell/check-prerequisites.ps1 -Json -PathsOnly)",
+      "PowerShell(.specify/extensions/git/scripts/powershell/create-new-feature.ps1 -Json -ShortName \"cancel-non-binding-debt-ux\" \"Cancel non-binding debt UX — Phase 3\")",
+      "PowerShell(.specify/scripts/powershell/setup-plan.ps1 -Json)",
+      "PowerShell(.specify/scripts/powershell/check-prerequisites.ps1 -Json)",
+      "PowerShell(.specify/scripts/powershell/check-prerequisites.ps1 -Json -RequireTasks -IncludeTasks)",
+      "Bash(uv run *)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(npm install *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "PowerShell(.specify/extensions/git/scripts/powershell/create-new-feature.ps1 -Json -ShortName \"e2e-demo-polish\" \"End-to-end demo polish — Phase 4\")",
+      "Bash(gh pr create --base develop --head 002-cancel-non-binding-debt-ux --title 'feat\\(uc3\\): cancel non-binding debt UX' --body ' *)",
+      "PowerShell(.specify/extensions/git/scripts/powershell/create-new-feature.ps1 -Json -ShortName \"bilingual-coverage-audit\" \"Phase 5 — Bilingual coverage audit \\(AR/EN\\): ensure every visible string in the frontend routes through i18n with no hardcoded AR/EN literals, both locales render with correct RTL/LTR behavior on all pages and components, dates and numbers are formatted via Intl APIs keyed on locale, and lint/CI guards prevent regressions.\")",
+      "Bash(npx vitest *)",
+      "Bash(git commit *)",
+      "Bash(git fetch *)",
+      "PowerShell(cd D:\\\\Salamhackthon\\\\thabetha; $env:GIT_BRANCH_NAME = \"006-whatsapp-business-integration\"; .\\\\.specify\\\\extensions\\\\git\\\\scripts\\\\powershell\\\\create-new-feature.ps1 -Json -ShortName \"whatsapp-business-integration\" \"Real WhatsApp Business API integration\")"
+    ]
+  }
+}

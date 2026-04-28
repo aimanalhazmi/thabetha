@@ -222,7 +222,31 @@ class AttachmentOut(BaseModel):
     created_at: datetime
 
 
+class WhatsAppDeliveryStatus(StrEnum):
+    not_attempted = "not_attempted"
+    attempted_unknown = "attempted_unknown"
+    delivered = "delivered"
+    failed = "failed"
+
+
+def derive_whatsapp_status(
+    *,
+    whatsapp_attempted: bool,
+    whatsapp_delivered: bool | None,
+    whatsapp_failed_reason: str | None,
+) -> WhatsAppDeliveryStatus:
+    if not whatsapp_attempted:
+        return WhatsAppDeliveryStatus.not_attempted
+    if whatsapp_delivered is True:
+        return WhatsAppDeliveryStatus.delivered
+    if whatsapp_delivered is False or whatsapp_failed_reason is not None:
+        return WhatsAppDeliveryStatus.failed
+    return WhatsAppDeliveryStatus.attempted_unknown
+
+
 class NotificationOut(BaseModel):
+    """Debtor-facing (recipient) notification shape — no delivery columns (Q1)."""
+
     id: str
     user_id: str
     notification_type: NotificationType
@@ -232,6 +256,14 @@ class NotificationOut(BaseModel):
     read_at: datetime | None = None
     whatsapp_attempted: bool = False
     created_at: datetime
+
+
+class NotificationOutCreditor(NotificationOut):
+    """Sender-facing notification shape — exposes WhatsApp delivery columns."""
+
+    whatsapp_delivered: bool | None = None
+    whatsapp_failed_reason: str | None = None
+    whatsapp_status: WhatsAppDeliveryStatus = WhatsAppDeliveryStatus.not_attempted
 
 
 class NotificationPreferenceIn(BaseModel):

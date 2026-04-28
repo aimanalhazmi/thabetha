@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     whatsapp_provider: str = "mock"
     whatsapp_access_token: str | None = None
     whatsapp_from_number: str | None = None
+    whatsapp_phone_number_id: str | None = None
+    whatsapp_webhook_secret: str | None = None
+    whatsapp_verify_token: str | None = None
 
     database_url: str | None = None
     repository_type: str = "postgres"

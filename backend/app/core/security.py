@@ -65,3 +65,17 @@ async def get_current_user(
         phone=claims.get("phone"),
         name=claims.get("user_metadata", {}).get("name") if isinstance(claims.get("user_metadata"), dict) else None,
     )
+
+
+def verify_whatsapp_signature(raw_body: bytes, signature_header: str | None) -> bool:
+    """Delegate signature verification to the active WhatsApp provider so the
+    webhook router stays decoupled from any specific implementation. Returns
+    False on any error or missing header."""
+    if not signature_header:
+        return False
+    try:
+        from app.services.whatsapp import get_provider
+
+        return get_provider().verify_webhook_signature(raw_body, signature_header)
+    except Exception:  # noqa: BLE001 — never let signature checks raise.
+        return False

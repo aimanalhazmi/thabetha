@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Panel } from "../components/Layout";
+import { WhatsAppDeliveryBadge } from "../components/WhatsAppDeliveryBadge";
 import { apiRequest } from "../lib/api";
 import { humanizeError } from "../lib/errors";
 import { t } from "../lib/i18n";
@@ -45,6 +46,13 @@ export function NotificationsPage({ language }: Props) {
             <div>
               <strong>{item.title}</strong>
               <span>{item.body}</span>
+              {item.whatsapp_status && item.whatsapp_status !== 'not_attempted' && (
+                <WhatsAppDeliveryBadge
+                  status={item.whatsapp_status}
+                  failedReason={item.whatsapp_failed_reason}
+                  language={language}
+                />
+              )}
             </div>
             <button disabled={markingRead} onClick={() => void markRead(item.id)}>
               <Check size={16} /><span>{markingRead ? '…' : tr("save")}</span>

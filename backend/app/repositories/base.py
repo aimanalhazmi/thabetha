@@ -39,6 +39,7 @@ from app.schemas.domain import (
     SettlementCreate,
     SettlementOut,
 )
+from app.services.whatsapp.provider import SendResult, StatusUpdate
 
 
 class Repository(ABC):
@@ -140,6 +141,22 @@ class Repository(ABC):
 
     @abstractmethod
     def list_commitment_score_events(self, user_id: str) -> list[CommitmentScoreEventOut]: ...
+
+    # ── WhatsApp delivery state ───────────────────────────────────────
+
+    @abstractmethod
+    def mark_whatsapp_attempted(self, notification_id: str, result: SendResult) -> None: ...
+
+    @abstractmethod
+    def apply_whatsapp_status(self, update: StatusUpdate) -> bool: ...
+
+    @abstractmethod
+    def get_whatsapp_state(self, notification_id: str) -> dict[str, object] | None: ...
+
+    @abstractmethod
+    def get_merchant_notification_preference(
+        self, creditor_id: str, debtor_id: str
+    ) -> NotificationPreferenceOut | None: ...
 
     # ── Groups ────────────────────────────────────────────────────────
 

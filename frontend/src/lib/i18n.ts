@@ -199,7 +199,19 @@ export type TranslationKey =
   | 'toastProfileSaved'
   | 'inbucketDevHint'
   | 'phonePlaceholder'
-  | 'reminderDatePlaceholder';
+  | 'reminderDatePlaceholder'
+  | 'whatsapp_status_attempted'
+  | 'whatsapp_status_delivered'
+  | 'whatsapp_status_failed'
+  | 'whatsapp_failed_reason_recipient_blocked'
+  | 'whatsapp_failed_reason_invalid_phone'
+  | 'whatsapp_failed_reason_template_not_approved'
+  | 'whatsapp_failed_reason_template_param_mismatch'
+  | 'whatsapp_failed_reason_provider_4xx'
+  | 'whatsapp_failed_reason_provider_5xx'
+  | 'whatsapp_failed_reason_network_error'
+  | 'whatsapp_failed_reason_no_template'
+  | 'whatsapp_failed_reason_no_phone_number';
 
 type Translations = Record<TranslationKey, string>;
 
@@ -402,6 +414,18 @@ const ar: Translations = {
   inbucketDevHint: '📧 تحقق من Inbucket على المنفذ 55324',
   phonePlaceholder: '+966XXXXXXXXX',
   reminderDatePlaceholder: 'YYYY-MM-DD, YYYY-MM-DD',
+  whatsapp_status_attempted: 'أُرسل عبر واتساب — بانتظار التأكيد',
+  whatsapp_status_delivered: 'وصل عبر واتساب',
+  whatsapp_status_failed: 'فشل عبر واتساب',
+  whatsapp_failed_reason_recipient_blocked: 'المستلم حظَر الإرسال',
+  whatsapp_failed_reason_invalid_phone: 'رقم الجوال غير صالح',
+  whatsapp_failed_reason_template_not_approved: 'القالب غير معتمد',
+  whatsapp_failed_reason_template_param_mismatch: 'بيانات القالب غير مطابقة',
+  whatsapp_failed_reason_provider_4xx: 'رفض من مزوّد واتساب',
+  whatsapp_failed_reason_provider_5xx: 'تعذّر الإرسال — جرّب لاحقًا',
+  whatsapp_failed_reason_network_error: 'خطأ في الشبكة',
+  whatsapp_failed_reason_no_template: 'لا يوجد قالب لهذا الإشعار',
+  whatsapp_failed_reason_no_phone_number: 'لا يوجد رقم جوال للمستلم',
 };
 
 const en: Translations = {
@@ -603,6 +627,18 @@ const en: Translations = {
   inbucketDevHint: '📧 Check Inbucket at localhost:55324',
   phonePlaceholder: '+966500000000',
   reminderDatePlaceholder: 'YYYY-MM-DD, YYYY-MM-DD',
+  whatsapp_status_attempted: 'WhatsApp sent — awaiting confirmation',
+  whatsapp_status_delivered: 'WhatsApp delivered',
+  whatsapp_status_failed: 'WhatsApp failed',
+  whatsapp_failed_reason_recipient_blocked: 'Recipient blocked the sender',
+  whatsapp_failed_reason_invalid_phone: 'Invalid phone number',
+  whatsapp_failed_reason_template_not_approved: 'Template not approved',
+  whatsapp_failed_reason_template_param_mismatch: 'Template parameters did not match',
+  whatsapp_failed_reason_provider_4xx: 'Rejected by WhatsApp',
+  whatsapp_failed_reason_provider_5xx: 'Send failed — retry later',
+  whatsapp_failed_reason_network_error: 'Network error',
+  whatsapp_failed_reason_no_template: 'No template for this notification',
+  whatsapp_failed_reason_no_phone_number: 'Recipient has no phone number',
 };
 
 const translations: Record<Language, Translations> = { ar, en };

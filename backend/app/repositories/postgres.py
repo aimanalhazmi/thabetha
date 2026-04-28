@@ -45,6 +45,7 @@ from app.schemas.domain import (
     SettlementOut,
     utcnow,
 )
+from app.services.whatsapp.provider import SendOutcome, SendResult, StatusUpdate
 
 
 def _profile_from_row(row: dict) -> ProfileOut:
@@ -1020,6 +1021,96 @@ class PostgresRepository(Repository):
                 )
                 for r in rows
             ]
+
+    # ── WhatsApp delivery state ───────────────────────────────────────
+
+    def mark_whatsapp_attempted(self, notification_id: str, result: SendResult) -> None:
+        if result.outcome == SendOutcome.sent:
+            sql = """
+                UPDATE notifications
+                   SET whatsapp_attempted = true,
+                       whatsapp_provider_ref = %s
+                 WHERE id = %s
+            """
+            params = (result.provider_ref, notification_id)
+        else:
+            sql = """
+                UPDATE notifications
+                   SET whatsapp_attempted = true,
+                       whatsapp_delivered = false,
+                       whatsapp_failed_reason = %s
+                 WHERE id = %s
+            """
+            params = (result.failed_reason, notification_id)
+        with self._pool.connection() as conn:
+            conn.execute(sql, params)
+            conn.commit()
+
+    def apply_whatsapp_status(self, update: StatusUpdate) -> bool:
+        sql = """
+            UPDATE notifications
+               SET whatsapp_delivered = CASE
+                       WHEN %(status)s = 'delivered' THEN true
+                       WHEN %(status)s = 'failed' AND COALESCE(whatsapp_delivered, false) = false THEN false
+                       ELSE whatsapp_delivered
+                   END,
+                   whatsapp_failed_reason = CASE
+                       WHEN %(status)s = 'failed' AND whatsapp_failed_reason IS NULL THEN %(failed_reason)s
+                       ELSE whatsapp_failed_reason
+                   END,
+                   whatsapp_status_received_at = COALESCE(whatsapp_status_received_at, %(occurred_at)s)
+             WHERE whatsapp_provider_ref = %(provider_ref)s
+        """
+        with self._pool.connection() as conn:
+            cur = conn.execute(
+                sql,
+                {
+                    "status": update.status,
+                    "failed_reason": update.failed_reason,
+                    "occurred_at": update.occurred_at,
+                    "provider_ref": update.provider_ref,
+                },
+            )
+            conn.commit()
+            return (cur.rowcount or 0) > 0
+
+    def get_whatsapp_state(self, notification_id: str) -> dict[str, object] | None:
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            row = conn.execute(
+                """
+                SELECT whatsapp_attempted AS attempted,
+                       whatsapp_delivered AS delivered,
+                       whatsapp_provider_ref AS provider_ref,
+                       whatsapp_failed_reason AS failed_reason,
+                       whatsapp_status_received_at AS status_received_at
+                  FROM notifications WHERE id = %s
+                """,
+                (notification_id,),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_merchant_notification_preference(
+        self, creditor_id: str, debtor_id: str
+    ) -> NotificationPreferenceOut | None:
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            row = conn.execute(
+                """
+                SELECT user_id, merchant_id, whatsapp_enabled, updated_at
+                  FROM merchant_notification_preferences
+                 WHERE user_id = %s AND merchant_id = %s
+                """,
+                (debtor_id, creditor_id),
+            ).fetchone()
+            if not row:
+                return None
+            return NotificationPreferenceOut(
+                user_id=str(row["user_id"]),
+                merchant_id=str(row["merchant_id"]),
+                whatsapp_enabled=row["whatsapp_enabled"],
+                updated_at=row["updated_at"],
+            )
 
     # ── Groups ────────────────────────────────────────────────────────
 

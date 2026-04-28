@@ -126,12 +126,34 @@ export const RECEIPT_MAX_BYTES = 5 * 1024 * 1024;
 export const RECEIPT_IMAGE_MAX_EDGE = 2048;
 export const RECEIPT_ACCEPT = 'image/*,application/pdf';
 
+export type WhatsAppDeliveryStatus =
+  | 'not_attempted'
+  | 'attempted_unknown'
+  | 'delivered'
+  | 'failed';
+
+export type WhatsAppFailedReason =
+  | 'recipient_blocked'
+  | 'invalid_phone'
+  | 'template_not_approved'
+  | 'template_param_mismatch'
+  | 'provider_4xx'
+  | 'provider_5xx'
+  | 'network_error'
+  | 'no_template'
+  | 'no_phone_number';
+
 export interface NotificationItem {
   id: string;
   title: string;
   body: string;
   read_at: string | null;
   created_at: string;
+  whatsapp_attempted?: boolean;
+  // Creditor-only fields — only present when the API returns NotificationOutCreditor.
+  whatsapp_delivered?: boolean | null;
+  whatsapp_failed_reason?: WhatsAppFailedReason | null;
+  whatsapp_status?: WhatsAppDeliveryStatus;
 }
 
 export interface Group {

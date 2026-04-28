@@ -43,6 +43,7 @@ from app.schemas.domain import (
     SettlementOut,
     utcnow,
 )
+from app.services.whatsapp.provider import SendOutcome, SendResult, StatusUpdate
 
 
 def _late_penalty(missed_count: int) -> int:
@@ -74,6 +75,10 @@ class InMemoryRepository(Repository):
             self.payment_confirmations: dict[str, PaymentConfirmationOut] = {}
             self.attachments: list[AttachmentOut] = []
             self.notifications: list[NotificationOut] = []
+            # WhatsApp delivery state per notification id (T007–T008).
+            # Keys: attempted (bool), delivered (bool|None), provider_ref (str|None),
+            #       failed_reason (str|None), status_received_at (datetime|None).
+            self._whatsapp_state: dict[str, dict[str, object]] = {}
             self.notification_preferences: dict[tuple[str, str], NotificationPreferenceOut] = {}
             self.commitment_score_events: list[CommitmentScoreEventOut] = []
             self.groups: dict[str, GroupOut] = {}
@@ -507,6 +512,67 @@ class InMemoryRepository(Repository):
     def list_commitment_score_events(self, user_id: str) -> list[CommitmentScoreEventOut]:
         return [event for event in self.commitment_score_events if event.user_id == user_id]
 
+    # ── WhatsApp delivery state ───────────────────────────────────────
+
+    def _ensure_whatsapp_state(self, notification_id: str) -> dict[str, object]:
+        state = self._whatsapp_state.get(notification_id)
+        if state is None:
+            state = {
+                "attempted": False,
+                "delivered": None,
+                "provider_ref": None,
+                "failed_reason": None,
+                "status_received_at": None,
+            }
+            self._whatsapp_state[notification_id] = state
+        return state
+
+    def mark_whatsapp_attempted(self, notification_id: str, result: SendResult) -> None:
+        with self._lock:
+            state = self._ensure_whatsapp_state(notification_id)
+            state["attempted"] = True
+            if result.outcome == SendOutcome.sent:
+                state["provider_ref"] = result.provider_ref
+                # delivered stays None (attempted_unknown) until a webhook arrives.
+            else:
+                # blocked or error -> failed; record the reason.
+                state["delivered"] = False
+                state["failed_reason"] = result.failed_reason
+            for index, notification in enumerate(self.notifications):
+                if notification.id == notification_id:
+                    self.notifications[index] = notification.model_copy(update={"whatsapp_attempted": True})
+                    break
+
+    def apply_whatsapp_status(self, update: StatusUpdate) -> bool:
+        with self._lock:
+            for _notification_id, state in self._whatsapp_state.items():
+                if state.get("provider_ref") != update.provider_ref:
+                    continue
+                # Forward-only: delivered is sticky; failed after delivered is no-op.
+                already_delivered = state.get("delivered") is True
+                if update.status == "delivered" and not already_delivered:
+                    state["delivered"] = True
+                elif update.status == "failed" and not already_delivered:
+                    if state.get("delivered") is None:
+                        state["delivered"] = False
+                    if state.get("failed_reason") is None:
+                        state["failed_reason"] = update.failed_reason
+                if state.get("status_received_at") is None:
+                    state["status_received_at"] = update.occurred_at
+                return True
+            return False
+
+    def get_whatsapp_state(self, notification_id: str) -> dict[str, object] | None:
+        state = self._whatsapp_state.get(notification_id)
+        return dict(state) if state is not None else None
+
+    def get_merchant_notification_preference(
+        self, creditor_id: str, debtor_id: str
+    ) -> NotificationPreferenceOut | None:
+        # Stored keyed on (debtor_id, creditor_id) — debtor sets a preference
+        # against a particular creditor (merchant).
+        return self.notification_preferences.get((debtor_id, creditor_id))
+
     def create_group(self, owner_id: str, payload: GroupCreate) -> GroupOut:
         with self._lock:
             group = GroupOut(id=str(uuid4()), owner_id=owner_id, name=payload.name, description=payload.description, created_at=utcnow())
@@ -590,8 +656,6 @@ class InMemoryRepository(Repository):
         debt_id: str | None,
         merchant_id: str | None = None,
     ) -> NotificationOut:
-        preference = self.notification_preferences.get((user_id, merchant_id or ""))
-        whatsapp_attempted = bool(preference.whatsapp_enabled if preference else True)
         notification = NotificationOut(
             id=str(uuid4()),
             user_id=user_id,
@@ -599,11 +663,68 @@ class InMemoryRepository(Repository):
             title=title,
             body=body,
             debt_id=debt_id,
-            whatsapp_attempted=whatsapp_attempted,
+            whatsapp_attempted=False,
             created_at=utcnow(),
         )
         self.notifications.append(notification)
+        self._dispatch_whatsapp(notification, merchant_id=merchant_id, debt_id=debt_id)
         return notification
+
+    def _dispatch_whatsapp(
+        self,
+        notification: NotificationOut,
+        *,
+        merchant_id: str | None,
+        debt_id: str | None,
+    ) -> None:
+        # Lazy imports to avoid circulars at module load time.
+        from app.services.whatsapp import get_provider
+        from app.services.whatsapp.dispatch import (
+            DispatchContext,
+            build_default_template_params,
+            dispatch_notification,
+        )
+
+        recipient = self.profiles.get(notification.user_id)
+        if recipient is None:
+            return
+
+        creditor_id: str | None = None
+        debtor_id: str | None = None
+        creditor_name = ""
+        debtor_name = ""
+        amount = ""
+        currency = ""
+        due_date = ""
+        if debt_id and debt_id in self.debts:
+            debt = self.debts[debt_id]
+            creditor_id = debt.creditor_id
+            debtor_id = debt.debtor_id
+            creditor_profile = self.profiles.get(debt.creditor_id)
+            creditor_name = creditor_profile.name if creditor_profile else ""
+            debtor_name = debt.debtor_name
+            amount = str(debt.amount)
+            currency = debt.currency
+            due_date = debt.due_date.isoformat()
+        elif merchant_id:
+            creditor_id = merchant_id
+            debtor_id = notification.user_id
+
+        ctx = DispatchContext(
+            recipient=recipient,
+            sender_id=creditor_id,
+            creditor_id=creditor_id,
+            debtor_id=debtor_id,
+            template_params=build_default_template_params(
+                creditor_name=creditor_name,
+                debtor_name=debtor_name,
+                amount=amount,
+                currency=currency,
+                debt_link=f"/debts/{debt_id}" if debt_id else "",
+                due_date=due_date,
+            ),
+        )
+        dispatch_notification(notification, ctx, self, get_provider())
 
     def _change_commitment_score(
         self,
