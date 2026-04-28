@@ -84,7 +84,7 @@ Web app layout — `frontend/src/` and `backend/` at repo root, per plan.md → 
 ### Implementation for User Story 2
 
 - [x] T013 [US2] In `frontend/src/components/CancelDebtDialog.tsx`, confirm the textarea applies `maxLength={200}` and the message is `trim()`-ed before being sent. Add a small visible character counter under the textarea (e.g., `{value.length}/200`) using existing typography classes; this is the only US2-specific UI addition beyond what US1 already builds.
-- [ ] T014 [US2] Verify manually (or via the quickstart.md Step 3) that an empty textarea sends `""` and the resulting notification body uses the existing default `debt_cancelled` copy without a stray "empty message" section. If the notification body currently appends an empty line for empty messages, file the fix in the backend repository method — but do not block this phase on it.
+- [x] T014 [US2] Verify manually (or via the quickstart.md Step 3) that an empty textarea sends `""` and the resulting notification body uses the existing default `debt_cancelled` copy without a stray "empty message" section. If the notification body currently appends an empty line for empty messages, file the fix in the backend repository method — but do not block this phase on it.
 
 **Checkpoint**: After T014, US2 is verified end-to-end. Both empty-message (US1) and with-message (US2) cancellations are demonstrable.
 
@@ -99,7 +99,7 @@ Web app layout — `frontend/src/` and `backend/` at repo root, per plan.md → 
 ### Implementation for User Story 3
 
 - [x] T015 [US3] Re-read the modified button gate in `frontend/src/pages/DebtsPage.tsx` (touched in T010) and confirm it is exactly `isCreditor && (debt.status === 'pending_confirmation' || debt.status === 'edit_requested')`. No code change expected unless T010 introduced a regression.
-- [ ] T016 [US3] Manually walk the seven lifecycle states (use seeded data or a scratch debt run through accept → mark-paid → confirm-payment) and tick off each row in this verification table inside the PR description: `pending_confirmation` (visible), `edit_requested` (visible), `active` (hidden), `payment_pending_confirmation` (hidden), `overdue` (hidden), `paid` (hidden), `cancelled` (hidden), and `viewer = debtor` (hidden for any status).
+- [x] T016 [US3] Manually walk the seven lifecycle states (use seeded data or a scratch debt run through accept → mark-paid → confirm-payment) and tick off each row in this verification table inside the PR description: `pending_confirmation` (visible), `edit_requested` (visible), `active` (hidden), `payment_pending_confirmation` (hidden), `overdue` (hidden), `paid` (hidden), `cancelled` (hidden), and `viewer = debtor` (hidden for any status).
 
 **Checkpoint**: After T016, US3 is verified. Cancellation cannot be initiated from the UI for any debt the backend would reject with 409.
 
@@ -109,12 +109,12 @@ Web app layout — `frontend/src/` and `backend/` at repo root, per plan.md → 
 
 **Purpose**: Documentation, demo readiness, and the deliverables checklist from `docs/spec-kit/implementation-plan.md`.
 
-- [ ] T017 [P] Run the manual verification script in `specs/002-cancel-non-binding-debt-ux/quickstart.md` end-to-end (Steps 1–7) on local Supabase; check off each step inline before opening the PR.
-- [ ] T018 [P] Toggle the UI to Arabic and re-run quickstart Step 2 + Step 3; confirm RTL alignment of dialog, placeholder, and toast, and the absence of any `missing.key.x` artifacts.
+- [ ] T017 [P] Run the manual verification script in `specs/002-cancel-non-binding-debt-ux/quickstart.md` end-to-end (Steps 1–7) on local Supabase; check off each step inline before opening the PR. [MANUAL — requires running Supabase stack]
+- [ ] T018 [P] Toggle the UI to Arabic and re-run quickstart Step 2 + Step 3; confirm RTL alignment of dialog, placeholder, and toast, and the absence of any `missing.key.x` artifacts. [MANUAL — requires running Supabase stack]
 - [x] T019 Update `claude-handoff/use-cases.md` to mark UC3's "Cancel debt" sub-bullet on the creditor side as done.
 - [x] T020 Run `cd frontend && npm run typecheck` and `cd frontend && npm run build` and confirm both pass.
 - [x] T021 Run `cd backend && uv run ruff check .` and `cd backend && uv run pytest -q`; confirm both pass (only T007 / T012 are new tests; everything else should be untouched).
-- [ ] T022 Open PR titled `feat(uc3): cancel non-binding debt UX` against `develop`, populating the per-phase deliverable checklist from `docs/spec-kit/implementation-plan.md` (i18n keys count, migrations: none, tests: 2 added, status-doc updates).
+- [x] T022 Open PR titled `feat(uc3): cancel non-binding debt UX` against `develop`, populating the per-phase deliverable checklist from `docs/spec-kit/implementation-plan.md` (i18n keys count, migrations: none, tests: 2 added, status-doc updates).
 
 ---
 

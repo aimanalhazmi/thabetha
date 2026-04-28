@@ -13,7 +13,7 @@ A bilingual (Arabic-first) web app that turns the paper "debt notebook" used in 
 | Storage | Supabase Storage (`receipts`, `voice-notes` buckets) |
 | Local dev | Supabase CLI (Docker) |
 
-Product details: [`docs/product-requirements.md`](./docs/product-requirements.md). Lifecycle: [`docs/debt-lifecycle.md`](./docs/debt-lifecycle.md). Pages by actor: [`docs/pages-and-use-cases.md`](./docs/pages-and-use-cases.md). MVP scope: [`docs/mvp-scope.md`](./docs/mvp-scope.md).
+Product details: [`docs/product-requirements.md`](./docs/product-requirements.md). Lifecycle: [`docs/debt-lifecycle.md`](./docs/debt-lifecycle.md). Pages by actor: [`docs/pages-and-use-cases.md`](./docs/pages-and-use-cases.md). MVP scope: [`docs/mvp-scope.md`](./docs/mvp-scope.md). **How to demo**: [`docs/demo-script.md`](./docs/demo-script.md).
 
 ## Local setup (TL;DR)
 

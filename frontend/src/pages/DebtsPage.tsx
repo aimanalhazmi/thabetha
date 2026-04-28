@@ -6,6 +6,7 @@ import { CancelDebtDialog } from '../components/CancelDebtDialog';
 import { Input, Panel } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../lib/api';
+import { humanizeError } from '../lib/errors';
 import { t } from '../lib/i18n';
 import type { Attachment, Debt, DebtEvent, DebtStatus, Language, Profile, ReceiptUploadItem } from '../lib/types';
 
@@ -113,6 +114,7 @@ export function DebtsPage({ language }: Props) {
   // Debtor: id of the debt whose edit-request form is open, plus its draft fields.
   const [editingDebtId, setEditingDebtId] = useState<string | null>(null);
   const [cancelDialogDebtId, setCancelDialogDebtId] = useState<string | null>(null);
+  const [actionInFlight, setActionInFlight] = useState(false);
   const [editForm, setEditForm] = useState<{ message: string; requested_amount: string; requested_due_date: string; requested_description: string }>({
     message: '',
     requested_amount: '',
@@ -185,7 +187,7 @@ export function DebtsPage({ language }: Props) {
       setDebts(data);
       void loadAttachmentsForDebts(data);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Failed to load');
+      setMessage(humanizeError(err, language, 'loadDebts'));
     }
   }
 
@@ -383,12 +385,15 @@ export function DebtsPage({ language }: Props) {
   }
 
   async function runAction(action: () => Promise<unknown>, success: string) {
+    setActionInFlight(true);
     try {
       await action();
       setMessage(success);
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Action failed');
+      setMessage(humanizeError(err, language, 'transition'));
+    } finally {
+      setActionInFlight(false);
     }
   }
 
@@ -462,7 +467,7 @@ export function DebtsPage({ language }: Props) {
       await load();
       await loadAttachmentsForDebt(created.id);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Action failed');
+      setMessage(humanizeError(err, language, 'transition'));
     }
   }
 
@@ -662,8 +667,8 @@ export function DebtsPage({ language }: Props) {
               </span>
               <div className="actions">
                 {!isCreditor && (debt.status === 'pending_confirmation' || debt.status === 'edit_requested') && (
-                  <button onClick={() => void debtorAcceptDebt(debt.id)}>
-                    <Check size={16} /><span>{tr('accept')}</span>
+                  <button disabled={actionInFlight} onClick={() => void debtorAcceptDebt(debt.id)}>
+                    <Check size={16} /><span>{actionInFlight ? '…' : tr('accept')}</span>
                   </button>
                 )}
                 {!isCreditor && debt.status === 'pending_confirmation' && !isEditing && (
@@ -672,13 +677,13 @@ export function DebtsPage({ language }: Props) {
                   </button>
                 )}
                 {!isCreditor && (debt.status === 'active' || debt.status === 'overdue') && (
-                  <button onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/mark-paid`, { method: 'POST', body: JSON.stringify({ note: 'Paid' }) }), language === 'ar' ? 'تم طلب تأكيد الدفع' : 'Payment requested')}>
-                    <WalletCards size={16} /><span>{tr('markPaid')}</span>
+                  <button disabled={actionInFlight} onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/mark-paid`, { method: 'POST', body: JSON.stringify({ note: 'Paid' }) }), language === 'ar' ? 'تم طلب تأكيد الدفع' : 'Payment requested')}>
+                    <WalletCards size={16} /><span>{actionInFlight ? '…' : tr('markPaid')}</span>
                   </button>
                 )}
                 {isCreditor && debt.status === 'payment_pending_confirmation' && (
-                  <button onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/confirm-payment`, { method: 'POST' }), language === 'ar' ? 'تم تأكيد الدفع' : 'Payment confirmed')}>
-                    <Check size={16} /><span>{tr('confirmPayment')}</span>
+                  <button disabled={actionInFlight} onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/confirm-payment`, { method: 'POST' }), language === 'ar' ? 'تم تأكيد الدفع' : 'Payment confirmed')}>
+                    <Check size={16} /><span>{actionInFlight ? '…' : tr('confirmPayment')}</span>
                   </button>
                 )}
                 {isCreditor && (debt.status === 'pending_confirmation' || debt.status === 'edit_requested') && (

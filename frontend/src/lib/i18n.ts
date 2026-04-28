@@ -122,7 +122,14 @@ export type TranslationKey =
   | 'recentDebts'
   | 'allStatuses'
   | 'noDebtsYet'
+  | 'noNotificationsYet'
   | 'loading'
+  | 'errorGeneric'
+  | 'errorLoadDebts'
+  | 'errorLoadDashboard'
+  | 'errorLoadNotifications'
+  | 'errorTransitionStateChanged'
+  | 'errorTransitionForbidden'
   | 'selectAccountType'
   | 'selectAccountTypeDesc'
   | 'shopOwner'
@@ -298,6 +305,13 @@ const ar: Translations = {
   recentDebts: 'الديون الأخيرة',
   allStatuses: 'جميع الحالات',
   noDebtsYet: 'لا توجد ديون حتى الآن',
+  noNotificationsYet: 'لا توجد إشعارات حتى الآن',
+  errorGeneric: 'حدث خطأ، حاول مرة أخرى.',
+  errorLoadDebts: 'تعذّر تحميل الديون. حاول مرة أخرى.',
+  errorLoadDashboard: 'تعذّر تحميل لوحة التحكم. حاول مرة أخرى.',
+  errorLoadNotifications: 'تعذّر تحميل الإشعارات. حاول مرة أخرى.',
+  errorTransitionStateChanged: 'تغيّرت حالة هذا الدين — يرجى التحديث.',
+  errorTransitionForbidden: 'غير مسموح لك بتنفيذ هذا الإجراء.',
   loading: 'جاري التحميل...',
   selectAccountType: 'اختر نوع الحساب',
   selectAccountTypeDesc: 'كيف ستستخدم ثبتها؟',
@@ -473,6 +487,13 @@ const en: Translations = {
   recentDebts: 'Recent Debts',
   allStatuses: 'All Statuses',
   noDebtsYet: 'No debts yet',
+  noNotificationsYet: 'No notifications yet',
+  errorGeneric: 'Something went wrong, please try again.',
+  errorLoadDebts: "Couldn't load your debts. Please retry.",
+  errorLoadDashboard: "Couldn't load your dashboard. Please retry.",
+  errorLoadNotifications: "Couldn't load your notifications. Please retry.",
+  errorTransitionStateChanged: "This debt's status changed — please refresh.",
+  errorTransitionForbidden: "You're not allowed to perform this action.",
   loading: 'Loading...',
   selectAccountType: 'Select Account Type',
   selectAccountTypeDesc: 'How will you use Thabetha?',

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Panel, Stat } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../lib/api';
+import { humanizeError } from '../lib/errors';
 import { t } from '../lib/i18n';
 import type { Debt, Language, NotificationItem, Profile } from '../lib/types';
 
@@ -17,13 +18,16 @@ export function DashboardPage({ language, message }: Props) {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadAll = (initial: boolean) => {
-      if (initial) setLoading(true);
+      if (initial) { setLoading(true); setLoadError(null); }
       const promise = Promise.all([
         apiRequest<Profile>('/profiles/me').then(setProfile).catch(() => {}),
-        apiRequest<Debt[]>('/debts').then(setDebts).catch(() => {}),
+        apiRequest<Debt[]>('/debts').then(setDebts).catch((err) => {
+          if (initial) setLoadError(humanizeError(err, language, 'loadDashboard'));
+        }),
         apiRequest<NotificationItem[]>('/notifications').then(setNotifications).catch(() => {}),
       ]);
       if (initial) {
@@ -35,7 +39,7 @@ export function DashboardPage({ language, message }: Props) {
     loadAll(true);
     const interval = setInterval(() => loadAll(false), 30_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [language]);
 
   const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both' || user?.account_type === 'business';
   const isDebtor = user?.account_type === 'debtor' || user?.account_type === 'both';
@@ -53,6 +57,7 @@ export function DashboardPage({ language, message }: Props) {
     .reduce((sum, d) => sum + parseFloat(d.amount || '0'), 0);
 
   if (loading) return <p className="empty">{tr('loading')}</p>;
+  if (loadError) return <p className="empty">{loadError}</p>;
 
   return (
     <section className="content-grid">
