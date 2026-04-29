@@ -255,6 +255,30 @@ export interface VoiceDraft {
   field_confirmations: Record<'debtor_name' | 'amount' | 'currency' | 'description' | 'due_date', 'extracted_unconfirmed' | 'missing' | 'confirmed' | 'edited'>;
 }
 
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ToolTraceEntry {
+  tool: 'list_debts' | 'get_debt' | 'get_dashboard_summary' | 'get_commitment_history';
+  outcome: 'ok' | 'error' | 'empty';
+  duration_ms: number;
+}
+
+export interface MerchantChatRequest {
+  message: string;
+  history?: ChatTurn[];
+  locale?: Language;
+  timezone?: string;
+}
+
+export interface MerchantChatResponse {
+  answer: string;
+  facts: Record<string, unknown>;
+  tool_trace?: ToolTraceEntry[] | null;
+}
+
 export interface PayOnlineResult {
   payment_intent_id: string;
   checkout_url: string;

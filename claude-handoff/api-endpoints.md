@@ -66,3 +66,12 @@ Added in feature 009. All endpoints require the caller to be an accepted member.
 | GET | `/{group_id}/settlement-proposals/{pid}` | 200 / 404 | Get a single proposal. Triggers lazy expiry/reminder sweep. `snapshot` field is null for observers. |
 | POST | `/{group_id}/settlement-proposals/{pid}/confirm` | 200 / 403 / 409 | Required party confirms. 403: `NotARequiredParty`. 409: `ProposalNotOpen`, `AlreadyResponded`. |
 | POST | `/{group_id}/settlement-proposals/{pid}/reject` | 200 / 403 / 409 | Required party rejects. Same error codes as confirm. |
+
+### AI tier (`/api/v1/ai/`)
+
+All endpoints hard-gated on `profile.ai_enabled` (returns 403). Per-user daily quota enforced.
+
+| Method | Path | Status codes | Description |
+|---|---|---|---|
+| POST | `/ai/debt-draft-from-voice` | 200 / 403 / 413 / 415 / 422 / 429 | Phase 12 — extract a `DebtCreate` draft from a transcript or audio file. |
+| POST | `/ai/merchant-chat` | 200 / 403 / 422 / 429 / 503 | Phase 13 — grounded merchant chat. Body: `{message, history?, locale?, timezone?}`. Response: `{answer, facts, tool_trace?}`. 503 (`ai_provider_unavailable`) does **not** consume daily quota. |

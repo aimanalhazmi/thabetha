@@ -126,6 +126,18 @@ export type TranslationKey =
   | 'voiceTranscript'
   | 'draft'
   | 'askMerchantBot'
+  | 'chatPlaceholder'
+  | 'chatSend'
+  | 'chatClear'
+  | 'chatNoData'
+  | 'chatDisabled'
+  | 'chatQuotaExceeded'
+  | 'chatProviderUnavailable'
+  | 'chatErrorGeneric'
+  | 'chatHistoryTrimmed'
+  | 'chatLocaleHint'
+  | 'merchantChatTitle'
+  | 'merchantChatSubtitle'
   | 'voiceDraftTitle'
   | 'voiceDraftRecord'
   | 'voiceDraftUpload'
@@ -433,6 +445,18 @@ const ar: Translations = {
   voiceTranscript: 'النص الصوتي',
   draft: 'مسودة',
   askMerchantBot: 'اسأل مساعد التاجر',
+  chatPlaceholder: 'اسأل عن دفترك… مثل: "من يدين لي بأكبر مبلغ؟"',
+  chatSend: 'إرسال',
+  chatClear: 'مسح المحادثة',
+  chatNoData: 'لا أملك هذه المعلومات.',
+  chatDisabled: 'ميزات الذكاء الاصطناعي غير مفعّلة لحسابك.',
+  chatQuotaExceeded: 'تم بلوغ الحد اليومي. حاول لاحقًا.',
+  chatProviderUnavailable: 'تعذّر الوصول إلى المساعد. حاول مرة أخرى.',
+  chatErrorGeneric: 'حدث خطأ. حاول مرة أخرى.',
+  chatHistoryTrimmed: 'يتم الاحتفاظ بآخر 10 رسائل فقط.',
+  chatLocaleHint: 'سيرد المساعد بنفس لغة سؤالك.',
+  merchantChatTitle: 'محادثة مرتكزة على دفترك',
+  merchantChatSubtitle: 'إجابات مبنية على بيانات دفترك أنت فقط.',
   voiceDraftTitle: 'مسودة دين بالصوت',
   voiceDraftRecord: 'تسجيل صوتي',
   voiceDraftUpload: 'رفع ملف صوتي',
@@ -739,6 +763,18 @@ const en: Translations = {
   voiceTranscript: 'Voice Transcript',
   draft: 'Draft',
   askMerchantBot: 'Ask Merchant Bot',
+  chatPlaceholder: 'Ask about your ledger… e.g. "Who owes me the most?"',
+  chatSend: 'Send',
+  chatClear: 'Clear chat',
+  chatNoData: "I don't have that information.",
+  chatDisabled: 'AI features are not enabled for your account.',
+  chatQuotaExceeded: 'Daily limit reached. Try again later.',
+  chatProviderUnavailable: "Couldn't reach the assistant. Please try again.",
+  chatErrorGeneric: 'Something went wrong. Try again.',
+  chatHistoryTrimmed: 'Only the last 10 messages are kept.',
+  chatLocaleHint: 'The assistant replies in the language of your question.',
+  merchantChatTitle: 'Grounded merchant chat',
+  merchantChatSubtitle: 'Answers grounded in your own ledger only.',
   voiceDraftTitle: 'Voice debt draft',
   voiceDraftRecord: 'Record audio',
   voiceDraftUpload: 'Upload audio',

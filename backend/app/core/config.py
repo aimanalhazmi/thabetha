@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     ai_voice_draft_daily_limit: int = 50
     ai_voice_max_duration_seconds: int = 60
     ai_voice_notes_bucket: str = "voice-notes"
+
+    anthropic_api_key: str | None = None
+    merchant_chat_provider: Literal["anthropic", "mock", "stub"] = "mock"
+    merchant_chat_model: str = "claude-sonnet-4-6"
+    ai_merchant_chat_daily_limit: int = 50
+    merchant_chat_log_salt: str = "dev-salt"
     whatsapp_provider: str = "mock"
     whatsapp_access_token: str | None = None
     whatsapp_from_number: str | None = None
