@@ -117,7 +117,6 @@ def test_pay_online_expired_intent_allows_retry(client: TestClient, reset_reposi
     # Force-expire the intent
     pi = next(pi for pi in reset_repository.payment_intents.values() if pi.debt_id == debt["id"])
     from app.schemas.domain import utcnow
-    from datetime import timedelta
     reset_repository.payment_intents[pi.id] = pi.model_copy(
         update={"expires_at": utcnow() - timedelta(minutes=1)}
     )

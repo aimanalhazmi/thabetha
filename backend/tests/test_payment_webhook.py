@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -63,7 +62,6 @@ def _send_webhook(client: TestClient, provider_ref: str, gateway_status: str = "
 def test_webhook_success_transitions_debt_to_paid(client: TestClient, reset_repository: InMemoryRepository) -> None:
     debt = _active_debt(client, "cred-1", "debt-1")
     intent = _pay_online(client, debt["id"], "debt-1")
-    provider_ref = intent["payment_intent_id"]  # mock uses intent id as provider_ref
 
     # Override the provider_ref in the intent so we can send it in the webhook
     pi = reset_repository.payment_intents.get(intent["payment_intent_id"])

@@ -161,5 +161,12 @@ Tests use `FastAPI.TestClient` via the `client` fixture. `conftest.py` forces `R
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at `specs/007-payment-gateway-settlement/plan.md`.
+at `specs/008-groups-mvp-surface/plan.md`.
 <!-- SPECKIT END -->
+
+## Active Technologies
+- Python 3.12 (backend), TypeScript 5.x strict (frontend), SQL (Supabase Postgres 15). + FastAPI, Pydantic v2, `@supabase/supabase-js`, React 19 + Vite + React Router. No new dependencies. (008-groups-mvp-surface)
+- Supabase Postgres. New audit table `group_events` and one new column on `profiles` (`groups_enabled`); enum widening for `group_members.status`; new partial-unique live-row index; `groups.updated_at` column. (008-groups-mvp-surface)
+
+## Recent Changes
+- 008-groups-mvp-surface: Added Python 3.12 (backend), TypeScript 5.x strict (frontend), SQL (Supabase Postgres 15). + FastAPI, Pydantic v2, `@supabase/supabase-js`, React 19 + Vite + React Router. No new dependencies.

@@ -5,14 +5,21 @@ import { useAuth } from '../contexts/AuthContext';
 import { t, type TranslationKey } from '../lib/i18n';
 import type { AccountType, Language } from '../lib/types';
 
-type NavItem = { path: string; icon: typeof LayoutDashboard; label: TranslationKey; roles?: Array<AccountType> };
+type NavItem = {
+  path: string;
+  icon: typeof LayoutDashboard;
+  label: TranslationKey;
+  roles?: Array<AccountType>;
+  /** Optional gate keyed off the live profile (e.g. groups_enabled). */
+  visible?: (user: { account_type: AccountType; groups_enabled?: boolean } | null) => boolean;
+};
 
 const navItems: NavItem[] = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'dashboard' },
   { path: '/debts', icon: CreditCard, label: 'debts' },
   { path: '/profile', icon: UserRound, label: 'profile' },
   { path: '/qr', icon: QrCode, label: 'qr' }, // creditor: scanner; debtor: own QR
-  { path: '/groups', icon: Users, label: 'groups', roles: ['debtor', 'both'] },
+  { path: '/groups', icon: Users, label: 'groups', visible: (u) => u?.groups_enabled !== false },
   { path: '/ai', icon: Bot, label: 'ai', roles: ['creditor', 'both', 'business'] },
   { path: '/notifications', icon: Bell, label: 'notifications' },
   { path: '/settings', icon: Settings, label: 'settings' },
@@ -79,6 +86,7 @@ export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel
           <div className="nav-list">
             {navItems
               .filter((item) => !item.roles || (user && item.roles.includes(user.account_type)))
+              .filter((item) => !item.visible || item.visible(user))
               .map((item) => {
               const Icon = item.icon;
               return (

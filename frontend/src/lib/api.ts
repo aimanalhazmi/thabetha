@@ -1,4 +1,12 @@
-import type { PaymentIntent, PayOnlineResult } from './types';
+import type {
+  Debt,
+  Group,
+  GroupDetail,
+  GroupInviteIn,
+  GroupMember,
+  PaymentIntent,
+  PayOnlineResult,
+} from './types';
 import { supabase } from './supabaseClient';
 
 const API_BASE = '/api/v1';
@@ -47,3 +55,49 @@ export async function payOnline(debtId: string): Promise<PayOnlineResult> {
 export async function getPaymentIntent(debtId: string): Promise<PaymentIntent> {
   return apiRequest<PaymentIntent>(`/debts/${debtId}/payment-intent`);
 }
+
+/** Read the `code` from a backend error body, if present. Falls back to ''. */
+export function errorCode(err: unknown): string {
+  if (err instanceof Error) {
+    const match = err.message.match(/^(\d+):\s*(.*)$/s);
+    if (match) {
+      try {
+        const body = JSON.parse(match[2]);
+        const detail = body?.detail;
+        if (typeof detail === 'object' && detail && typeof detail.code === 'string') {
+          return detail.code;
+        }
+      } catch {
+        return '';
+      }
+    }
+  }
+  return '';
+}
+
+export const groups = {
+  list: () => apiRequest<Group[]>('/groups'),
+  create: (body: { name: string; description?: string }) =>
+    apiRequest<Group>('/groups', { method: 'POST', body: JSON.stringify(body) }),
+  get: (id: string) => apiRequest<GroupDetail>(`/groups/${id}`),
+  members: (id: string) => apiRequest<GroupMember[]>(`/groups/${id}/members`),
+  pendingInvites: (id: string) => apiRequest<GroupMember[]>(`/groups/${id}/invites`),
+  invite: (id: string, body: GroupInviteIn) =>
+    apiRequest<GroupMember>(`/groups/${id}/invite`, { method: 'POST', body: JSON.stringify(body) }),
+  accept: (id: string) => apiRequest<GroupMember>(`/groups/${id}/accept`, { method: 'POST' }),
+  decline: (id: string) => apiRequest<GroupMember>(`/groups/${id}/decline`, { method: 'POST' }),
+  leave: (id: string) => apiRequest<GroupMember>(`/groups/${id}/leave`, { method: 'POST' }),
+  rename: (id: string, name: string) =>
+    apiRequest<Group>(`/groups/${id}/rename`, { method: 'POST', body: JSON.stringify({ name }) }),
+  transferOwnership: (id: string, newOwnerUserId: string) =>
+    apiRequest<Group>(`/groups/${id}/transfer-ownership`, {
+      method: 'POST',
+      body: JSON.stringify({ new_owner_user_id: newOwnerUserId }),
+    }),
+  delete: (id: string) => apiRequest<void>(`/groups/${id}`, { method: 'DELETE' }),
+  revokeInvite: (id: string, userId: string) =>
+    apiRequest<void>(`/groups/${id}/invites/${userId}`, { method: 'DELETE' }),
+  debts: (id: string) => apiRequest<Debt[]>(`/groups/${id}/debts`),
+  shared: (withUserId: string) =>
+    apiRequest<Group[]>(`/groups/shared?with_user_id=${encodeURIComponent(withUserId)}`),
+};

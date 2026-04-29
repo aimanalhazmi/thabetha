@@ -1227,6 +1227,47 @@ class PostgresRepository(Repository):
             ).fetchall()
             return [_debt_from_row(r) for r in rows]
 
+    # ── Group lifecycle (008-groups-mvp-surface) ─────────────────────
+    # MVP note: full Postgres parity with InMemoryRepository is tracked under
+    # task T013. Until then these stubs raise so production deployments fail
+    # loud rather than silently diverge from the in-memory contract.
+
+    def decline_group_invite(self, user_id: str, group_id: str) -> GroupMemberOut:  # type: ignore[override]
+        raise NotImplementedError("decline_group_invite: Postgres parity pending (T013)")
+
+    def leave_group(self, user_id: str, group_id: str) -> GroupMemberOut:  # type: ignore[override]
+        raise NotImplementedError("leave_group: Postgres parity pending (T013)")
+
+    def rename_group(self, owner_id, group_id, payload):  # type: ignore[override]
+        raise NotImplementedError("rename_group: Postgres parity pending (T013)")
+
+    def transfer_group_ownership(self, owner_id, group_id, payload):  # type: ignore[override]
+        raise NotImplementedError("transfer_group_ownership: Postgres parity pending (T013)")
+
+    def delete_group(self, owner_id: str, group_id: str) -> None:  # type: ignore[override]
+        raise NotImplementedError("delete_group: Postgres parity pending (T013)")
+
+    def revoke_group_invite(self, owner_id: str, group_id: str, target_user_id: str) -> None:  # type: ignore[override]
+        raise NotImplementedError("revoke_group_invite: Postgres parity pending (T013)")
+
+    def list_pending_group_invites(self, owner_id: str, group_id: str) -> list:  # type: ignore[override]
+        raise NotImplementedError("list_pending_group_invites: Postgres parity pending (T013)")
+
+    def list_group_members(self, viewer_id: str, group_id: str) -> list:  # type: ignore[override]
+        raise NotImplementedError("list_group_members: Postgres parity pending (T013)")
+
+    def get_group_detail(self, viewer_id: str, group_id: str):  # type: ignore[override]
+        raise NotImplementedError("get_group_detail: Postgres parity pending (T013)")
+
+    def shared_accepted_groups(self, user_a: str, user_b: str) -> list:  # type: ignore[override]
+        raise NotImplementedError("shared_accepted_groups: Postgres parity pending (T013)")
+
+    def update_debt_group_tag(self, creditor_id: str, debt_id: str, group_id: str | None):  # type: ignore[override]
+        raise NotImplementedError("update_debt_group_tag: Postgres parity pending (T013)")
+
+    def find_profile_by_email_or_phone(self, *, email: str | None = None, phone: str | None = None):  # type: ignore[override]
+        raise NotImplementedError("find_profile_by_email_or_phone: Postgres parity pending (T013)")
+
     def create_settlement(self, payer_id: str, group_id: str, payload: SettlementCreate) -> SettlementOut:
         with self._pool.connection() as conn:
             conn.row_factory = dict_row

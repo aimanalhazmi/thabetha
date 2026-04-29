@@ -22,7 +22,7 @@ State of the Supabase Postgres database after all migrations (`supabase/migratio
 | `account_type` | `creditor`, `debtor`, `both`, `business` |
 | `debt_status` | `pending_confirmation`, `active`, `edit_requested`, `overdue`, `payment_pending_confirmation`, `paid`, `cancelled` (no `rejected` after 006) |
 | `attachment_type` | `invoice`, `voice_note`, `other` |
-| `group_member_status` | `pending`, `accepted` |
+| `group_member_status` | `pending`, `accepted`, `declined`, `left` (widened in migration 011) |
 
 ## Tables
 
@@ -40,6 +40,7 @@ State of the Supabase Postgres database after all migrations (`supabase/migratio
 | `commercial_registration` | text | |
 | `whatsapp_enabled` | boolean NOT NULL DEFAULT `true` | Global toggle |
 | `ai_enabled` | boolean NOT NULL DEFAULT `false` | Hard-gates `/api/v1/ai/*` |
+| `groups_enabled` | boolean NOT NULL DEFAULT `true` | Hides Groups nav item when false (migration 011) |
 | `commitment_score` | int NOT NULL DEFAULT `50`, CHECK between 0 and 100 | |
 | `created_at`, `updated_at` | timestamptz NOT NULL DEFAULT `now()` | |
 
@@ -130,8 +131,40 @@ RLS: `auth.uid() = user_id`.
 | `expires_at` | timestamptz NOT NULL | TTL ~10 min |
 | `created_at` | timestamptz NOT NULL | |
 
-### `public.groups`, `public.group_members`, `public.group_settlements`
-Standard ownership-and-membership shape. `group_members` has `(group_id, user_id)` UNIQUE; status is `pending` until `accepted_at`. `group_settlements` is RLS-scoped to accepted members of the group.
+### `public.groups`
+| Column | Notes |
+|---|---|
+| `id` | uuid PK |
+| `owner_id` | uuid FK → `profiles(id)` ON DELETE CASCADE |
+| `name` | text NOT NULL |
+| `updated_at` | timestamptz NOT NULL DEFAULT `now()`, updated via trigger `touch_groups_updated_at` (migration 011) |
+| `created_at` | timestamptz NOT NULL |
+
+### `public.group_members`
+Partial-unique index `ux_group_members_live` on `(group_id, user_id) WHERE status IN ('pending','accepted')` replaces the old flat unique constraint (migration 011). Previous `declined`/`left` rows are retained for history.
+
+| Column | Notes |
+|---|---|
+| `id` | uuid PK |
+| `group_id` | uuid FK → `groups(id)` ON DELETE CASCADE |
+| `user_id` | uuid FK → `profiles(id)` ON DELETE CASCADE |
+| `status` | `group_member_status` — `pending`/`accepted`/`declined`/`left` |
+| `invited_at`, `accepted_at` | timestamptz |
+
+### `public.group_events`
+Append-only audit log, one row per group state transition (migration 011).
+
+| Column | Notes |
+|---|---|
+| `id` | uuid PK |
+| `group_id` | uuid FK → `groups(id)` ON DELETE SET NULL — preserved after group deletion |
+| `actor_id` | uuid FK → `profiles(id)` ON DELETE SET NULL |
+| `event_type` | text (e.g. `group_created`, `member_invited`, `member_accepted`, `group_renamed`, `ownership_transferred`, `group_deleted`) |
+| `metadata` | jsonb |
+| `created_at` | timestamptz NOT NULL |
+
+### `public.group_settlements`
+RLS-scoped to accepted members of the group.
 
 ### `public.notifications`
 

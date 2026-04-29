@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AttachmentUploader } from '../components/AttachmentUploader';
 import { CancelDebtDialog } from '../components/CancelDebtDialog';
+import { GroupSelector } from '../components/GroupSelector';
 import { Input, Panel } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest, payOnline } from '../lib/api';
@@ -110,6 +111,7 @@ export function DebtsPage({ language }: Props) {
   });
   const [reminderPresets, setReminderPresets] = useState<Set<number>>(new Set([3]));
   const [reminderCustom, setReminderCustom] = useState<string>('');
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
   // Debtor: id of the debt whose edit-request form is open, plus its draft fields.
   const [editingDebtId, setEditingDebtId] = useState<string | null>(null);
@@ -434,7 +436,7 @@ export function DebtsPage({ language }: Props) {
     try {
       const created = await apiRequest<Debt>('/debts', {
         method: 'POST',
-        body: JSON.stringify({ ...debtForm, reminder_dates: reminderDates }),
+        body: JSON.stringify({ ...debtForm, reminder_dates: reminderDates, ...(selectedGroupId ? { group_id: selectedGroupId } : {}) }),
       });
 
       const uploadable = receiptItems.filter(canUploadReceipt);
@@ -456,6 +458,7 @@ export function DebtsPage({ language }: Props) {
         setMessage(tr('receiptUploadFailed'));
       } else {
         setReceiptItems([]);
+        setSelectedGroupId(null);
         setMessage(tr('toastDebtCreated'));
       }
       // T013: strip qr_token from URL after success (client-side single-use)
@@ -585,6 +588,12 @@ export function DebtsPage({ language }: Props) {
           {debtorSource !== 'qr-resolved' && (
             <Input label={tr('debtorId')} value={debtForm.debtor_id} onChange={(v) => setDebtForm({ ...debtForm, debtor_id: v })} placeholder={tr('debtorIdPlaceholder')} disabled={debtorSource === 'qr-resolving'} />
           )}
+          <GroupSelector
+            debtorId={debtForm.debtor_id || null}
+            value={selectedGroupId}
+            onChange={setSelectedGroupId}
+            language={language}
+          />
           <Input label={tr('amount')} value={debtForm.amount} onChange={(v) => setDebtForm({ ...debtForm, amount: v })} disabled={debtorSource === 'qr-resolving'} />
           <Input label={tr('currency')} value={debtForm.currency} onChange={(v) => setDebtForm({ ...debtForm, currency: v })} disabled={debtorSource === 'qr-resolving'} />
           <Input label={tr('description')} value={debtForm.description} onChange={(v) => setDebtForm({ ...debtForm, description: v })} disabled={debtorSource === 'qr-resolving'} />
@@ -723,9 +732,22 @@ export function DebtsPage({ language }: Props) {
                   </button>
                 )}
                 {isCreditor && (debt.status === 'pending_confirmation' || debt.status === 'edit_requested') && (
-                  <button onClick={() => setCancelDialogDebtId(debt.id)}>
-                    <X size={16} /><span>{tr('cancel_debt')}</span>
-                  </button>
+                  <>
+                    <button onClick={() => setCancelDialogDebtId(debt.id)}>
+                      <X size={16} /><span>{tr('cancel_debt')}</span>
+                    </button>
+                    {debt.debtor_id && (
+                      <GroupSelector
+                        debtorId={debt.debtor_id}
+                        value={debt.group_id ?? null}
+                        onChange={(gid) => {
+                          void apiRequest(`/debts/${debt.id}`, { method: 'PATCH', body: JSON.stringify({ group_id: gid }) })
+                            .then(() => load());
+                        }}
+                        language={language}
+                      />
+                    )}
+                  </>
                 )}
               </div>
 

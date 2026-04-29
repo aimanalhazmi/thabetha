@@ -27,10 +27,13 @@ from app.schemas.domain import (
     DebtOut,
     DebtStatus,
     GroupCreate,
+    GroupDetailOut,
     GroupInviteIn,
     GroupMemberOut,
     GroupMemberStatus,
     GroupOut,
+    GroupOwnershipTransferIn,
+    GroupRenameIn,
     NotificationOut,
     NotificationPreferenceIn,
     NotificationPreferenceOut,
@@ -198,6 +201,12 @@ class InMemoryRepository(Repository):
     def create_debt(self, creditor_id: str, payload: DebtCreate) -> DebtOut:
         with self._lock:
             self._refresh_overdue()
+            if payload.group_id:
+                if not payload.debtor_id:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": "DebtorRequired", "message": "Group tag requires a registered debtor."})
+                shared = {g.id for g in self.shared_accepted_groups(creditor_id, payload.debtor_id)}
+                if payload.group_id not in shared:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "NotInSharedGroup", "message": "Both parties must be accepted members of the group."})
             now = utcnow()
             debt = DebtOut(
                 id=str(uuid4()),
@@ -577,44 +586,228 @@ class InMemoryRepository(Repository):
         # against a particular creditor (merchant).
         return self.notification_preferences.get((debtor_id, creditor_id))
 
+    GROUP_MEMBER_CAP = 20
+
+    def _enrich_member(self, member: GroupMemberOut) -> GroupMemberOut:
+        profile = self.profiles.get(member.user_id)
+        if profile is None:
+            return member
+        return member.model_copy(update={"name": profile.name, "commitment_score": profile.commitment_score})
+
+    def _group_member_count(self, group_id: str, *, statuses: tuple[GroupMemberStatus, ...] = (GroupMemberStatus.accepted,)) -> int:
+        return sum(1 for m in self.group_members if m.group_id == group_id and m.status in statuses)
+
+    def _group_with_count(self, group: GroupOut) -> GroupOut:
+        return group.model_copy(update={"member_count": self._group_member_count(group.id)})
+
+    def find_profile_by_email_or_phone(self, *, email: str | None = None, phone: str | None = None) -> ProfileOut | None:
+        if email:
+            email_l = email.strip().lower()
+            for p in self.profiles.values():
+                if p.email and p.email.lower() == email_l:
+                    return p
+        if phone:
+            phone_n = phone.strip()
+            for p in self.profiles.values():
+                if p.phone and p.phone == phone_n:
+                    return p
+        return None
+
+    def _resolve_invite_target(self, payload: GroupInviteIn) -> str:
+        if payload.user_id is not None:
+            if payload.user_id not in self.profiles:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotPlatformUser", "message": "Recipient is not a platform user."})
+            return payload.user_id
+        profile = self.find_profile_by_email_or_phone(email=payload.email, phone=payload.phone)
+        if profile is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotPlatformUser", "message": "Recipient is not a platform user."})
+        return profile.id
+
     def create_group(self, owner_id: str, payload: GroupCreate) -> GroupOut:
         with self._lock:
-            group = GroupOut(id=str(uuid4()), owner_id=owner_id, name=payload.name, description=payload.description, created_at=utcnow())
+            now = utcnow()
+            group = GroupOut(id=str(uuid4()), owner_id=owner_id, name=payload.name, description=payload.description, created_at=now, updated_at=now, member_count=1)
             self.groups[group.id] = group
             self.group_members.append(
-                GroupMemberOut(id=str(uuid4()), group_id=group.id, user_id=owner_id, status=GroupMemberStatus.accepted, created_at=utcnow(), accepted_at=utcnow())
+                GroupMemberOut(id=str(uuid4()), group_id=group.id, user_id=owner_id, status=GroupMemberStatus.accepted, created_at=now, accepted_at=now)
             )
-            return group
+            return self._group_with_count(group)
 
     def list_groups(self, user_id: str) -> list[GroupOut]:
-        group_ids = self._accepted_group_ids(user_id)
-        return [group for group in self.groups.values() if group.id in group_ids]
+        live = {GroupMemberStatus.pending, GroupMemberStatus.accepted}
+        my_groups: list[tuple[GroupMemberStatus, GroupOut]] = []
+        seen: set[str] = set()
+        for member in self.group_members:
+            if member.user_id != user_id or member.status not in live or member.group_id in seen:
+                continue
+            group = self.groups.get(member.group_id)
+            if group is None:
+                continue
+            seen.add(member.group_id)
+            enriched = self._group_with_count(group).model_copy(update={"member_status": member.status})
+            my_groups.append((member.status, enriched))
+        my_groups.sort(key=lambda pair: (0 if pair[0] == GroupMemberStatus.accepted else 1, -(pair[1].updated_at or pair[1].created_at).timestamp()))
+        return [g for _, g in my_groups]
 
     def invite_group_member(self, actor_id: str, group_id: str, payload: GroupInviteIn) -> GroupMemberOut:
         with self._lock:
             group = self._require_group_owner(actor_id, group_id)
+            target_id = self._resolve_invite_target(payload)
+            if target_id == actor_id:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": "InviteToSelf", "message": "Cannot invite yourself."})
             for member in self.group_members:
-                if member.group_id == group.id and member.user_id == payload.user_id:
-                    return member
-            member = GroupMemberOut(id=str(uuid4()), group_id=group.id, user_id=payload.user_id, status=GroupMemberStatus.pending, created_at=utcnow())
+                if member.group_id == group.id and member.user_id == target_id and member.status in (GroupMemberStatus.pending, GroupMemberStatus.accepted):
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "AlreadyMember", "message": "Recipient is already a member or has a pending invite.", "status": member.status.value})
+            member = GroupMemberOut(id=str(uuid4()), group_id=group.id, user_id=target_id, status=GroupMemberStatus.pending, created_at=utcnow())
             self.group_members.append(member)
-            self._notify(payload.user_id, NotificationType.debt_created, "Group invitation", f"You were invited to {group.name}", None)
-            return member
+            self._notify(target_id, NotificationType.group_invite, "Group invitation", f"You were invited to {group.name}", None)
+            return self._enrich_member(member)
 
     def accept_group_invite(self, user_id: str, group_id: str) -> GroupMemberOut:
         with self._lock:
+            group = self.groups.get(group_id)
+            if group is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NoPendingInvite", "message": "No pending invite for this group."})
+            target_index: int | None = None
             for index, member in enumerate(self.group_members):
-                if member.group_id == group_id and member.user_id == user_id:
-                    updated = member.model_copy(update={"status": GroupMemberStatus.accepted, "accepted_at": utcnow()})
+                if member.group_id == group_id and member.user_id == user_id and member.status == GroupMemberStatus.pending:
+                    target_index = index
+                    break
+            if target_index is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NoPendingInvite", "message": "No pending invite for this group."})
+            if self._group_member_count(group_id) >= self.GROUP_MEMBER_CAP:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "GroupFull", "message": f"Group is full (max {self.GROUP_MEMBER_CAP} members)."})
+            updated = self.group_members[target_index].model_copy(update={"status": GroupMemberStatus.accepted, "accepted_at": utcnow()})
+            self.group_members[target_index] = updated
+            self._notify(group.owner_id, NotificationType.group_invite_accepted, "Invitation accepted", f"{user_id} joined {group.name}", None)
+            return self._enrich_member(updated)
+
+    def decline_group_invite(self, user_id: str, group_id: str) -> GroupMemberOut:
+        with self._lock:
+            for index, member in enumerate(self.group_members):
+                if member.group_id == group_id and member.user_id == user_id and member.status == GroupMemberStatus.pending:
+                    updated = member.model_copy(update={"status": GroupMemberStatus.declined})
                     self.group_members[index] = updated
-                    return updated
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group invitation not found")
+                    return self._enrich_member(updated)
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NoPendingInvite", "message": "No pending invite for this group."})
+
+    def leave_group(self, user_id: str, group_id: str) -> GroupMemberOut:
+        with self._lock:
+            group = self.groups.get(group_id)
+            if group is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotAGroupMember", "message": "Group not found."})
+            if group.owner_id == user_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "OwnerCannotLeave", "message": "Owner must transfer ownership before leaving."})
+            for index, member in enumerate(self.group_members):
+                if member.group_id == group_id and member.user_id == user_id and member.status == GroupMemberStatus.accepted:
+                    updated = member.model_copy(update={"status": GroupMemberStatus.left})
+                    self.group_members[index] = updated
+                    return self._enrich_member(updated)
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotAGroupMember", "message": "You are not an accepted member."})
+
+    def rename_group(self, owner_id: str, group_id: str, payload: GroupRenameIn) -> GroupOut:
+        with self._lock:
+            group = self._require_group_owner(owner_id, group_id)
+            updated = group.model_copy(update={"name": payload.name, "updated_at": utcnow()})
+            self.groups[group_id] = updated
+            return self._group_with_count(updated)
+
+    def transfer_group_ownership(self, owner_id: str, group_id: str, payload: GroupOwnershipTransferIn) -> GroupOut:
+        with self._lock:
+            group = self._require_group_owner(owner_id, group_id)
+            target = payload.new_owner_user_id
+            if target == owner_id:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": "SameOwner", "message": "Target is already the owner."})
+            target_member = next((m for m in self.group_members if m.group_id == group_id and m.user_id == target and m.status == GroupMemberStatus.accepted), None)
+            if target_member is None:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "NotAGroupMember", "message": "Target must be an accepted member."})
+            updated = group.model_copy(update={"owner_id": target, "updated_at": utcnow()})
+            self.groups[group_id] = updated
+            self._notify(target, NotificationType.group_ownership_transferred, "You're now the owner", f"You are now the owner of {group.name}", None)
+            return self._group_with_count(updated)
+
+    def delete_group(self, owner_id: str, group_id: str) -> None:
+        with self._lock:
+            self._require_group_owner(owner_id, group_id)
+            attached = sum(1 for d in self.debts.values() if d.group_id == group_id)
+            if attached > 0:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "GroupHasDebts", "message": "Group has attached debts. Settle or detach them first.", "count": attached})
+            self.group_members = [m for m in self.group_members if m.group_id != group_id]
+            self.settlements = [s for s in self.settlements if s.group_id != group_id]
+            self.groups.pop(group_id, None)
+
+    def revoke_group_invite(self, owner_id: str, group_id: str, target_user_id: str) -> None:
+        with self._lock:
+            self._require_group_owner(owner_id, group_id)
+            for index, member in enumerate(self.group_members):
+                if member.group_id == group_id and member.user_id == target_user_id and member.status == GroupMemberStatus.pending:
+                    self.group_members.pop(index)
+                    return
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NoPendingInvite", "message": "No pending invite for this user."})
+
+    def list_pending_group_invites(self, owner_id: str, group_id: str) -> list[GroupMemberOut]:
+        self._require_group_owner(owner_id, group_id)
+        return [self._enrich_member(m) for m in self.group_members if m.group_id == group_id and m.status == GroupMemberStatus.pending]
+
+    def list_group_members(self, viewer_id: str, group_id: str) -> list[GroupMemberOut]:
+        group = self.groups.get(group_id)
+        if group is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotAGroupMember", "message": "Group not found."})
+        is_member = any(m.group_id == group_id and m.user_id == viewer_id and m.status == GroupMemberStatus.accepted for m in self.group_members)
+        if not is_member:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "NotAGroupMember", "message": "You are not an accepted member."})
+        accepted = [self._enrich_member(m) for m in self.group_members if m.group_id == group_id and m.status == GroupMemberStatus.accepted]
+        if group.owner_id == viewer_id:
+            accepted.extend(self._enrich_member(m) for m in self.group_members if m.group_id == group_id and m.status == GroupMemberStatus.pending)
+        return accepted
+
+    def get_group_detail(self, viewer_id: str, group_id: str) -> GroupDetailOut:
+        group = self.groups.get(group_id)
+        if group is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotAGroupMember", "message": "Group not found."})
+        is_member = any(m.group_id == group_id and m.user_id == viewer_id and m.status == GroupMemberStatus.accepted for m in self.group_members)
+        if not is_member:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "NotAGroupMember", "message": "You are not an accepted member."})
+        members = [self._enrich_member(m) for m in self.group_members if m.group_id == group_id and m.status == GroupMemberStatus.accepted]
+        pending = None
+        if group.owner_id == viewer_id:
+            pending = [self._enrich_member(m) for m in self.group_members if m.group_id == group_id and m.status == GroupMemberStatus.pending]
+        enriched = self._group_with_count(group)
+        return GroupDetailOut(**enriched.model_dump(), members=members, pending_invites=pending)
+
+    def shared_accepted_groups(self, user_a: str, user_b: str) -> list[GroupOut]:
+        a_groups = {m.group_id for m in self.group_members if m.user_id == user_a and m.status == GroupMemberStatus.accepted}
+        b_groups = {m.group_id for m in self.group_members if m.user_id == user_b and m.status == GroupMemberStatus.accepted}
+        shared = a_groups & b_groups
+        return [self._group_with_count(self.groups[g]) for g in shared if g in self.groups]
+
+    def update_debt_group_tag(self, creditor_id: str, debt_id: str, group_id: str | None) -> DebtOut:
+        with self._lock:
+            debt = self.debts.get(debt_id)
+            if debt is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "DebtNotFound", "message": "Debt not found."})
+            if debt.creditor_id != creditor_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "NotDebtCreditor", "message": "Only the creditor can change the group tag."})
+            if debt.status not in (DebtStatus.pending_confirmation, DebtStatus.edit_requested):
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "GroupTagLocked", "message": "Group tag is locked once the debt is binding."})
+            if group_id is not None:
+                if debt.debtor_id is None:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": "DebtorRequired", "message": "Group tag requires a registered debtor."})
+                shared = {g.id for g in self.shared_accepted_groups(creditor_id, debt.debtor_id)}
+                if group_id not in shared:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "NotInSharedGroup", "message": "Both parties must be accepted members of the group."})
+            updated = debt.model_copy(update={"group_id": group_id, "updated_at": utcnow()})
+            self.debts[debt_id] = updated
+            return updated
 
     def group_debts(self, user_id: str, group_id: str) -> list[DebtOut]:
-        if group_id not in self._accepted_group_ids(user_id):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not an accepted group member")
-        member_ids = self._accepted_group_member_ids({group_id})
-        return [debt for debt in self.debts.values() if debt.group_id == group_id or debt.creditor_id in member_ids or debt.debtor_id in member_ids]
+        group = self.groups.get(group_id)
+        if group is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotAGroupMember", "message": "Group not found."})
+        is_member = any(m.group_id == group_id and m.user_id == user_id and m.status == GroupMemberStatus.accepted for m in self.group_members)
+        if not is_member:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "NotAGroupMember", "message": "You are not an accepted group member"})
+        return [debt for debt in self.debts.values() if debt.group_id == group_id]
 
     def create_settlement(self, payer_id: str, group_id: str, payload: SettlementCreate) -> SettlementOut:
         with self._lock:

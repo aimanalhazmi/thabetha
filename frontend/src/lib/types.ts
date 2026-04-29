@@ -33,6 +33,7 @@ export interface Profile {
   commitment_score: number;
   ai_enabled: boolean;
   whatsapp_enabled: boolean;
+  groups_enabled: boolean;
   /** User's preferred locale — persisted across devices for signed-in users. Default 'ar'. */
   preferred_language: Language;
 }
@@ -54,6 +55,7 @@ export interface Debt {
   reminder_dates: string[];
   status: DebtStatus;
   notes?: string;
+  group_id?: string | null;
   created_at: string;
   updated_at: string;
   confirmed_at?: string;
@@ -157,12 +159,40 @@ export interface NotificationItem {
   whatsapp_status_received_at?: string | null;
 }
 
+export type GroupMemberStatus = 'pending' | 'accepted' | 'declined' | 'left';
+
 export interface Group {
   id: string;
   name: string;
   description?: string;
   owner_id: string;
+  member_count: number;
+  /** The caller's membership status in this group (set by the list endpoint). */
+  member_status?: GroupMemberStatus | null;
   created_at: string;
+  updated_at?: string;
+}
+
+export interface GroupMember {
+  id: string;
+  group_id: string;
+  user_id: string;
+  status: GroupMemberStatus;
+  created_at: string;
+  accepted_at?: string | null;
+  name?: string | null;
+  commitment_score?: number | null;
+}
+
+export interface GroupDetail extends Group {
+  members: GroupMember[];
+  pending_invites?: GroupMember[] | null;
+}
+
+export interface GroupInviteIn {
+  user_id?: string;
+  email?: string;
+  phone?: string;
 }
 
 export interface VoiceDraft {

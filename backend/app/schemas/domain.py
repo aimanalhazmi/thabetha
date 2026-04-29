@@ -3,7 +3,7 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def utcnow() -> datetime:
@@ -56,6 +56,9 @@ class NotificationType(StrEnum):
     payment_requested = "payment_requested"
     payment_confirmed = "payment_confirmed"
     payment_failed = "payment_failed"
+    group_invite = "group_invite"
+    group_invite_accepted = "group_invite_accepted"
+    group_ownership_transferred = "group_ownership_transferred"
 
 
 class PaymentIntentStatus(StrEnum):
@@ -68,6 +71,8 @@ class PaymentIntentStatus(StrEnum):
 class GroupMemberStatus(StrEnum):
     pending = "pending"
     accepted = "accepted"
+    declined = "declined"
+    left = "left"
 
 
 class ProfileUpdate(BaseModel):
@@ -83,6 +88,7 @@ class ProfileUpdate(BaseModel):
     shop_description: str | None = None
     whatsapp_enabled: bool | None = None
     ai_enabled: bool | None = None
+    groups_enabled: bool | None = None
     preferred_language: str | None = Field(default=None, pattern=r"^(ar|en)$")
 
 
@@ -100,6 +106,7 @@ class ProfileOut(BaseModel):
     shop_description: str | None = None
     whatsapp_enabled: bool = True
     ai_enabled: bool = False
+    groups_enabled: bool = True
     commitment_score: int = Field(default=50, ge=0, le=100)
     preferred_language: str = "ar"
     created_at: datetime | None = None
@@ -169,6 +176,10 @@ class DebtEditApproval(BaseModel):
 
 class ActionMessageIn(BaseModel):
     message: str | None = None
+
+
+class DebtGroupTagUpdate(BaseModel):
+    group_id: str | None = None
 
 
 class DebtOut(BaseModel):
@@ -360,7 +371,10 @@ class GroupOut(BaseModel):
     name: str
     description: str | None = None
     owner_id: str
+    member_count: int = 1
+    member_status: GroupMemberStatus | None = None  # the caller's membership status, when known (e.g. list endpoint).
     created_at: datetime
+    updated_at: datetime | None = None
 
 
 class GroupMemberOut(BaseModel):
@@ -370,10 +384,41 @@ class GroupMemberOut(BaseModel):
     status: GroupMemberStatus
     created_at: datetime
     accepted_at: datetime | None = None
+    name: str | None = None
+    commitment_score: int | None = None
+
+
+class GroupDetailOut(GroupOut):
+    members: list[GroupMemberOut] = Field(default_factory=list)
+    pending_invites: list[GroupMemberOut] | None = None
 
 
 class GroupInviteIn(BaseModel):
-    user_id: str = Field(min_length=1)
+    user_id: str | None = None
+    email: str | None = None
+    phone: str | None = None
+
+    @field_validator("user_id", "email", "phone", mode="before")
+    @classmethod
+    def _empty_to_none(cls, value: str | None) -> str | None:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def _exactly_one_identifier(self) -> "GroupInviteIn":
+        present = sum(x is not None for x in (self.user_id, self.email, self.phone))
+        if present != 1:
+            raise ValueError("Provide exactly one of user_id, email, phone.")
+        return self
+
+
+class GroupRenameIn(BaseModel):
+    name: str = Field(min_length=1)
+
+
+class GroupOwnershipTransferIn(BaseModel):
+    new_owner_user_id: str = Field(min_length=1)
 
 
 class SettlementCreate(BaseModel):

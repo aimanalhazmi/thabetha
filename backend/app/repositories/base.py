@@ -28,9 +28,12 @@ from app.schemas.domain import (
     DebtorDashboardOut,
     DebtOut,
     GroupCreate,
+    GroupDetailOut,
     GroupInviteIn,
     GroupMemberOut,
     GroupOut,
+    GroupOwnershipTransferIn,
+    GroupRenameIn,
     NotificationOut,
     NotificationPreferenceIn,
     NotificationPreferenceOut,
@@ -175,6 +178,42 @@ class Repository(ABC):
 
     @abstractmethod
     def accept_group_invite(self, user_id: str, group_id: str) -> GroupMemberOut: ...
+
+    @abstractmethod
+    def decline_group_invite(self, user_id: str, group_id: str) -> GroupMemberOut: ...
+
+    @abstractmethod
+    def leave_group(self, user_id: str, group_id: str) -> GroupMemberOut: ...
+
+    @abstractmethod
+    def rename_group(self, owner_id: str, group_id: str, payload: GroupRenameIn) -> GroupOut: ...
+
+    @abstractmethod
+    def transfer_group_ownership(self, owner_id: str, group_id: str, payload: GroupOwnershipTransferIn) -> GroupOut: ...
+
+    @abstractmethod
+    def delete_group(self, owner_id: str, group_id: str) -> None: ...
+
+    @abstractmethod
+    def revoke_group_invite(self, owner_id: str, group_id: str, target_user_id: str) -> None: ...
+
+    @abstractmethod
+    def list_pending_group_invites(self, owner_id: str, group_id: str) -> list[GroupMemberOut]: ...
+
+    @abstractmethod
+    def list_group_members(self, viewer_id: str, group_id: str) -> list[GroupMemberOut]: ...
+
+    @abstractmethod
+    def get_group_detail(self, viewer_id: str, group_id: str) -> GroupDetailOut: ...
+
+    @abstractmethod
+    def shared_accepted_groups(self, user_a: str, user_b: str) -> list[GroupOut]: ...
+
+    @abstractmethod
+    def update_debt_group_tag(self, creditor_id: str, debt_id: str, group_id: str | None) -> DebtOut: ...
+
+    @abstractmethod
+    def find_profile_by_email_or_phone(self, *, email: str | None = None, phone: str | None = None) -> ProfileOut | None: ...
 
     @abstractmethod
     def group_debts(self, user_id: str, group_id: str) -> list[DebtOut]: ...

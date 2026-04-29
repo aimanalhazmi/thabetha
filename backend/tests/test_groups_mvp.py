@@ -1,0 +1,487 @@
+"""Tests for 008-groups-mvp-surface (US1 + lifecycle + retag)."""
+from datetime import date, timedelta
+
+import pytest
+from fastapi.testclient import TestClient
+
+from tests.conftest import auth_headers
+
+
+def _ensure_profiles(client: TestClient, *user_ids: str, email_phone: dict[str, tuple[str, str]] | None = None) -> None:
+    for uid in user_ids:
+        headers = auth_headers(uid)
+        if email_phone and uid in email_phone:
+            email, phone = email_phone[uid]
+            headers = {**headers, "x-demo-email": email, "x-demo-phone": phone}
+        client.get("/api/v1/profiles/me", headers=headers)
+        if email_phone and uid in email_phone:
+            email, phone = email_phone[uid]
+            client.patch("/api/v1/profiles/me", headers=headers, json={"email": email, "phone": phone})
+
+
+def _create_group(client: TestClient, owner: str, name: str = "Family") -> str:
+    r = client.post("/api/v1/groups", headers=auth_headers(owner), json={"name": name})
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def test_create_group_lists_owner_as_only_accepted_member(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1")
+    gid = _create_group(client, "owner-1")
+    detail = client.get(f"/api/v1/groups/{gid}", headers=auth_headers("owner-1"))
+    assert detail.status_code == 200
+    body = detail.json()
+    assert body["owner_id"] == "owner-1"
+    assert body["member_count"] == 1
+    assert len(body["members"]) == 1
+    assert body["members"][0]["user_id"] == "owner-1"
+
+
+def test_invite_by_email_resolves_to_existing_profile(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1", email_phone={"friend-1": ("friend@example.com", "+966500000099")})
+    gid = _create_group(client, "owner-1")
+    r = client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"email": "friend@example.com"})
+    assert r.status_code == 200, r.text
+    assert r.json()["user_id"] == "friend-1"
+    assert r.json()["status"] == "pending"
+
+
+def test_invite_unknown_email_returns_404_not_platform_user(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1")
+    gid = _create_group(client, "owner-1")
+    r = client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"email": "nobody@example.com"})
+    assert r.status_code == 404
+    assert r.json()["detail"]["code"] == "NotPlatformUser"
+
+
+def test_invite_self_rejected(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1")
+    gid = _create_group(client, "owner-1")
+    r = client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "owner-1"})
+    assert r.status_code == 400
+    assert r.json()["detail"]["code"] == "InviteToSelf"
+
+
+def test_invite_duplicate_pending_returns_409(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1")
+    gid = _create_group(client, "owner-1")
+    r1 = client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "friend-1"})
+    assert r1.status_code == 200
+    r2 = client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "friend-1"})
+    assert r2.status_code == 409
+    assert r2.json()["detail"]["code"] == "AlreadyMember"
+
+
+def test_invite_xor_validation(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1")
+    gid = _create_group(client, "owner-1")
+    r = client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={})
+    assert r.status_code == 422
+    r = client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "x", "email": "y@z.com"})
+    assert r.status_code == 422
+
+
+def test_accept_then_decline_idempotent(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1", "friend-2")
+    gid = _create_group(client, "owner-1")
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "friend-1"})
+    accept = client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers("friend-1"))
+    assert accept.status_code == 200
+    assert accept.json()["status"] == "accepted"
+
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "friend-2"})
+    decline = client.post(f"/api/v1/groups/{gid}/decline", headers=auth_headers("friend-2"))
+    assert decline.status_code == 200
+    assert decline.json()["status"] == "declined"
+
+    # Re-decline is now a 404 — terminal state, no pending row.
+    redecline = client.post(f"/api/v1/groups/{gid}/decline", headers=auth_headers("friend-2"))
+    assert redecline.status_code == 404
+
+
+def test_member_cap_enforced_at_acceptance(client: TestClient, monkeypatch) -> None:
+    # Lower the cap to make the test fast.
+    from app.repositories.memory import InMemoryRepository
+    monkeypatch.setattr(InMemoryRepository, "GROUP_MEMBER_CAP", 3)
+
+    _ensure_profiles(client, "owner-1", "u-2", "u-3", "u-4")
+    gid = _create_group(client, "owner-1")
+    for uid in ("u-2", "u-3"):
+        client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": uid})
+        assert client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers(uid)).status_code == 200
+    # Group now at cap (owner + 2). Invite a 4th and try to accept.
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "u-4"})
+    over = client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers("u-4"))
+    assert over.status_code == 409
+    assert over.json()["detail"]["code"] == "GroupFull"
+
+
+def test_non_member_cannot_view_group_debts(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1", "stranger-1")
+    gid = _create_group(client, "owner-1")
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "friend-1"})
+    client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers("friend-1"))
+
+    forbidden = client.get(f"/api/v1/groups/{gid}/debts", headers=auth_headers("stranger-1"))
+    assert forbidden.status_code == 403
+    assert forbidden.json()["detail"]["code"] == "NotAGroupMember"
+
+
+def test_pending_invitee_cannot_view_group_debts(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1")
+    gid = _create_group(client, "owner-1")
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "friend-1"})
+    forbidden = client.get(f"/api/v1/groups/{gid}/debts", headers=auth_headers("friend-1"))
+    assert forbidden.status_code == 403
+
+
+def test_group_tagged_debt_visible_to_third_member(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1", "third-1")
+    gid = _create_group(client, "owner-1")
+    for uid in ("friend-1", "third-1"):
+        client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": uid})
+        client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers(uid))
+
+    debt = client.post(
+        "/api/v1/debts",
+        headers=auth_headers("owner-1"),
+        json={
+            "debtor_name": "Friend",
+            "debtor_id": "friend-1",
+            "amount": "10.00",
+            "currency": "SAR",
+            "description": "Dinner",
+            "due_date": str(date.today() + timedelta(days=1)),
+            "group_id": gid,
+        },
+    )
+    assert debt.status_code == 201
+
+    # Third (non-party) accepted member can see the group-tagged debt.
+    listed = client.get(f"/api/v1/groups/{gid}/debts", headers=auth_headers("third-1"))
+    assert listed.status_code == 200
+    assert any(d["id"] == debt.json()["id"] for d in listed.json())
+
+
+def test_untagged_debt_invisible_in_group(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1", "third-1")
+    gid = _create_group(client, "owner-1")
+    for uid in ("friend-1", "third-1"):
+        client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": uid})
+        client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers(uid))
+
+    untagged = client.post(
+        "/api/v1/debts",
+        headers=auth_headers("owner-1"),
+        json={
+            "debtor_name": "Friend",
+            "debtor_id": "friend-1",
+            "amount": "5.00",
+            "currency": "SAR",
+            "description": "Personal",
+            "due_date": str(date.today() + timedelta(days=1)),
+        },
+    )
+    assert untagged.status_code == 201
+
+    listed = client.get(f"/api/v1/groups/{gid}/debts", headers=auth_headers("third-1"))
+    assert listed.status_code == 200
+    assert all(d["id"] != untagged.json()["id"] for d in listed.json())
+
+
+def test_owner_cannot_leave(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1")
+    gid = _create_group(client, "owner-1")
+    r = client.post(f"/api/v1/groups/{gid}/leave", headers=auth_headers("owner-1"))
+    assert r.status_code == 403
+    assert r.json()["detail"]["code"] == "OwnerCannotLeave"
+
+
+def test_member_can_leave(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1")
+    gid = _create_group(client, "owner-1")
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "friend-1"})
+    client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers("friend-1"))
+    leave = client.post(f"/api/v1/groups/{gid}/leave", headers=auth_headers("friend-1"))
+    assert leave.status_code == 200
+    assert leave.json()["status"] == "left"
+
+
+def test_transfer_ownership_immediate(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1")
+    gid = _create_group(client, "owner-1")
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "friend-1"})
+    client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers("friend-1"))
+    r = client.post(f"/api/v1/groups/{gid}/transfer-ownership", headers=auth_headers("owner-1"), json={"new_owner_user_id": "friend-1"})
+    assert r.status_code == 200
+    assert r.json()["owner_id"] == "friend-1"
+
+
+def test_transfer_to_pending_or_non_member_rejected(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1", "stranger-1")
+    gid = _create_group(client, "owner-1")
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "friend-1"})
+    # friend-1 is pending, not accepted.
+    pending = client.post(f"/api/v1/groups/{gid}/transfer-ownership", headers=auth_headers("owner-1"), json={"new_owner_user_id": "friend-1"})
+    assert pending.status_code == 409
+    assert pending.json()["detail"]["code"] == "NotAGroupMember"
+
+    nobody = client.post(f"/api/v1/groups/{gid}/transfer-ownership", headers=auth_headers("owner-1"), json={"new_owner_user_id": "stranger-1"})
+    assert nobody.status_code == 409
+    assert nobody.json()["detail"]["code"] == "NotAGroupMember"
+
+
+def test_transfer_to_self_rejected(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1")
+    gid = _create_group(client, "owner-1")
+    r = client.post(f"/api/v1/groups/{gid}/transfer-ownership", headers=auth_headers("owner-1"), json={"new_owner_user_id": "owner-1"})
+    assert r.status_code == 400
+    assert r.json()["detail"]["code"] == "SameOwner"
+
+
+def test_delete_blocked_when_debts_attached(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1")
+    gid = _create_group(client, "owner-1")
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "friend-1"})
+    client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers("friend-1"))
+    client.post(
+        "/api/v1/debts",
+        headers=auth_headers("owner-1"),
+        json={
+            "debtor_name": "Friend", "debtor_id": "friend-1", "amount": "1.00", "currency": "SAR",
+            "description": "x", "due_date": str(date.today() + timedelta(days=1)), "group_id": gid,
+        },
+    )
+    r = client.delete(f"/api/v1/groups/{gid}", headers=auth_headers("owner-1"))
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "GroupHasDebts"
+    assert r.json()["detail"]["count"] == 1
+
+
+def test_delete_empty_group_succeeds_and_cascades_pending(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1")
+    gid = _create_group(client, "owner-1")
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "friend-1"})
+    r = client.delete(f"/api/v1/groups/{gid}", headers=auth_headers("owner-1"))
+    assert r.status_code == 204
+    # Pending invitee no longer sees the group anywhere.
+    listed = client.get("/api/v1/groups", headers=auth_headers("friend-1"))
+    assert all(g["id"] != gid for g in listed.json())
+
+
+def test_revoke_pending_invite(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1")
+    gid = _create_group(client, "owner-1")
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "friend-1"})
+    r = client.delete(f"/api/v1/groups/{gid}/invites/friend-1", headers=auth_headers("owner-1"))
+    assert r.status_code == 204
+    # Re-revoke fails.
+    r2 = client.delete(f"/api/v1/groups/{gid}/invites/friend-1", headers=auth_headers("owner-1"))
+    assert r2.status_code == 404
+    assert r2.json()["detail"]["code"] == "NoPendingInvite"
+
+
+def test_rename_group(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1")
+    gid = _create_group(client, "owner-1", name="Old")
+    r = client.post(f"/api/v1/groups/{gid}/rename", headers=auth_headers("owner-1"), json={"name": "New"})
+    assert r.status_code == 200
+    assert r.json()["name"] == "New"
+
+
+def test_shared_groups_endpoint(client: TestClient) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1", "stranger-1")
+    gid = _create_group(client, "owner-1")
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "friend-1"})
+    client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers("friend-1"))
+
+    shared = client.get("/api/v1/groups/shared", headers=auth_headers("owner-1"), params={"with_user_id": "friend-1"})
+    assert shared.status_code == 200
+    assert len(shared.json()) == 1
+    assert shared.json()[0]["id"] == gid
+
+    none = client.get("/api/v1/groups/shared", headers=auth_headers("owner-1"), params={"with_user_id": "stranger-1"})
+    assert none.status_code == 200
+    assert none.json() == []
+
+
+def test_group_creation_only_notifies_parties(client: TestClient, reset_repository) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1", "third-1")
+    gid = _create_group(client, "owner-1")
+    for uid in ("friend-1", "third-1"):
+        client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": uid})
+        client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers(uid))
+
+    # Snapshot pre-creation count of debt_created notifications to third-1.
+    pre = sum(1 for n in reset_repository.notifications if n.user_id == "third-1" and n.notification_type.value == "debt_created")
+
+    client.post(
+        "/api/v1/debts",
+        headers=auth_headers("owner-1"),
+        json={
+            "debtor_name": "Friend", "debtor_id": "friend-1", "amount": "1.00", "currency": "SAR",
+            "description": "x", "due_date": str(date.today() + timedelta(days=1)), "group_id": gid,
+        },
+    )
+    post = sum(1 for n in reset_repository.notifications if n.user_id == "third-1" and n.notification_type.value == "debt_created")
+    assert post == pre, "non-party group member should not be notified on group-tagged debt creation"
+
+
+def test_groups_enabled_default_true_and_toggleable(client: TestClient) -> None:
+    headers = auth_headers("solo-1")
+    profile = client.get("/api/v1/profiles/me", headers=headers)
+    assert profile.status_code == 200
+    assert profile.json()["groups_enabled"] is True
+
+    off = client.patch("/api/v1/profiles/me", headers=headers, json={"groups_enabled": False})
+    assert off.status_code == 200
+    assert off.json()["groups_enabled"] is False
+
+    refetched = client.get("/api/v1/profiles/me", headers=headers)
+    assert refetched.json()["groups_enabled"] is False
+
+
+@pytest.mark.parametrize("status_when_locked", ["active"])
+def test_retag_debt_locked_after_active(client: TestClient, status_when_locked: str) -> None:
+    _ensure_profiles(client, "owner-1", "friend-1")
+    gid = _create_group(client, "owner-1")
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-1"), json={"user_id": "friend-1"})
+    client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers("friend-1"))
+
+    # Create personal debt first.
+    debt = client.post(
+        "/api/v1/debts",
+        headers=auth_headers("owner-1"),
+        json={
+            "debtor_name": "Friend", "debtor_id": "friend-1", "amount": "1.00", "currency": "SAR",
+            "description": "x", "due_date": str(date.today() + timedelta(days=1)),
+        },
+    )
+    assert debt.status_code == 201
+    debt_id = debt.json()["id"]
+
+    # Tag while pending — direct repo call (we haven't wired a PATCH endpoint yet).
+    from app.repositories import get_repository
+    repo = get_repository()
+    tagged = repo.update_debt_group_tag("owner-1", debt_id, gid)
+    assert tagged.group_id == gid
+
+    # Accept to flip pending_confirmation → active, then retagging must fail.
+    accepted = client.post(f"/api/v1/debts/{debt_id}/accept", headers=auth_headers("friend-1"))
+    assert accepted.status_code == 200
+    assert accepted.json()["status"] == "active"
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as exc:
+        repo.update_debt_group_tag("owner-1", debt_id, None)
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "GroupTagLocked"
+
+
+# ── T027: Group-tagged debt creation ──────────────────────────────────────────
+
+def test_create_debt_with_group_happy(client: TestClient) -> None:
+    _ensure_profiles(client, "cred-1", "deb-1")
+    gid = _create_group(client, "cred-1")
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("cred-1"), json={"user_id": "deb-1"})
+    client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers("deb-1"))
+
+    r = client.post(
+        "/api/v1/debts",
+        headers=auth_headers("cred-1"),
+        json={"debtor_name": "D", "debtor_id": "deb-1", "amount": "50.00", "currency": "SAR",
+              "description": "group debt", "due_date": str(date.today() + timedelta(days=7)), "group_id": gid},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["group_id"] == gid
+
+
+def test_create_debt_with_group_non_shared_parties_409(client: TestClient) -> None:
+    _ensure_profiles(client, "cred-2", "deb-2")
+    gid = _create_group(client, "cred-2")
+    # deb-2 not invited to group
+
+    r = client.post(
+        "/api/v1/debts",
+        headers=auth_headers("cred-2"),
+        json={"debtor_name": "D", "debtor_id": "deb-2", "amount": "5.00", "currency": "SAR",
+              "description": "x", "due_date": str(date.today() + timedelta(days=1)), "group_id": gid},
+    )
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "NotInSharedGroup"
+
+
+def test_create_debt_without_group_stays_personal(client: TestClient) -> None:
+    _ensure_profiles(client, "cred-3", "deb-3")
+    r = client.post(
+        "/api/v1/debts",
+        headers=auth_headers("cred-3"),
+        json={"debtor_name": "D", "debtor_id": "deb-3", "amount": "5.00", "currency": "SAR",
+              "description": "personal", "due_date": str(date.today() + timedelta(days=1))},
+    )
+    assert r.status_code == 201
+    assert r.json()["group_id"] is None
+
+
+def test_create_debt_with_group_but_no_debtor_id_400(client: TestClient) -> None:
+    _ensure_profiles(client, "cred-4")
+    gid = _create_group(client, "cred-4")
+    r = client.post(
+        "/api/v1/debts",
+        headers=auth_headers("cred-4"),
+        json={"debtor_name": "Unknown", "amount": "5.00", "currency": "SAR",
+              "description": "x", "due_date": str(date.today() + timedelta(days=1)), "group_id": gid},
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"]["code"] == "DebtorRequired"
+
+
+# ── T046: PATCH /debts/{id} group_id retag ────────────────────────────────────
+
+def _setup_two_member_group(client: TestClient, owner: str, member: str) -> tuple[str, str]:
+    """Returns (gid, debt_id) — debt is personal, parties share a group."""
+    _ensure_profiles(client, owner, member)
+    gid = _create_group(client, owner)
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers(owner), json={"user_id": member})
+    client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers(member))
+    debt = client.post(
+        "/api/v1/debts",
+        headers=auth_headers(owner),
+        json={"debtor_name": "M", "debtor_id": member, "amount": "10.00", "currency": "SAR",
+              "description": "x", "due_date": str(date.today() + timedelta(days=3))},
+    )
+    assert debt.status_code == 201
+    return gid, debt.json()["id"]
+
+
+def test_retag_while_pending_happy(client: TestClient) -> None:
+    gid, debt_id = _setup_two_member_group(client, "own-r1", "mem-r1")
+    r = client.patch(f"/api/v1/debts/{debt_id}", headers=auth_headers("own-r1"), json={"group_id": gid})
+    assert r.status_code == 200
+    assert r.json()["group_id"] == gid
+
+
+def test_retag_to_null_clears_tag(client: TestClient) -> None:
+    gid, debt_id = _setup_two_member_group(client, "own-r2", "mem-r2")
+    client.patch(f"/api/v1/debts/{debt_id}", headers=auth_headers("own-r2"), json={"group_id": gid})
+    r = client.patch(f"/api/v1/debts/{debt_id}", headers=auth_headers("own-r2"), json={"group_id": None})
+    assert r.status_code == 200
+    assert r.json()["group_id"] is None
+
+
+def test_retag_after_active_locked(client: TestClient) -> None:
+    gid, debt_id = _setup_two_member_group(client, "own-r3", "mem-r3")
+    # Accept to push to active.
+    client.post(f"/api/v1/debts/{debt_id}/accept", headers=auth_headers("mem-r3"))
+    r = client.patch(f"/api/v1/debts/{debt_id}", headers=auth_headers("own-r3"), json={"group_id": gid})
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "GroupTagLocked"
+
+
+def test_retag_to_non_shared_group_409(client: TestClient) -> None:
+    _ensure_profiles(client, "own-r4", "mem-r4")
+    gid1, debt_id = _setup_two_member_group(client, "own-r4", "mem-r4")
+    # Create a second group that mem-r4 doesn't belong to.
+    gid2 = _create_group(client, "own-r4", name="Private")
+    r = client.patch(f"/api/v1/debts/{debt_id}", headers=auth_headers("own-r4"), json={"group_id": gid2})
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "NotInSharedGroup"

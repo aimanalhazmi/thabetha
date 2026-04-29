@@ -86,6 +86,43 @@ export type TranslationKey =
   | 'groupName'
   | 'inviteUser'
   | 'acceptInvite'
+  | 'groupsCreate'
+  | 'groupsCreateGroup'
+  | 'groupsInvite'
+  | 'groupsInviteByEmailOrPhone'
+  | 'groupsAccept'
+  | 'groupsDecline'
+  | 'groupsLeave'
+  | 'groupsRename'
+  | 'groupsTransferOwnership'
+  | 'groupsDelete'
+  | 'groupsRevokeInvite'
+  | 'groupsMyGroups'
+  | 'groupsPendingInvitations'
+  | 'groupsNoPendingInvitations'
+  | 'groupsNoGroupsYet'
+  | 'groupsMembers'
+  | 'groupsPendingInvites'
+  | 'groupsDebts'
+  | 'groupsOwner'
+  | 'groupsMemberCount'
+  | 'groupsNoGroupOption'
+  | 'groupsSelectorLabel'
+  | 'settingsGroupsFeature'
+  | 'settingsGroupsFeatureHint'
+  | 'errorNotPlatformUser'
+  | 'errorAlreadyMember'
+  | 'errorInviteToSelf'
+  | 'errorGroupFull'
+  | 'errorOwnerCannotLeave'
+  | 'errorNotAGroupMember'
+  | 'errorNotGroupOwner'
+  | 'errorGroupHasDebts'
+  | 'errorGroupTagLocked'
+  | 'errorNotInSharedGroup'
+  | 'errorSameOwner'
+  | 'errorNoPendingInvite'
+  | 'errorIdentifierAmbiguous'
   | 'voiceTranscript'
   | 'draft'
   | 'askMerchantBot'
@@ -311,6 +348,43 @@ const ar: Translations = {
   groupName: 'اسم المجموعة',
   inviteUser: 'دعوة مستخدم',
   acceptInvite: 'قبول الدعوة',
+  groupsCreate: 'إنشاء مجموعة',
+  groupsCreateGroup: 'إنشاء مجموعة جديدة',
+  groupsInvite: 'دعوة',
+  groupsInviteByEmailOrPhone: 'البريد الإلكتروني أو رقم الهاتف',
+  groupsAccept: 'قبول',
+  groupsDecline: 'رفض',
+  groupsLeave: 'مغادرة المجموعة',
+  groupsRename: 'إعادة تسمية',
+  groupsTransferOwnership: 'نقل الملكية',
+  groupsDelete: 'حذف المجموعة',
+  groupsRevokeInvite: 'إلغاء الدعوة',
+  groupsMyGroups: 'مجموعاتي',
+  groupsPendingInvitations: 'دعوات معلقة',
+  groupsNoPendingInvitations: 'لا توجد دعوات معلقة',
+  groupsNoGroupsYet: 'لم تنضم إلى أي مجموعة بعد',
+  groupsMembers: 'الأعضاء',
+  groupsPendingInvites: 'الدعوات المعلقة',
+  groupsDebts: 'ديون المجموعة',
+  groupsOwner: 'المالك',
+  groupsMemberCount: 'عدد الأعضاء',
+  groupsNoGroupOption: 'بدون مجموعة (خاص)',
+  groupsSelectorLabel: 'مجموعة (اختياري)',
+  settingsGroupsFeature: 'ميزة المجموعات',
+  settingsGroupsFeatureHint: 'إظهار المجموعات في القائمة الرئيسية. تعطيلها لا يحذف عضوياتك.',
+  errorNotPlatformUser: 'لا يوجد مستخدم بهذا البريد أو الهاتف. اطلب منه التسجيل أولاً.',
+  errorAlreadyMember: 'هذا المستخدم عضو بالفعل أو لديه دعوة معلقة.',
+  errorInviteToSelf: 'لا يمكنك دعوة نفسك.',
+  errorGroupFull: 'المجموعة ممتلئة (الحد الأقصى ٢٠ عضوًا).',
+  errorOwnerCannotLeave: 'يجب على المالك نقل الملكية قبل المغادرة.',
+  errorNotAGroupMember: 'لست عضوًا مقبولًا في هذه المجموعة.',
+  errorNotGroupOwner: 'هذه العملية متاحة لمالك المجموعة فقط.',
+  errorGroupHasDebts: 'لا يمكن حذف المجموعة وفيها ديون مرتبطة.',
+  errorGroupTagLocked: 'لا يمكن تغيير المجموعة بعد قبول المدين للدين.',
+  errorNotInSharedGroup: 'الطرفان ليسا في نفس المجموعة.',
+  errorSameOwner: 'هذا الشخص هو المالك الحالي بالفعل.',
+  errorNoPendingInvite: 'لا توجد دعوة معلقة.',
+  errorIdentifierAmbiguous: 'أدخل واحدًا فقط: المعرف، البريد، أو الهاتف.',
   voiceTranscript: 'النص الصوتي',
   draft: 'مسودة',
   askMerchantBot: 'اسأل مساعد التاجر',
@@ -535,6 +609,43 @@ const en: Translations = {
   groupName: 'Group Name',
   inviteUser: 'Invite User',
   acceptInvite: 'Accept Invite',
+  groupsCreate: 'Create group',
+  groupsCreateGroup: 'Create a new group',
+  groupsInvite: 'Invite',
+  groupsInviteByEmailOrPhone: 'Email or phone',
+  groupsAccept: 'Accept',
+  groupsDecline: 'Decline',
+  groupsLeave: 'Leave group',
+  groupsRename: 'Rename',
+  groupsTransferOwnership: 'Transfer ownership',
+  groupsDelete: 'Delete group',
+  groupsRevokeInvite: 'Revoke',
+  groupsMyGroups: 'My groups',
+  groupsPendingInvitations: 'Pending invitations',
+  groupsNoPendingInvitations: 'No pending invitations',
+  groupsNoGroupsYet: "You haven't joined any groups yet",
+  groupsMembers: 'Members',
+  groupsPendingInvites: 'Pending invites',
+  groupsDebts: 'Group debts',
+  groupsOwner: 'Owner',
+  groupsMemberCount: 'Members',
+  groupsNoGroupOption: 'No group (private)',
+  groupsSelectorLabel: 'Group (optional)',
+  settingsGroupsFeature: 'Groups feature',
+  settingsGroupsFeatureHint: 'Show Groups in the main navigation. Disabling does not delete your memberships.',
+  errorNotPlatformUser: 'No platform user matches that email or phone. Ask them to sign up first.',
+  errorAlreadyMember: 'This user is already a member or has a pending invitation.',
+  errorInviteToSelf: 'You cannot invite yourself.',
+  errorGroupFull: 'Group is full (max 20 members).',
+  errorOwnerCannotLeave: 'Owner must transfer ownership before leaving.',
+  errorNotAGroupMember: 'You are not an accepted member of this group.',
+  errorNotGroupOwner: 'Only the group owner can perform this action.',
+  errorGroupHasDebts: 'Cannot delete a group while debts are attached.',
+  errorGroupTagLocked: 'Group tag cannot be changed once the debtor has accepted.',
+  errorNotInSharedGroup: 'Both parties must be accepted members of the chosen group.',
+  errorSameOwner: 'This person is already the owner.',
+  errorNoPendingInvite: 'No pending invitation found.',
+  errorIdentifierAmbiguous: 'Provide exactly one: user ID, email, or phone.',
   voiceTranscript: 'Voice Transcript',
   draft: 'Draft',
   askMerchantBot: 'Ask Merchant Bot',

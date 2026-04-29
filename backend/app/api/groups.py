@@ -1,10 +1,21 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.core.security import AuthenticatedUser, get_current_user
 from app.repositories import Repository, get_repository
-from app.schemas.domain import DebtOut, GroupCreate, GroupInviteIn, GroupMemberOut, GroupOut, SettlementCreate, SettlementOut
+from app.schemas.domain import (
+    DebtOut,
+    GroupCreate,
+    GroupDetailOut,
+    GroupInviteIn,
+    GroupMemberOut,
+    GroupOut,
+    GroupOwnershipTransferIn,
+    GroupRenameIn,
+    SettlementCreate,
+    SettlementOut,
+)
 
 router = APIRouter()
 
@@ -28,6 +39,46 @@ def list_groups(
     return repo.list_groups(user.id)
 
 
+@router.get("/shared", response_model=list[GroupOut])
+def shared_groups(
+    with_user_id: Annotated[str, Query(min_length=1)],
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> list[GroupOut]:
+    repo.ensure_profile(user)
+    return repo.shared_accepted_groups(user.id, with_user_id)
+
+
+@router.get("/{group_id}", response_model=GroupDetailOut)
+def group_detail(
+    group_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> GroupDetailOut:
+    repo.ensure_profile(user)
+    return repo.get_group_detail(user.id, group_id)
+
+
+@router.get("/{group_id}/members", response_model=list[GroupMemberOut])
+def group_members(
+    group_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> list[GroupMemberOut]:
+    repo.ensure_profile(user)
+    return repo.list_group_members(user.id, group_id)
+
+
+@router.get("/{group_id}/invites", response_model=list[GroupMemberOut])
+def list_pending_invites(
+    group_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> list[GroupMemberOut]:
+    repo.ensure_profile(user)
+    return repo.list_pending_group_invites(user.id, group_id)
+
+
 @router.post("/{group_id}/invite", response_model=GroupMemberOut)
 def invite_group_member(
     group_id: str,
@@ -49,6 +100,71 @@ def accept_group_invite(
     return repo.accept_group_invite(user.id, group_id)
 
 
+@router.post("/{group_id}/decline", response_model=GroupMemberOut)
+def decline_group_invite(
+    group_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> GroupMemberOut:
+    repo.ensure_profile(user)
+    return repo.decline_group_invite(user.id, group_id)
+
+
+@router.post("/{group_id}/leave", response_model=GroupMemberOut)
+def leave_group(
+    group_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> GroupMemberOut:
+    repo.ensure_profile(user)
+    return repo.leave_group(user.id, group_id)
+
+
+@router.post("/{group_id}/rename", response_model=GroupOut)
+def rename_group(
+    group_id: str,
+    payload: GroupRenameIn,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> GroupOut:
+    repo.ensure_profile(user)
+    return repo.rename_group(user.id, group_id, payload)
+
+
+@router.post("/{group_id}/transfer-ownership", response_model=GroupOut)
+def transfer_group_ownership(
+    group_id: str,
+    payload: GroupOwnershipTransferIn,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> GroupOut:
+    repo.ensure_profile(user)
+    return repo.transfer_group_ownership(user.id, group_id, payload)
+
+
+@router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_group(
+    group_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> Response:
+    repo.ensure_profile(user)
+    repo.delete_group(user.id, group_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/{group_id}/invites/{target_user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_group_invite(
+    group_id: str,
+    target_user_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> Response:
+    repo.ensure_profile(user)
+    repo.revoke_group_invite(user.id, group_id, target_user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/{group_id}/debts", response_model=list[DebtOut])
 def group_debts(
     group_id: str,
@@ -68,4 +184,3 @@ def create_settlement(
 ) -> SettlementOut:
     repo.ensure_profile(user)
     return repo.create_settlement(user.id, group_id, payload)
-
