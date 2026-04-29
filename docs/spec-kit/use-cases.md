@@ -77,12 +77,12 @@ Creditor: total receivable, debtor count, active/overdue/paid counts, best custo
 - Frontend: `frontend/src/pages/DashboardPage.tsx` (role-routed by `account_type`).
 - Notes: dashboard reads also drive the lazy overdue/missed-reminder sweeper.
 
-## UC9 — Groups (friends/family) · debtor · ⛔ (post-MVP)
+## UC9 — Groups (friends/family) · both · 🟡 (Part 1 surfaced, auto-netting pending)
 
-Endpoints exist but are not surfaced in MVP nav. Auto-netting is not implemented; settlements are recorded as opaque rows.
+Part 1 (008-groups-mvp-surface) ships Groups in nav for all users (`profiles.groups_enabled` gate). Full lifecycle (create, invite by email/phone, accept/decline, leave, rename, transfer-ownership, delete) is implemented. Group-tagged debt creation and retag via `PATCH /debts/{id}` are wired. Auto-netting is not implemented; settlements are recorded as opaque rows.
 
-- Endpoints: `POST /groups`, `GET /groups`, `POST /groups/{id}/invite`, `POST /groups/{id}/accept`, `GET /groups/{id}/debts`, `POST /groups/{id}/settlements`.
-- Tables: `groups`, `group_members`, `group_settlements`, plus `debts.group_id`.
+- Endpoints: 13 group routes (`GET /groups`, `POST /groups`, `GET /groups/{id}`, `GET /groups/{id}/members`, `GET /groups/{id}/invites`, `POST /groups/{id}/invite`, `POST /groups/{id}/accept`, `POST /groups/{id}/decline`, `POST /groups/{id}/leave`, `POST /groups/{id}/rename`, `POST /groups/{id}/transfer-ownership`, `DELETE /groups/{id}`, `DELETE /groups/{id}/invites/{user_id}`, `GET /groups/{id}/debts`, `POST /groups/{id}/settlements`, `GET /groups/shared`), `PATCH /debts/{id}` for group retag.
+- Tables: `groups`, `group_members` (widened `status` enum), `group_events` (audit), `group_settlements`, `debts.group_id`; `profiles.groups_enabled`.
 
 ## UC10 — AI assistant (paid tier) · creditor · ⛔ (Could-Have, gated)
 

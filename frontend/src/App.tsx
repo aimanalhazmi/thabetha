@@ -9,6 +9,7 @@ import { DebtsPage } from "./pages/DebtsPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { QRPage } from "./pages/QRPage";
 import { GroupsPage } from "./pages/GroupsPage";
+import { GroupDetailPage } from "./pages/GroupDetailPage";
 import { AIPage } from "./pages/AIPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { LandingPage } from "./pages/LandingPage";
@@ -53,6 +54,7 @@ function AppShell({ language, onToggleLanguage }: ShellProps) {
           <Route path="/profile" element={<ProfilePage language={language} key={refreshKey} />} />
           <Route path="/qr" element={<QRPage language={language} key={refreshKey} />} />
           <Route path="/groups" element={<GroupsPage language={language} key={refreshKey} />} />
+          <Route path="/groups/:id" element={<GroupDetailPage language={language} key={refreshKey} />} />
           <Route path="/ai" element={<AIPage language={language} key={refreshKey} />} />
           <Route path="/notifications" element={<NotificationsPage language={language} key={refreshKey} />} />
           <Route path="/settings" element={<SettingsPage language={language} onToggleLanguage={onToggleLanguage} key={refreshKey} />} />

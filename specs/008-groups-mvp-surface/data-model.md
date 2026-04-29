@@ -69,7 +69,7 @@ No structural change. The existing `group_id uuid null` column carries the optio
 ```sql
 create table group_events (
   id uuid primary key default gen_random_uuid(),
-  group_id uuid not null references groups(id) on delete cascade,
+  group_id uuid references groups(id) on delete set null,
   actor_id uuid not null references profiles(id),
   event_type text not null
     check (event_type in (
@@ -100,7 +100,7 @@ create index ix_group_events_group_created
 | `POST /groups/{id}/transfer-ownership` | `ownership_transferred` | old owner | `from_user_id`, `to_user_id` |
 | `DELETE /groups/{id}` | `deleted` | owner | — |
 
-`group_events` rows for a deleted group are removed via `on delete cascade`. This is acceptable because the surrounding `notifications` rows preserve the externally-visible side effects.
+`group_events` rows for a deleted group are **preserved** with `group_id` set to `NULL` (the FK uses `on delete set null`, not cascade). This satisfies Constitution VIII's audit-trail principle: the `deleted` event row survives the group's removal, retaining `actor_id`, `event_type`, `metadata`, and `created_at`. Queries scoped to a live group filter on `group_id is not null`; admin/audit queries can read the orphaned rows directly.
 
 ---
 

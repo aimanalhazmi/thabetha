@@ -26,7 +26,7 @@ This document resolves every open technical question implied by the spec and the
 
 ## R2. Invite by `email` / `phone` vs `user_id` only
 
-**Decision**: Extend `GroupInviteIn` to accept exactly one of `{user_id, email, phone}`. Backend resolves email/phone to a `user_id` server-side via `repo.find_profile_by_email_or_phone` (already used elsewhere). If no matching profile exists, return `404 NotPlatformUser` with a translated reason code.
+**Decision**: Extend `GroupInviteIn` to accept exactly one of `{user_id, email, phone}`. Backend resolves email/phone to a `user_id` server-side via `repo.find_profile_by_email_or_phone` (already used elsewhere). If no matching profile exists, return `404` with the machine-readable code `NotPlatformUser` (single canonical name shared with `contracts/api-groups.md`) and a translated message.
 
 **Rationale**:
 
@@ -76,7 +76,13 @@ This document resolves every open technical question implied by the spec and the
 
 ## R5. Notifications surface
 
-**Decision**: Reuse the existing `notifications` table. Add three `NotificationType` values: `group_invite`, `group_invite_accepted`, `group_ownership_transferred`. No WhatsApp template work in this phase.
+**Decision**: Reuse the existing `notifications` table. Add three `NotificationType` values:
+
+- `group_invite` — recipient: invited user; emitted on `POST /groups/{id}/invite`.
+- `group_invite_accepted` — recipient: group owner; emitted on `POST /groups/{id}/accept`.
+- `group_ownership_transferred` — recipient: new owner; emitted on `POST /groups/{id}/transfer-ownership`.
+
+No notifications fire on decline, leave, revoke, rename, or delete. No WhatsApp template work in this phase.
 
 **Rationale**:
 

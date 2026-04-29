@@ -81,10 +81,6 @@ def test_sc003_commitment_score_delta_identical(
     debt_manual = _setup_debt(client, "cs1", "ds1")
     debt_gw = _setup_debt(client, "cs2", "ds2")
 
-    # Record baseline scores
-    score_before_manual = reset_repository.profiles.get("ds1", None)
-    score_before_gw = reset_repository.profiles.get("ds2", None)
-
     # Manual confirm
     client.post(f"/api/v1/debts/{debt_manual['id']}/mark-paid", json={}, headers=auth_headers("ds1"))
     client.post(f"/api/v1/debts/{debt_manual['id']}/confirm-payment", headers=auth_headers("cs1"))

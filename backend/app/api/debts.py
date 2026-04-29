@@ -15,6 +15,7 @@ from app.schemas.domain import (
     DebtEditApproval,
     DebtEditRequest,
     DebtEventOut,
+    DebtGroupTagUpdate,
     DebtOut,
     PaymentConfirmationOut,
     PaymentIntentOut,
@@ -124,6 +125,17 @@ def reject_edit_request(
 ) -> DebtOut:
     repo.ensure_profile(user)
     return repo.reject_edit_request(user.id, debt_id, payload.message)
+
+
+@router.patch("/{debt_id}", response_model=DebtOut)
+def patch_debt_group_tag(
+    debt_id: str,
+    payload: DebtGroupTagUpdate,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> DebtOut:
+    repo.ensure_profile(user)
+    return repo.update_debt_group_tag(user.id, debt_id, payload.group_id)
 
 
 @router.post("/{debt_id}/cancel", response_model=DebtOut)
