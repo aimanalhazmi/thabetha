@@ -1,3 +1,6 @@
+import json
+import signal
+from datetime import UTC, datetime
 from pathlib import Path
 
 import uvicorn
@@ -8,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
 from app.core.config import get_settings
+from app.core.db_session import RLSSessionMiddleware
 from app.repositories import get_repository
 from app.repositories.memory import InMemoryRepository
 from app.services.demo_data import seed_demo_data
@@ -17,6 +21,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name, version="0.1.0")
 
+    app.add_middleware(RLSSessionMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -64,6 +69,37 @@ def create_app() -> FastAPI:
     return app
 
 
+_last_rls_mode: str | None = None
+
+
+def _install_sighup_handler() -> None:
+    if not hasattr(signal, "SIGHUP"):
+        return
+
+    def _handle_sighup(signum, frame) -> None:  # noqa: ANN001
+        global _last_rls_mode
+        before = get_settings().rls_mode
+        get_settings.cache_clear()
+        after = get_settings().rls_mode
+        _last_rls_mode = after
+        print(
+            json.dumps(
+                {
+                    "event": "rls.mode_changed",
+                    "from": before,
+                    "to": after,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+            flush=True,
+        )
+
+    signal.signal(signal.SIGHUP, _handle_sighup)
+
+
+_install_sighup_handler()
 app = create_app()
 
 

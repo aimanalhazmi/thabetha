@@ -567,5 +567,6 @@ class HealthOut(BaseModel):
     service: str
     environment: str
     supabase_connected: bool
+    rls_mode: str
 
     model_config = ConfigDict(extra="forbid")

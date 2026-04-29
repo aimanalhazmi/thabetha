@@ -1,0 +1,33 @@
+name: RLS
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "supabase/migrations/**"
+      - "specs/010-*/**"
+      - ".github/workflows/rls.yml"
+
+jobs:
+  rls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start Supabase
+        run: supabase start
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --dev
+      - name: Run RLS tests
+        working-directory: backend
+        env:
+          REPOSITORY_TYPE: postgres
+          RLS_MODE: enforce
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55322/postgres
+          APP_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55322/postgres
+          SYSTEM_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55322/postgres
+        run: uv run pytest tests/rls/ -q

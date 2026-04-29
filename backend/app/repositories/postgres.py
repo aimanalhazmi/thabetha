@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile, status
+from psycopg import Connection
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from app.core.config import get_settings
+from app.core.db_session import claims_json, current_request_info, current_request_jwt
 from app.core.security import AuthenticatedUser
 from app.db.supabase import get_supabase_client, unwrap_response
 from app.repositories.attachment_retention import apply_attachment_access_metadata, retention_for_debt
@@ -124,6 +128,71 @@ class PostgresRepository(Repository):
         self._pool = pool
         self._reminder_dates_supported: bool | None = None
 
+    @contextmanager
+    def _connection(self) -> Iterator[Connection]:
+        settings = get_settings()
+        claims = current_request_jwt.get()
+        with self._pool.connection() as conn:
+            try:
+                if settings.rls_mode == "enforce":
+                    if not claims:
+                        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing request identity for RLS enforcement")
+                    conn.execute("SET ROLE app_authenticated")
+                    conn.execute("SET request.jwt.claims = %s", (claims_json(claims),))
+                elif settings.rls_mode == "shadow":
+                    if claims:
+                        conn.execute("SET request.jwt.claims = %s", (claims_json(claims),))
+                yield conn
+            except Exception:
+                conn.rollback()
+                conn.execute("RESET ALL")
+                conn.execute("RESET ROLE")
+                raise
+            finally:
+                if not conn.info.transaction_status.name == "INERROR":
+                    conn.execute("RESET ALL")
+                    conn.execute("RESET ROLE")
+
+    def _shadow_probe_visible(self, *, table: str, policy: str, query_signature: str, sql: str, params: tuple[object, ...]) -> None:
+        settings = get_settings()
+        claims = current_request_jwt.get()
+        if settings.rls_mode != "shadow" or not claims:
+            return
+
+        from app.observability.shadow_log import log_shadow_violation
+        from app.repositories import app_pool
+
+        if app_pool is None:
+            return
+
+        with app_pool.connection() as probe:
+            try:
+                probe.execute("SET ROLE app_authenticated")
+                probe.execute("SET request.jwt.claims = %s", (claims_json(claims),))
+                allowed = probe.execute(sql, params).fetchone()
+            finally:
+                probe.rollback()
+                probe.execute("RESET ALL")
+                probe.execute("RESET ROLE")
+
+        if allowed:
+            return
+
+        request_info = current_request_info.get() or {}
+        log_shadow_violation(
+            {
+                "request_id": request_info.get("request_id", ""),
+                "route": request_info.get("route", ""),
+                "method": request_info.get("method", ""),
+                "table": table,
+                "policy": policy,
+                "caller_id": str(claims.get("sub", "")),
+                "claim_role": str(claims.get("role", "")),
+                "query_signature": query_signature,
+                "would_have_returned_rows": 1,
+            }
+        )
+
     def _has_reminder_dates(self, conn) -> bool:
         """Cache whether migration 006 (reminder_dates column) has been applied."""
         if self._reminder_dates_supported is None:
@@ -139,6 +208,21 @@ class PostgresRepository(Repository):
     # ── helpers ────────────────────────────────────────────────────────
 
     def _refresh_overdue(self, conn) -> None:
+        settings = get_settings()
+        if settings.rls_mode != "off":
+            from app.repositories.system_tasks import elevated_connection
+
+            try:
+                with elevated_connection() as elevated:
+                    elevated.row_factory = dict_row
+                    self._refresh_overdue_raw(elevated)
+                    elevated.commit()
+                return
+            except RuntimeError:
+                pass
+        self._refresh_overdue_raw(conn)
+
+    def _refresh_overdue_raw(self, conn) -> None:
         """Move active debts past due_date to overdue, then apply missed-reminder penalties."""
         cur = conn.execute(
             """
@@ -269,12 +353,20 @@ class PostgresRepository(Repository):
             """,
             (debt_id, user_id, user_id, user_id),
         ).fetchone()
+        if row:
+            self._shadow_probe_visible(
+                table="debts",
+                policy="debts_select_party_or_group",
+                query_signature="select:debts:by_id",
+                sql="SELECT 1 FROM public.debts WHERE id = %s",
+                params=(debt_id,),
+            )
         return dict(row) if row else None
 
     # ── Profiles ──────────────────────────────────────────────────────
 
     def ensure_profile(self, user: AuthenticatedUser) -> ProfileOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = conn.execute(_PROFILE_SELECT + " WHERE p.id = %s", (user.id,)).fetchone()
             if row:
@@ -291,11 +383,18 @@ class PostgresRepository(Repository):
             return _profile_from_row(row)
 
     def get_profile(self, user_id: str) -> ProfileOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = conn.execute(_PROFILE_SELECT + " WHERE p.id = %s", (user_id,)).fetchone()
             if not row:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+            self._shadow_probe_visible(
+                table="profiles",
+                policy="Profiles preview for authenticated",
+                query_signature="select:profiles:by_id",
+                sql="SELECT 1 FROM public.profiles WHERE id = %s",
+                params=(user_id,),
+            )
             return _profile_from_row(row)
 
     # Map ProfileUpdate's shop_* field names to business_profiles column names.
@@ -328,7 +427,7 @@ class PostgresRepository(Repository):
             return self.ensure_profile(user)
         self.ensure_profile(user)
         business_fields = {self._BUSINESS_FIELD_MAP[k]: data.pop(k) for k in list(data) if k in self._BUSINESS_FIELD_MAP}
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             if data:
                 set_clauses = ", ".join(f"{k} = %s" for k in data)
@@ -340,7 +439,7 @@ class PostgresRepository(Repository):
             return _profile_from_row(row)
 
     def upsert_business_profile(self, owner_id: str, payload: BusinessProfileIn) -> BusinessProfileOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._upsert_business_profile_fields(
                 conn,
@@ -366,7 +465,7 @@ class PostgresRepository(Repository):
             )
 
     def current_business_profile(self, owner_id: str) -> BusinessProfileOut | None:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = conn.execute("SELECT * FROM business_profiles WHERE owner_id = %s", (owner_id,)).fetchone()
             if not row:
@@ -385,7 +484,7 @@ class PostgresRepository(Repository):
     # ── QR tokens ─────────────────────────────────────────────────────
 
     def rotate_qr_token(self, user_id: str, ttl_minutes: int = 10) -> dict[str, object]:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             token = str(uuid4())
             now = utcnow()
@@ -398,7 +497,7 @@ class PostgresRepository(Repository):
             return {"token": token, "user_id": user_id, "expires_at": expires_at, "created_at": now}
 
     def current_qr_token(self, user_id: str) -> dict[str, object]:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = conn.execute(
                 "SELECT * FROM qr_tokens WHERE user_id = %s AND expires_at > now() ORDER BY created_at DESC LIMIT 1",
@@ -409,7 +508,7 @@ class PostgresRepository(Repository):
         return self.rotate_qr_token(user_id)
 
     def resolve_qr_token(self, token: str) -> ProfileOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = conn.execute("SELECT user_id FROM qr_tokens WHERE token = %s AND expires_at > now()", (token,)).fetchone()
             if not row:
@@ -419,7 +518,7 @@ class PostgresRepository(Repository):
     # ── Debts ─────────────────────────────────────────────────────────
 
     def create_debt(self, creditor_id: str, payload: DebtCreate) -> DebtOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._refresh_overdue(conn)
             debt_id = str(uuid4())
@@ -482,7 +581,7 @@ class PostgresRepository(Repository):
             return _debt_from_row(row)
 
     def list_debts_for_user(self, user_id: str) -> list[DebtOut]:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._refresh_overdue(conn)
             conn.commit()
@@ -499,10 +598,18 @@ class PostgresRepository(Repository):
                 """,
                 (user_id, user_id, user_id),
             ).fetchall()
+            for row in rows:
+                self._shadow_probe_visible(
+                    table="debts",
+                    policy="debts_select_party_or_group",
+                    query_signature="select:debts:list_for_user",
+                    sql="SELECT 1 FROM public.debts WHERE id = %s",
+                    params=(row["id"],),
+                )
             return [_debt_from_row(r) for r in rows]
 
     def get_authorized_debt(self, user_id: str, debt_id: str) -> DebtOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._refresh_overdue(conn)
             conn.commit()
@@ -516,7 +623,7 @@ class PostgresRepository(Repository):
             return _debt_from_row(row)
 
     def accept_debt(self, user_id: str, debt_id: str) -> DebtOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = self._can_view_debt(conn, user_id, debt_id)
             if not row:
@@ -540,7 +647,7 @@ class PostgresRepository(Repository):
             return _debt_from_row(updated)
 
     def request_debt_change(self, user_id: str, debt_id: str, payload: DebtChangeRequest) -> DebtOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = self._can_view_debt(conn, user_id, debt_id)
             if not row:
@@ -557,7 +664,7 @@ class PostgresRepository(Repository):
             return _debt_from_row(updated)
 
     def approve_edit_request(self, user_id: str, debt_id: str, payload: DebtEditApproval) -> DebtOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = self._can_view_debt(conn, user_id, debt_id)
             if not row:
@@ -629,7 +736,7 @@ class PostgresRepository(Repository):
             return _debt_from_row(updated)
 
     def reject_edit_request(self, user_id: str, debt_id: str, message: str | None = None) -> DebtOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = self._can_view_debt(conn, user_id, debt_id)
             if not row:
@@ -652,7 +759,7 @@ class PostgresRepository(Repository):
             return _debt_from_row(updated)
 
     def mark_paid(self, user_id: str, debt_id: str, payload: PaymentRequest) -> PaymentConfirmationOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = self._can_view_debt(conn, user_id, debt_id)
             if not row:
@@ -696,7 +803,7 @@ class PostgresRepository(Repository):
             )
 
     def confirm_payment(self, user_id: str, debt_id: str) -> DebtOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = self._can_view_debt(conn, user_id, debt_id)
             if not row:
@@ -735,7 +842,7 @@ class PostgresRepository(Repository):
             return _debt_from_row(updated)
 
     def cancel_debt(self, user_id: str, debt_id: str, message: str | None = None) -> DebtOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = self._can_view_debt(conn, user_id, debt_id)
             if not row:
@@ -764,7 +871,7 @@ class PostgresRepository(Repository):
 
     def list_events(self, user_id: str, debt_id: str) -> list[DebtEventOut]:
         self.get_authorized_debt(user_id, debt_id)
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             rows = conn.execute("SELECT * FROM debt_events WHERE debt_id = %s ORDER BY created_at", (debt_id,)).fetchall()
             return [
@@ -787,7 +894,7 @@ class PostgresRepository(Repository):
         safe_file_name = file_name.replace("/", "_").replace("\\", "_")
         storage_path = f"{debt_id}/{att_id}-{safe_file_name}"
         signed_url = await self._store_receipt_and_sign(storage_path, file)
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             conn.execute(
                 """
@@ -828,7 +935,7 @@ class PostgresRepository(Repository):
         retention_state, _ = retention_for_debt(debt)
         if retention_state.value == "retention_expired":
             return []
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             rows = conn.execute("SELECT * FROM attachments WHERE debt_id = %s ORDER BY created_at", (debt_id,)).fetchall()
             return [
@@ -884,7 +991,7 @@ class PostgresRepository(Repository):
     # ── Dashboards ────────────────────────────────────────────────────
 
     def debtor_dashboard(self, user_id: str) -> DebtorDashboardOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._refresh_overdue(conn)
             conn.commit()
@@ -917,7 +1024,7 @@ class PostgresRepository(Repository):
             )
 
     def creditor_dashboard(self, user_id: str) -> CreditorDashboardOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._refresh_overdue(conn)
             conn.commit()
@@ -958,7 +1065,7 @@ class PostgresRepository(Repository):
     # ── Notifications ─────────────────────────────────────────────────
 
     def list_notifications(self, user_id: str) -> list[NotificationOut]:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             rows = conn.execute("SELECT * FROM notifications WHERE user_id = %s ORDER BY created_at DESC", (user_id,)).fetchall()
             return [
@@ -977,7 +1084,7 @@ class PostgresRepository(Repository):
             ]
 
     def read_notification(self, user_id: str, notification_id: str) -> NotificationOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             conn.execute(
                 "UPDATE notifications SET read_at = now() WHERE id = %s AND user_id = %s AND read_at IS NULL",
@@ -1000,7 +1107,7 @@ class PostgresRepository(Repository):
             )
 
     def set_notification_preference(self, user_id: str, payload: NotificationPreferenceIn) -> NotificationPreferenceOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO merchant_notification_preferences (user_id, merchant_id, whatsapp_enabled, updated_at)
@@ -1016,7 +1123,7 @@ class PostgresRepository(Repository):
         )
 
     def list_commitment_score_events(self, user_id: str) -> list[CommitmentScoreEventOut]:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             rows = conn.execute("SELECT * FROM commitment_score_events WHERE user_id = %s ORDER BY created_at DESC", (user_id,)).fetchall()
             return [
@@ -1053,7 +1160,7 @@ class PostgresRepository(Repository):
                  WHERE id = %s
             """
             params = (result.failed_reason, notification_id)
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.execute(sql, params)
             conn.commit()
 
@@ -1072,7 +1179,7 @@ class PostgresRepository(Repository):
                    whatsapp_status_received_at = COALESCE(whatsapp_status_received_at, %(occurred_at)s)
              WHERE whatsapp_provider_ref = %(provider_ref)s
         """
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             cur = conn.execute(
                 sql,
                 {
@@ -1086,7 +1193,7 @@ class PostgresRepository(Repository):
             return (cur.rowcount or 0) > 0
 
     def get_whatsapp_state(self, notification_id: str) -> dict[str, object] | None:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = conn.execute(
                 """
@@ -1104,7 +1211,7 @@ class PostgresRepository(Repository):
     def get_merchant_notification_preference(
         self, creditor_id: str, debtor_id: str
     ) -> NotificationPreferenceOut | None:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = conn.execute(
                 """
@@ -1127,7 +1234,7 @@ class PostgresRepository(Repository):
 
     def create_group(self, owner_id: str, payload: GroupCreate) -> GroupOut:
         group_id = str(uuid4())
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             conn.execute(
                 "INSERT INTO groups (id, owner_id, name, description, created_at) VALUES (%s, %s, %s, %s, now())",
@@ -1144,7 +1251,7 @@ class PostgresRepository(Repository):
             )
 
     def list_groups(self, user_id: str) -> list[GroupOut]:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             rows = conn.execute(
                 """
@@ -1203,7 +1310,7 @@ class PostgresRepository(Repository):
         )
 
     def invite_group_member(self, actor_id: str, group_id: str, payload: GroupInviteIn) -> GroupMemberOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             group = conn.execute("SELECT * FROM groups WHERE id = %s", (group_id,)).fetchone()
             if not group:
@@ -1237,7 +1344,7 @@ class PostgresRepository(Repository):
             return self._member_from_row(row)
 
     def accept_group_invite(self, user_id: str, group_id: str) -> GroupMemberOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             conn.execute(
                 "UPDATE group_members SET status = 'accepted', accepted_at = now() WHERE group_id = %s AND user_id = %s AND status = 'pending'",
@@ -1257,7 +1364,7 @@ class PostgresRepository(Repository):
             )
 
     def group_debts(self, user_id: str, group_id: str) -> list[DebtOut]:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             member = conn.execute(
                 "SELECT 1 FROM group_members WHERE group_id = %s AND user_id = %s AND status = 'accepted'",
@@ -1333,7 +1440,7 @@ class PostgresRepository(Repository):
     )
 
     def decline_group_invite(self, user_id: str, group_id: str) -> GroupMemberOut:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             updated = conn.execute(
                 "UPDATE group_members SET status = 'declined' WHERE group_id = %s AND user_id = %s AND status = 'pending' RETURNING id",
@@ -1350,7 +1457,7 @@ class PostgresRepository(Repository):
             return self._member_from_row(row)
 
     def leave_group(self, user_id: str, group_id: str) -> GroupMemberOut:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             group = conn.execute("SELECT * FROM groups WHERE id = %s", (group_id,)).fetchone()
             if not group:
@@ -1394,7 +1501,7 @@ class PostgresRepository(Repository):
             return self._member_from_row(row)
 
     def rename_group(self, owner_id: str, group_id: str, payload: GroupRenameIn) -> GroupOut:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._require_group_owner_pg(conn, owner_id, group_id)
             conn.execute("UPDATE groups SET name = %s WHERE id = %s", (payload.name, group_id))
@@ -1404,7 +1511,7 @@ class PostgresRepository(Repository):
             return self._group_from_row(row, self._accepted_member_count(conn, group_id))
 
     def transfer_group_ownership(self, owner_id: str, group_id: str, payload: GroupOwnershipTransferIn) -> GroupOut:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             group = self._require_group_owner_pg(conn, owner_id, group_id)
             target = payload.new_owner_user_id
@@ -1430,7 +1537,7 @@ class PostgresRepository(Repository):
             return self._group_from_row(row, self._accepted_member_count(conn, group_id))
 
     def delete_group(self, owner_id: str, group_id: str) -> None:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._require_group_owner_pg(conn, owner_id, group_id)
             attached_row = conn.execute("SELECT count(*) AS c FROM debts WHERE group_id = %s", (group_id,)).fetchone()
@@ -1453,7 +1560,7 @@ class PostgresRepository(Repository):
             conn.commit()
 
     def revoke_group_invite(self, owner_id: str, group_id: str, target_user_id: str) -> None:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._require_group_owner_pg(conn, owner_id, group_id)
             deleted = conn.execute(
@@ -1469,7 +1576,7 @@ class PostgresRepository(Repository):
             conn.commit()
 
     def list_pending_group_invites(self, owner_id: str, group_id: str) -> list[GroupMemberOut]:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._require_group_owner_pg(conn, owner_id, group_id)
             rows = conn.execute(
@@ -1479,7 +1586,7 @@ class PostgresRepository(Repository):
             return [self._member_from_row(r) for r in rows]
 
     def list_group_members(self, viewer_id: str, group_id: str) -> list[GroupMemberOut]:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             group = conn.execute("SELECT * FROM groups WHERE id = %s", (group_id,)).fetchone()
             if not group:
@@ -1506,7 +1613,7 @@ class PostgresRepository(Repository):
             return [self._member_from_row(r) for r in rows]
 
     def get_group_detail(self, viewer_id: str, group_id: str) -> GroupDetailOut:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             group = conn.execute("SELECT * FROM groups WHERE id = %s", (group_id,)).fetchone()
             if not group:
@@ -1539,7 +1646,7 @@ class PostgresRepository(Repository):
             return GroupDetailOut(**base.model_dump(), members=members, pending_invites=pending)
 
     def shared_accepted_groups(self, user_a: str, user_b: str) -> list[GroupOut]:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             rows = conn.execute(
                 """
@@ -1555,7 +1662,7 @@ class PostgresRepository(Repository):
             return [self._group_from_row(r, int(r["member_count"])) for r in rows]
 
     def update_debt_group_tag(self, creditor_id: str, debt_id: str, group_id: str | None) -> DebtOut:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             debt = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
             if not debt:
@@ -1603,7 +1710,7 @@ class PostgresRepository(Repository):
     def find_profile_by_email_or_phone(self, *, email: str | None = None, phone: str | None = None) -> ProfileOut | None:  # type: ignore[override]
         if not email and not phone:
             return None
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             if email:
                 row = conn.execute(
@@ -1622,7 +1729,7 @@ class PostgresRepository(Repository):
             return None
 
     def create_settlement(self, payer_id: str, group_id: str, payload: SettlementCreate) -> SettlementOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             member = conn.execute(
                 "SELECT 1 FROM group_members WHERE group_id = %s AND user_id = %s AND status = 'accepted'",
@@ -1820,7 +1927,7 @@ class PostgresRepository(Repository):
                 self._notify_raw(conn, str(c["user_id"]), "settlement_failed", "Settlement failed", "The settlement could not be applied. All debts are unchanged.", None)
 
     def create_settlement_proposal(self, user_id: str, group_id: str) -> SettlementProposalOut:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._require_accepted_member_pg(conn, user_id, group_id)
             self._sweep_proposals_pg(conn, group_id)
@@ -1910,7 +2017,7 @@ class PostgresRepository(Repository):
             return self._serialise_proposal_pg(conn, pid, viewer_id=user_id)
 
     def get_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str) -> SettlementProposalOut:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._require_accepted_member_pg(conn, user_id, group_id)
             self._sweep_proposals_pg(conn, group_id)
@@ -1927,7 +2034,7 @@ class PostgresRepository(Repository):
             return self._serialise_proposal_pg(conn, proposal_id, viewer_id=user_id)
 
     def list_settlement_proposals(self, user_id: str, group_id: str, status_filter: str | None = None) -> list[SettlementProposalOut]:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._require_accepted_member_pg(conn, user_id, group_id)
             self._sweep_proposals_pg(conn, group_id)
@@ -1945,7 +2052,7 @@ class PostgresRepository(Repository):
             return [self._serialise_proposal_pg(conn, str(r["id"]), viewer_id=user_id) for r in rows]
 
     def confirm_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str) -> SettlementProposalOut:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._require_accepted_member_pg(conn, user_id, group_id)
             self._sweep_proposals_pg(conn, group_id)
@@ -1995,7 +2102,7 @@ class PostgresRepository(Repository):
             return self._serialise_proposal_pg(conn, proposal_id, viewer_id=user_id)
 
     def reject_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str) -> SettlementProposalOut:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._require_accepted_member_pg(conn, user_id, group_id)
             self._sweep_proposals_pg(conn, group_id)
@@ -2046,7 +2153,7 @@ class PostgresRepository(Repository):
             return self._serialise_proposal_pg(conn, proposal_id, viewer_id=user_id)
 
     def sweep_settlement_proposals(self, group_id: str) -> None:  # type: ignore[override]
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             self._sweep_proposals_pg(conn, group_id)
             conn.commit()
@@ -2095,7 +2202,7 @@ class PostgresRepository(Repository):
         expires_at: datetime,
     ) -> PaymentIntentOut:
         intent_id = str(uuid4())
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             conn.execute(
                 """
@@ -2110,7 +2217,7 @@ class PostgresRepository(Repository):
             return self._intent_from_row(row)
 
     def get_active_payment_intent(self, debt_id: str) -> PaymentIntentOut | None:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             conn.execute(
                 """
@@ -2128,7 +2235,7 @@ class PostgresRepository(Repository):
             return self._intent_from_row(row) if row else None
 
     def get_payment_intent_by_ref(self, provider_ref: str) -> PaymentIntentOut | None:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = conn.execute(
                 "SELECT * FROM payment_intents WHERE provider_ref = %s LIMIT 1",
@@ -2139,7 +2246,7 @@ class PostgresRepository(Repository):
     def update_payment_intent_status(
         self, intent_id: str, status: str, completed_at: datetime | None = None
     ) -> None:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             if completed_at is not None:
                 conn.execute(
                     "UPDATE payment_intents SET status = %s, completed_at = %s WHERE id = %s",
@@ -2163,7 +2270,7 @@ class PostgresRepository(Repository):
         fee: Decimal,
         expires_at: datetime,
     ) -> PayOnlineOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             row = self._can_view_debt(conn, user_id, debt_id)
             if not row:
@@ -2212,7 +2319,7 @@ class PostgresRepository(Repository):
             )
 
     def confirm_payment_gateway(self, provider_ref: str) -> DebtOut:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             intent_row = conn.execute(
                 "SELECT * FROM payment_intents WHERE provider_ref = %s LIMIT 1",
@@ -2267,7 +2374,7 @@ class PostgresRepository(Repository):
             return _debt_from_row(updated)
 
     def record_payment_failure(self, provider_ref: str) -> None:
-        with self._pool.connection() as conn:
+        with self._connection() as conn:
             conn.row_factory = dict_row
             intent_row = conn.execute(
                 "SELECT * FROM payment_intents WHERE provider_ref = %s AND status = 'pending' LIMIT 1",

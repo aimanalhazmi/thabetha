@@ -1,0 +1,26 @@
+Phase 010 validation notes
+Date: 2026-04-29
+Branch: 010-backend-rls-enforcement
+
+Pre-change develop baseline:
+- Captured from isolated worktree `/tmp/thabetha-develop-baseline` at develop commit `a318eefb2570d576606da729743aad418694d346`.
+- Command: `cd /tmp/thabetha-develop-baseline/backend && uv run pytest tests/ -q --durations=0`
+- Result: 141 passed in 4.85s
+
+Local validation captured during implementation:
+- backend default suite: `cd backend && uv run pytest -q`
+- Result: 152 passed, 4 skipped in 5.06s
+- backend lint: `cd backend && uv run ruff check .`
+- Result: all checks passed
+- RLS suite: `cd backend && REPOSITORY_TYPE=postgres RLS_MODE=enforce DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55322/postgres APP_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55322/postgres SYSTEM_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55322/postgres uv run pytest tests/rls/ -q`
+- Result: 11 passed, 4 skipped in 0.11s
+
+Post-change comparison:
+- Command: `cd backend && RLS_MODE=enforce uv run pytest tests/ -q --ignore=tests/rls --durations=0`
+- Result: 141 passed in 4.98s
+- Threshold: 4.85s * 1.10 = 5.335s
+- Outcome: PASS, post-change wall-clock is 102.7% of baseline.
+
+RLS/Supabase transition validation:
+- `supabase start` completed successfully against local Docker.
+- `off -> shadow -> enforce -> shadow` was validated with the FastAPI app, `SIGHUP`, and `/api/v1/healthz`; each transition surfaced on the next request.
