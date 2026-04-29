@@ -968,7 +968,13 @@ class InMemoryRepository(Repository):
             # If everyone has confirmed, atomically settle.
             roster = [c for c in self.settlement_confirmations.values() if c["proposal_id"] == proposal_id]
             if all(c["status"] == SettlementConfirmationStatus.confirmed for c in roster):
-                self._apply_settlement(proposal_id)
+                try:
+                    self._apply_settlement(proposal_id)
+                except Exception as exc:  # noqa: BLE001 — guard for mocked/unexpected raises
+                    p = self.settlement_proposals[proposal_id]
+                    p["status"] = SettlementProposalStatus.settlement_failed
+                    p["failure_reason"] = type(exc).__name__
+                    p["resolved_at"] = utcnow()
             return self._serialise_proposal(proposal_id, viewer_id=user_id)
 
     def reject_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str) -> SettlementProposalOut:

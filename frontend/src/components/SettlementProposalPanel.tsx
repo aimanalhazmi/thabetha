@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { Panel } from "./Layout";
+import { SettlementReviewModal } from "./SettlementReviewModal";
 import { errorCode, settlements } from "../lib/api";
 import { t, type TranslationKey } from "../lib/i18n";
 import type { Language, SettlementProposal } from "../lib/types";
@@ -31,13 +32,19 @@ export function SettlementProposalPanel({ groupId, language, hasSettleableDebts 
   const tr = (key: TranslationKey) => t(language, key);
   const { user } = useAuth();
   const [proposal, setProposal] = useState<SettlementProposal | null>(null);
+  const [failedProposal, setFailedProposal] = useState<SettlementProposal | null>(null);
+  const [showModal, setShowModal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   async function load() {
     try {
-      const list = await settlements.list(groupId, "open");
-      setProposal(list.length > 0 ? list[0] : null);
+      const [open, failed] = await Promise.all([
+        settlements.list(groupId, "open"),
+        settlements.list(groupId, "settlement_failed"),
+      ]);
+      setProposal(open.length > 0 ? open[0] : null);
+      setFailedProposal(failed.length > 0 ? failed[0] : null);
     } catch {
       // Non-fatal — just leave proposal as null.
     }
@@ -53,6 +60,7 @@ export function SettlementProposalPanel({ groupId, language, hasSettleableDebts 
     try {
       const created = await settlements.create(groupId);
       setProposal(created);
+      setFailedProposal(null);
     } catch (err) {
       const code = errorCode(err);
       const key = code ? SETTLEMENT_ERROR_KEY[code] : undefined;
@@ -67,6 +75,21 @@ export function SettlementProposalPanel({ groupId, language, hasSettleableDebts 
   return (
     <Panel title={tr("settlementProposedTitle")}>
       {error && <div className="message">{error}</div>}
+
+      {/* settlement_failed banner — T034 */}
+      {!proposal && failedProposal && (
+        <div className="message" style={{ marginBottom: 12 }}>
+          <span>{tr("settlementStatusFailed")}</span>
+          <button
+            className="ghost-button"
+            disabled={busy}
+            onClick={() => void handleCreate()}
+            style={{ marginLeft: 12 }}
+          >
+            {tr("settlementCtaTryAgain")}
+          </button>
+        </div>
+      )}
 
       {!proposal && (
         <>
@@ -132,13 +155,29 @@ export function SettlementProposalPanel({ groupId, language, hasSettleableDebts 
             </>
           )}
 
-          {/* User's own pending status badge */}
-          {currentUserId && proposal.confirmations.some((c) => c.user_id === currentUserId && c.status === "pending") && (
-            <p style={{ marginTop: 8 }}>
-              {tr("settlementConfirm")}: <em>{tr("settlementStatusOpen")}</em>
-            </p>
-          )}
+          {/* Review link — T033 */}
+          <button
+            className="ghost-button"
+            onClick={() => setShowModal(true)}
+            style={{ marginTop: 12 }}
+          >
+            {tr("settlementReviewTitle")} →
+          </button>
         </div>
+      )}
+
+      {/* Review modal — T033 */}
+      {showModal && proposal && (
+        <SettlementReviewModal
+          groupId={groupId}
+          proposal={proposal}
+          language={language}
+          onClose={() => setShowModal(false)}
+          onUpdated={(updated) => {
+            setProposal(updated.status === "open" ? updated : null);
+            if (updated.status === "settlement_failed") setFailedProposal(updated);
+          }}
+        />
       )}
     </Panel>
   );

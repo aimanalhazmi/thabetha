@@ -276,6 +276,8 @@ export type TranslationKey =
   | 'settlementExpiresIn'
   | 'settlementTransfersHeading'
   | 'settlementProposedTitle'
+  | 'settlementReviewTitle'
+  | 'settlementCtaTryAgain'
   | 'errorOpenProposalExists'
   | 'errorMixedCurrency'
   | 'errorNothingToSettle'
@@ -562,6 +564,8 @@ const ar: Translations = {
   settlementExpiresIn: 'تنتهي خلال',
   settlementTransfersHeading: 'التحويلات المقترحة',
   settlementProposedTitle: 'اقتراح تسوية',
+  settlementReviewTitle: 'مراجعة التسوية',
+  settlementCtaTryAgain: 'حاول مجددًا',
   errorOpenProposalExists: 'يوجد اقتراح تسوية مفتوح في هذه المجموعة.',
   errorMixedCurrency: 'لا يمكن تسوية ديون بعملات مختلفة تلقائيًا.',
   errorNothingToSettle: 'لا توجد ديون قابلة للتسوية في هذه المجموعة.',
@@ -847,6 +851,8 @@ const en: Translations = {
   settlementExpiresIn: 'Expires in',
   settlementTransfersHeading: 'Proposed transfers',
   settlementProposedTitle: 'Settlement proposal',
+  settlementReviewTitle: 'Review settlement',
+  settlementCtaTryAgain: 'Try again',
   errorOpenProposalExists: 'A settlement proposal is already open for this group.',
   errorMixedCurrency: 'Mixed-currency debts cannot be auto-netted.',
   errorNothingToSettle: 'There is nothing to settle in this group.',
