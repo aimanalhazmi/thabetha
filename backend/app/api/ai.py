@@ -7,7 +7,8 @@ from app.core.security import AuthenticatedUser, get_current_user
 from app.repositories import Repository, get_repository
 from app.schemas.domain import MerchantChatOut, MerchantChatRequest, VoiceDebtDraftOut, VoiceDebtDraftRequest
 from app.services.ai.draft_extract import extract_voice_debt_draft
-from app.services.ai.limits import ensure_ai_quota_available, record_ai_usage
+from app.services.ai.limits import MERCHANT_CHAT_FEATURE, ensure_ai_quota_available, record_ai_usage
+from app.services.ai.merchant_chat import MerchantChatProviderError, run_merchant_chat
 from app.services.ai.transcribe import get_transcription_provider, validate_audio_input
 
 router = APIRouter()
@@ -96,12 +97,11 @@ def merchant_chat(
     repo: Annotated[Repository, Depends(get_repository)],
 ) -> MerchantChatOut:
     _require_ai_enabled(user, repo)
-    facts = repo.merchant_facts(user.id)
-    answer = (
-        f"You have {facts['active_count']} active debts, {facts['overdue_count']} overdue debts, "
-        f"and total receivables of {facts['total_receivable']}. "
-        f"Recommendation: follow up on overdue customers first and keep QR confirmation for new debts."
-    )
-    if "متأخر" in payload.message or "overdue" in payload.message.lower():
-        answer = f"Overdue summary: {facts['overdue_count']} debts need attention. Alerts: {facts['alerts'] or ['No overdue alerts.']}"
-    return MerchantChatOut(answer=answer, facts=facts)
+    ensure_ai_quota_available(repo, user.id, feature=MERCHANT_CHAT_FEATURE)
+    try:
+        return run_merchant_chat(repo, user, payload)
+    except MerchantChatProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "ai_provider_unavailable", "message": str(exc) or "Couldn't reach the assistant"},
+        ) from exc

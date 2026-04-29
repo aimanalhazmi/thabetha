@@ -1,0 +1,205 @@
+openapi: 3.1.0
+info:
+  title: Thabetha — Merchant Chat (Phase 13)
+  version: 0.1.0
+  description: |
+    Grounded merchant-chat endpoint. Replaces the keyword-matching stub at
+    `POST /api/v1/ai/merchant-chat` with a tool-using LLM that answers the
+    caller's questions about their own ledger only. Per-user data isolation is
+    inherited from the existing repository contract — tools always run as the
+    authenticated caller.
+
+    This document is the contract for Phase 13. The shape of the existing
+    endpoint remains backward-compatible: existing callers that send only
+    `{ "message": "..." }` continue to work and continue to receive
+    `{ "answer": "...", "facts": {...} }`.
+
+servers:
+  - url: /api/v1
+
+paths:
+  /ai/merchant-chat:
+    post:
+      operationId: merchantChat
+      summary: Ask a grounded question about the caller's ledger.
+      description: |
+        Hard-gated on `profile.ai_enabled` (returns 403 otherwise). Per-user
+        daily quota applies (returns 429 when exceeded). Quota is consumed only
+        on a successful response; provider failures return 503 and do not
+        consume quota.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantChatRequest'
+            examples:
+              who_owes_most:
+                summary: "Top demo prompt"
+                value:
+                  message: "Who owes me the most?"
+                  history: []
+                  locale: "en"
+                  timezone: "Asia/Riyadh"
+              follow_up:
+                summary: "Multi-turn follow-up"
+                value:
+                  message: "And which is the oldest?"
+                  history:
+                    - role: "user"
+                      content: "List my active debts."
+                    - role: "assistant"
+                      content: "You have 3 active debts: Ahmed (1,200 SAR), Sara (500 SAR), Omar (300 SAR)."
+                  locale: "en"
+                  timezone: "Asia/Riyadh"
+      responses:
+        '200':
+          description: Grounded answer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantChatOut'
+              examples:
+                grounded_answer:
+                  value:
+                    answer: "Ahmed owes you the most — 1,200 SAR on an active debt created on 2026-04-12."
+                    facts:
+                      outstanding_count: 3
+                      outstanding_sum: "2000.00"
+                      overdue_count: 0
+                      alerts: []
+                no_data:
+                  value:
+                    answer: "I don't have that information."
+                    facts:
+                      outstanding_count: 0
+                      outstanding_sum: "0.00"
+                      overdue_count: 0
+                      alerts: []
+        '403':
+          description: AI tier disabled for this user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail:
+                  code: "ai_not_enabled"
+                  message: "AI features are not enabled for this account."
+        '422':
+          description: Invalid request body (e.g. message too long, malformed history).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Daily merchant-chat quota exceeded.
+          headers:
+            Retry-After:
+              description: Seconds until the next quota window.
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail:
+                  code: "ai_daily_limit_reached"
+                  message: "Daily merchant-chat limit reached."
+        '503':
+          description: Upstream LLM provider unavailable. Quota is **not** consumed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail:
+                  code: "ai_provider_unavailable"
+                  message: "Couldn't reach the assistant. Please try again."
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    MerchantChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        history:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/ChatTurn'
+          description: |
+            Trailing turns supplied by the client. The server trims to the last
+            10 entries; the rest are silently dropped.
+          default: []
+        locale:
+          type: string
+          enum: ["ar", "en"]
+          default: "ar"
+        timezone:
+          type: string
+          description: IANA timezone identifier. Invalid values fall back to `Asia/Riyadh`.
+          default: "Asia/Riyadh"
+    ChatTurn:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: ["user", "assistant"]
+        content:
+          type: string
+          maxLength: 4000
+    MerchantChatOut:
+      type: object
+      required: [answer, facts]
+      properties:
+        answer:
+          type: string
+        facts:
+          type: object
+          additionalProperties: true
+        tool_trace:
+          type: array
+          nullable: true
+          description: Present only when `APP_ENV != production`. Contains tool name + outcome + duration; never arguments or row contents.
+          items:
+            $ref: '#/components/schemas/ToolTraceEntry'
+    ToolTraceEntry:
+      type: object
+      required: [tool, outcome, duration_ms]
+      properties:
+        tool:
+          type: string
+          enum: [list_debts, get_debt, get_dashboard_summary, get_commitment_history]
+        outcome:
+          type: string
+          enum: [ok, error, empty]
+        duration_ms:
+          type: integer
+          minimum: 0
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          oneOf:
+            - type: string
+            - type: object
+              properties:
+                code:
+                  type: string
+                message:
+                  type: string
+              required: [code, message]

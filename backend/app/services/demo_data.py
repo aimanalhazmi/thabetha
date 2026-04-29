@@ -55,3 +55,21 @@ def seed_demo_data(repo: InMemoryRepository) -> None:
     repo.invite_group_member(customer.id, group.id, GroupInviteIn(user_id=friend.id))
     repo.accept_group_invite(friend.id, group.id)
 
+    # Phase 13 — extra ledger so the merchant-chat demo prompts have grounded answers.
+    for debtor_name, amount in (("Alpha", "500.00"), ("Bravo", "1200.00"), ("Charlie", "300.00")):
+        debt = repo.create_debt(
+            merchant.id,
+            DebtCreate(
+                debtor_name=debtor_name,
+                amount=Decimal(amount),
+                currency="SAR",
+                description=f"Phase 13 demo — {debtor_name}",
+                due_date=date.today() + timedelta(days=14),
+            ),
+        )
+        # Accept some so the assistant can answer "active" questions.
+        if debtor_name in {"Alpha", "Bravo"}:
+            # Auto-accept by treating debtor_name as a synthetic acceptance — only meaningful
+            # when debtor_id is known; here debtors are unlinked so debt stays pending_confirmation.
+            _ = debt
+

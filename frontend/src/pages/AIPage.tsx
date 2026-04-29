@@ -1,7 +1,8 @@
 import { Bot } from "lucide-react";
 import { useState } from "react";
+import { MerchantChatPanel } from "../components/ai/MerchantChatPanel";
 import { Panel } from "../components/Layout";
-import { aiVoiceDrafts, apiRequest } from "../lib/api";
+import { aiVoiceDrafts } from "../lib/api";
 import { humanizeError } from "../lib/errors";
 import { t } from "../lib/i18n";
 import type { Language, VoiceDraft } from "../lib/types";
@@ -12,8 +13,6 @@ export function AIPage({ language }: Props) {
   const tr = (key: Parameters<typeof t>[1]) => t(language, key);
   const [transcript, setTranscript] = useState("على Ahmed 25 SAR groceries due 2026-05-01");
   const [voiceDraft, setVoiceDraft] = useState<VoiceDraft | null>(null);
-  const [chatMessage, setChatMessage] = useState("Give me overdue summary");
-  const [chatAnswer, setChatAnswer] = useState("");
   const [message, setMessage] = useState("");
 
   async function draftFromVoice() {
@@ -23,16 +22,6 @@ export function AIPage({ language }: Props) {
       setMessage("Draft extracted");
     } catch (err) {
       setMessage(humanizeError(err, language, "aiVoiceDraft"));
-    }
-  }
-
-  async function askChatbot() {
-    try {
-      const resp = await apiRequest<{ answer: string }>("/ai/merchant-chat", { method: "POST", body: JSON.stringify({ message: chatMessage }) });
-      setChatAnswer(resp.answer);
-      setMessage("Summary ready");
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Failed");
     }
   }
 
@@ -46,13 +35,7 @@ export function AIPage({ language }: Props) {
         </button>
         {voiceDraft && <pre>{JSON.stringify(voiceDraft, null, 2)}</pre>}
       </Panel>
-      <Panel title={tr("askMerchantBot")}>
-        <textarea value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} />
-        <button className="primary-button" onClick={() => void askChatbot()}>
-          <Bot size={18} /><span>{tr("askMerchantBot")}</span>
-        </button>
-        {chatAnswer && <p className="answer">{chatAnswer}</p>}
-      </Panel>
+      <MerchantChatPanel language={language} />
     </section>
   );
 }

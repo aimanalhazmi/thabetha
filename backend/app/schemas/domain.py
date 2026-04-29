@@ -559,13 +559,28 @@ class VoiceDebtDraftOut(BaseModel):
     field_confirmations: VoiceDraftFieldConfirmations = Field(default_factory=VoiceDraftFieldConfirmations)
 
 
+class ChatTurn(BaseModel):
+    role: str = Field(pattern=r"^(user|assistant)$")
+    content: str = Field(max_length=4000)
+
+
+class ToolTraceEntry(BaseModel):
+    tool: str
+    outcome: str
+    duration_ms: int = Field(ge=0)
+
+
 class MerchantChatRequest(BaseModel):
-    message: str = Field(min_length=1)
+    message: str = Field(min_length=1, max_length=4000)
+    history: list[ChatTurn] = Field(default_factory=list)
+    locale: str = Field(default="ar", pattern=r"^(ar|en)$")
+    timezone: str = Field(default="Asia/Riyadh")
 
 
 class MerchantChatOut(BaseModel):
     answer: str
     facts: dict[str, Any]
+    tool_trace: list[ToolTraceEntry] | None = None
 
 
 class SignUpRequest(BaseModel):

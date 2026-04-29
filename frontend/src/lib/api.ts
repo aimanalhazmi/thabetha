@@ -147,3 +147,10 @@ export const aiVoiceDrafts = {
     });
   },
 };
+
+export function postMerchantChat(payload: import('./types').MerchantChatRequest) {
+  return apiRequest<import('./types').MerchantChatResponse>('/ai/merchant-chat', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
