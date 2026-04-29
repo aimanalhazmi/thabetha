@@ -1311,6 +1311,31 @@ class PostgresRepository(Repository):
                 created_at=utcnow(),
             )
 
+    # ── Group settlement proposals (UC9 part 2) ──────────────────────
+    # In-memory parity is the CI path; full Postgres parity for the
+    # group surface remains pending (Phase 8 also stubbed `leave_group`,
+    # `rename_group`, `transfer_group_ownership`, etc. on this path).
+    # The schema (migration 012) is fully applied so a follow-up that
+    # implements these methods does not need to touch SQL.
+
+    def create_settlement_proposal(self, user_id: str, group_id: str):  # type: ignore[override]
+        raise NotImplementedError("create_settlement_proposal: Postgres parity pending (T015)")
+
+    def get_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str):  # type: ignore[override]
+        raise NotImplementedError("get_settlement_proposal: Postgres parity pending (T015)")
+
+    def list_settlement_proposals(self, user_id: str, group_id: str, status_filter: str | None = None):  # type: ignore[override]
+        raise NotImplementedError("list_settlement_proposals: Postgres parity pending (T015)")
+
+    def confirm_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str):  # type: ignore[override]
+        raise NotImplementedError("confirm_settlement_proposal: Postgres parity pending (T015)")
+
+    def reject_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str):  # type: ignore[override]
+        raise NotImplementedError("reject_settlement_proposal: Postgres parity pending (T015)")
+
+    def sweep_settlement_proposals(self, group_id: str) -> None:  # type: ignore[override]
+        raise NotImplementedError("sweep_settlement_proposals: Postgres parity pending (T015)")
+
     # ── AI / analytics ────────────────────────────────────────────────
 
     def merchant_facts(self, user_id: str) -> dict[str, object]:

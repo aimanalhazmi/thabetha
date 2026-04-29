@@ -341,6 +341,7 @@ class CommitmentScoreEventOut(BaseModel):
     reason: str
     debt_id: str | None = None
     reminder_date: date | None = None
+    proposal_id: str | None = None
     created_at: datetime
 
 

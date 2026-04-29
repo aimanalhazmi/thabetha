@@ -15,6 +15,7 @@ from app.schemas.domain import (
     GroupRenameIn,
     SettlementCreate,
     SettlementOut,
+    SettlementProposalOut,
 )
 
 router = APIRouter()
@@ -184,3 +185,76 @@ def create_settlement(
 ) -> SettlementOut:
     repo.ensure_profile(user)
     return repo.create_settlement(user.id, group_id, payload)
+
+
+# ── Settlement proposals (UC9 part 2) ──────────────────────────────────────
+
+
+@router.post(
+    "/{group_id}/settlement-proposals",
+    response_model=SettlementProposalOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_settlement_proposal(
+    group_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> SettlementProposalOut:
+    repo.ensure_profile(user)
+    return repo.create_settlement_proposal(user.id, group_id)
+
+
+@router.get(
+    "/{group_id}/settlement-proposals",
+    response_model=list[SettlementProposalOut],
+)
+def list_settlement_proposals(
+    group_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+    status_filter: Annotated[str | None, Query(alias="status")] = None,
+) -> list[SettlementProposalOut]:
+    repo.ensure_profile(user)
+    return repo.list_settlement_proposals(user.id, group_id, status_filter)
+
+
+@router.get(
+    "/{group_id}/settlement-proposals/{proposal_id}",
+    response_model=SettlementProposalOut,
+)
+def get_settlement_proposal(
+    group_id: str,
+    proposal_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> SettlementProposalOut:
+    repo.ensure_profile(user)
+    return repo.get_settlement_proposal(user.id, group_id, proposal_id)
+
+
+@router.post(
+    "/{group_id}/settlement-proposals/{proposal_id}/confirm",
+    response_model=SettlementProposalOut,
+)
+def confirm_settlement_proposal(
+    group_id: str,
+    proposal_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> SettlementProposalOut:
+    repo.ensure_profile(user)
+    return repo.confirm_settlement_proposal(user.id, group_id, proposal_id)
+
+
+@router.post(
+    "/{group_id}/settlement-proposals/{proposal_id}/reject",
+    response_model=SettlementProposalOut,
+)
+def reject_settlement_proposal(
+    group_id: str,
+    proposal_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> SettlementProposalOut:
+    repo.ensure_profile(user)
+    return repo.reject_settlement_proposal(user.id, group_id, proposal_id)

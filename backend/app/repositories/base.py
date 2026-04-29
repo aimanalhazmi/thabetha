@@ -45,6 +45,7 @@ from app.schemas.domain import (
     ProfileUpdate,
     SettlementCreate,
     SettlementOut,
+    SettlementProposalOut,
 )
 from app.services.whatsapp.provider import SendResult, StatusUpdate
 
@@ -220,6 +221,35 @@ class Repository(ABC):
 
     @abstractmethod
     def create_settlement(self, payer_id: str, group_id: str, payload: SettlementCreate) -> SettlementOut: ...
+
+    # ── Group settlement proposals (UC9 part 2) ───────────────────────
+    # Auto-netting flow: any accepted member proposes a settlement, the
+    # netting algorithm produces minimum-edge transfers, every required
+    # party (payer or receiver) confirms or rejects, full confirmation
+    # atomically settles every snapshotted debt via the canonical
+    # active|overdue → payment_pending_confirmation → paid chain.
+    # `leave_group` (above) MUST raise 409 LeaveBlockedByOpenProposal
+    # when the leaver is a payer or receiver in any open proposal.
+
+    @abstractmethod
+    def create_settlement_proposal(self, user_id: str, group_id: str) -> SettlementProposalOut: ...
+
+    @abstractmethod
+    def get_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str) -> SettlementProposalOut: ...
+
+    @abstractmethod
+    def list_settlement_proposals(
+        self, user_id: str, group_id: str, status_filter: str | None = None
+    ) -> list[SettlementProposalOut]: ...
+
+    @abstractmethod
+    def confirm_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str) -> SettlementProposalOut: ...
+
+    @abstractmethod
+    def reject_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str) -> SettlementProposalOut: ...
+
+    @abstractmethod
+    def sweep_settlement_proposals(self, group_id: str) -> None: ...
 
     # ── AI / analytics ────────────────────────────────────────────────
 

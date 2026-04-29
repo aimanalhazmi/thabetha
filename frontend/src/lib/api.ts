@@ -6,6 +6,7 @@ import type {
   GroupMember,
   PaymentIntent,
   PayOnlineResult,
+  SettlementProposal,
 } from './types';
 import { supabase } from './supabaseClient';
 
@@ -100,4 +101,29 @@ export const groups = {
   debts: (id: string) => apiRequest<Debt[]>(`/groups/${id}/debts`),
   shared: (withUserId: string) =>
     apiRequest<Group[]>(`/groups/shared?with_user_id=${encodeURIComponent(withUserId)}`),
+};
+
+export const settlements = {
+  /** Trigger auto-netting for a group. 409 on open-proposal-exists / mixed-currency / nothing-to-settle. */
+  create: (groupId: string) =>
+    apiRequest<SettlementProposal>(`/groups/${groupId}/settlement-proposals`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  list: (groupId: string, status?: string) => {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+    return apiRequest<SettlementProposal[]>(`/groups/${groupId}/settlement-proposals${qs}`);
+  },
+  get: (groupId: string, proposalId: string) =>
+    apiRequest<SettlementProposal>(`/groups/${groupId}/settlement-proposals/${proposalId}`),
+  confirm: (groupId: string, proposalId: string) =>
+    apiRequest<SettlementProposal>(
+      `/groups/${groupId}/settlement-proposals/${proposalId}/confirm`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
+  reject: (groupId: string, proposalId: string) =>
+    apiRequest<SettlementProposal>(
+      `/groups/${groupId}/settlement-proposals/${proposalId}/reject`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
 };

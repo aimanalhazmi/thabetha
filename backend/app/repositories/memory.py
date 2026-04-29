@@ -45,10 +45,18 @@ from app.schemas.domain import (
     PayOnlineOut,
     ProfileOut,
     ProfileUpdate,
+    ProposedTransferOut,
+    SettlementConfirmationOut,
+    SettlementConfirmationStatus,
     SettlementCreate,
     SettlementOut,
+    SettlementProposalOut,
+    SettlementProposalStatus,
+    SnapshotDebtOut,
     utcnow,
 )
+from app.services.netting import SnapshotDebt as _NetSnapshotDebt
+from app.services.netting import compute_transfers as _compute_transfers
 from app.services.whatsapp.provider import SendOutcome, SendResult, StatusUpdate
 
 
@@ -90,6 +98,11 @@ class InMemoryRepository(Repository):
             self.groups: dict[str, GroupOut] = {}
             self.group_members: list[GroupMemberOut] = []
             self.settlements: list[SettlementOut] = []
+            # Group settlement proposals (UC9 part 2). Each proposal stores its
+            # own snapshot, transfer list, status, expiry, and confirmation
+            # roster. Confirmations are keyed (proposal_id, user_id).
+            self.settlement_proposals: dict[str, dict[str, object]] = {}
+            self.settlement_confirmations: dict[tuple[str, str], dict[str, object]] = {}
             self._overdue_penalties: set[str] = set()
             self._edit_request_payloads: dict[str, dict[str, object]] = {}
             self._original_terms: dict[str, dict[str, object]] = {}
@@ -698,6 +711,16 @@ class InMemoryRepository(Repository):
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotAGroupMember", "message": "Group not found."})
             if group.owner_id == user_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "OwnerCannotLeave", "message": "Owner must transfer ownership before leaving."})
+            # FR-013: cannot leave while in any open proposal's transfers.
+            for proposal in self.settlement_proposals.values():
+                if proposal["group_id"] != group_id or proposal["status"] != SettlementProposalStatus.open:
+                    continue
+                transfers = proposal["transfers"]
+                if any(t["payer_id"] == user_id or t["receiver_id"] == user_id for t in transfers):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={"code": "LeaveBlockedByOpenProposal", "message": "You cannot leave while an open settlement proposal includes you."},
+                    )
             for index, member in enumerate(self.group_members):
                 if member.group_id == group_id and member.user_id == user_id and member.status == GroupMemberStatus.accepted:
                     updated = member.model_copy(update={"status": GroupMemberStatus.left})
@@ -819,6 +842,301 @@ class InMemoryRepository(Repository):
             self.settlements.append(settlement)
             self._notify(payload.debtor_id, NotificationType.payment_confirmed, "Group settlement recorded", f"{payer_id} paid {payload.amount} {payload.currency} for you", None)
             return settlement
+
+    # ── Group settlement proposals (UC9 part 2) ──────────────────────
+
+    def create_settlement_proposal(self, user_id: str, group_id: str) -> SettlementProposalOut:
+        with self._lock:
+            self._require_accepted_member(user_id, group_id)
+            self.sweep_settlement_proposals(group_id)
+            # One open proposal per group.
+            for proposal in self.settlement_proposals.values():
+                if proposal["group_id"] == group_id and proposal["status"] == SettlementProposalStatus.open:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={"code": "OpenProposalExists", "message": "An open proposal already exists for this group.", "existing_proposal_id": proposal["id"]},
+                    )
+            # Snapshot active|overdue debts in this group.
+            settle_states = {DebtStatus.active, DebtStatus.overdue}
+            snapshot_debts = sorted(
+                [d for d in self.debts.values() if d.group_id == group_id and d.status in settle_states and d.debtor_id is not None],
+                key=lambda d: d.id,
+            )
+            if not snapshot_debts:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "NothingToSettle", "message": "Nothing to settle in this group."})
+            currencies = {d.currency for d in snapshot_debts}
+            if len(currencies) > 1:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "MixedCurrency", "message": "Cannot auto-net mixed currencies."})
+            currency = next(iter(currencies))
+            net_inputs = [
+                _NetSnapshotDebt(debt_id=d.id, debtor_id=d.debtor_id, creditor_id=d.creditor_id, amount=d.amount, currency=d.currency)
+                for d in snapshot_debts
+            ]
+            transfers = _compute_transfers(net_inputs)
+            now = utcnow()
+            pid = str(uuid4())
+            transfers_list = [
+                {"payer_id": t.payer_id, "receiver_id": t.receiver_id, "amount": t.amount}
+                for t in transfers
+            ]
+            snapshot_list = [
+                {"debt_id": d.id, "debtor_id": d.debtor_id, "creditor_id": d.creditor_id, "amount": d.amount}
+                for d in snapshot_debts
+            ]
+            required_users: set[str] = set()
+            for t in transfers_list:
+                required_users.add(t["payer_id"])
+                required_users.add(t["receiver_id"])
+            self.settlement_proposals[pid] = {
+                "id": pid,
+                "group_id": group_id,
+                "proposed_by": user_id,
+                "currency": currency,
+                "snapshot": snapshot_list,
+                "transfers": transfers_list,
+                "status": SettlementProposalStatus.open,
+                "failure_reason": None,
+                "created_at": now,
+                "expires_at": now + timedelta(days=7),
+                "resolved_at": None,
+                "reminder_sent_at": None,
+            }
+            for uid in sorted(required_users):
+                self.settlement_confirmations[(pid, uid)] = {
+                    "proposal_id": pid,
+                    "user_id": uid,
+                    "status": SettlementConfirmationStatus.pending,
+                    "responded_at": None,
+                }
+            self._record_group_event(group_id, user_id, "settlement_proposed", {"proposal_id": pid, "transfer_count": len(transfers_list)})
+            # Notify each required confirmer; if none required, proposal is
+            # immediately settle-able with zero transfers — auto-settle.
+            for uid in required_users:
+                their_amount = sum(
+                    (t["amount"] for t in transfers_list if t["payer_id"] == uid),
+                    Decimal("0"),
+                ) or sum(
+                    (t["amount"] for t in transfers_list if t["receiver_id"] == uid),
+                    Decimal("0"),
+                )
+                self._notify(uid, NotificationType.settlement_proposed, "Settlement proposal", f"{their_amount} {currency} settlement proposed in your group", None)
+            if not required_users:
+                # Net-zero group with non-empty snapshot (e.g. perfect cycle)
+                # → settle immediately, no confirmations needed.
+                self._apply_settlement(pid)
+            return self._serialise_proposal(pid, viewer_id=user_id)
+
+    def get_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str) -> SettlementProposalOut:
+        self._require_accepted_member(user_id, group_id)
+        self.sweep_settlement_proposals(group_id)
+        proposal = self.settlement_proposals.get(proposal_id)
+        if proposal is None or proposal["group_id"] != group_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "ProposalNotFound", "message": "Proposal not found."})
+        return self._serialise_proposal(proposal_id, viewer_id=user_id)
+
+    def list_settlement_proposals(
+        self, user_id: str, group_id: str, status_filter: str | None = None
+    ) -> list[SettlementProposalOut]:
+        self._require_accepted_member(user_id, group_id)
+        self.sweep_settlement_proposals(group_id)
+        items = [p for p in self.settlement_proposals.values() if p["group_id"] == group_id]
+        if status_filter and status_filter != "all":
+            items = [p for p in items if p["status"] == status_filter]
+        items.sort(key=lambda p: p["created_at"], reverse=True)
+        return [self._serialise_proposal(p["id"], viewer_id=user_id) for p in items]
+
+    def confirm_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str) -> SettlementProposalOut:
+        with self._lock:
+            self._require_accepted_member(user_id, group_id)
+            self.sweep_settlement_proposals(group_id)
+            proposal = self.settlement_proposals.get(proposal_id)
+            if proposal is None or proposal["group_id"] != group_id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "ProposalNotFound", "message": "Proposal not found."})
+            if proposal["status"] != SettlementProposalStatus.open:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "ProposalNotOpen", "message": "Proposal is not open."})
+            confirmation = self.settlement_confirmations.get((proposal_id, user_id))
+            if confirmation is None:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "NotARequiredParty", "message": "You are not a required party for this proposal."})
+            if confirmation["status"] == SettlementConfirmationStatus.confirmed:
+                # Idempotent.
+                return self._serialise_proposal(proposal_id, viewer_id=user_id)
+            if confirmation["status"] == SettlementConfirmationStatus.rejected:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "AlreadyResponded", "message": "You have already rejected this proposal."})
+            confirmation["status"] = SettlementConfirmationStatus.confirmed
+            confirmation["responded_at"] = utcnow()
+            self._record_group_event(group_id, user_id, "settlement_confirmed", {"proposal_id": proposal_id})
+            # If everyone has confirmed, atomically settle.
+            roster = [c for c in self.settlement_confirmations.values() if c["proposal_id"] == proposal_id]
+            if all(c["status"] == SettlementConfirmationStatus.confirmed for c in roster):
+                self._apply_settlement(proposal_id)
+            return self._serialise_proposal(proposal_id, viewer_id=user_id)
+
+    def reject_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str) -> SettlementProposalOut:
+        with self._lock:
+            self._require_accepted_member(user_id, group_id)
+            self.sweep_settlement_proposals(group_id)
+            proposal = self.settlement_proposals.get(proposal_id)
+            if proposal is None or proposal["group_id"] != group_id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "ProposalNotFound", "message": "Proposal not found."})
+            if proposal["status"] != SettlementProposalStatus.open:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "ProposalNotOpen", "message": "Proposal is not open."})
+            confirmation = self.settlement_confirmations.get((proposal_id, user_id))
+            if confirmation is None:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "NotARequiredParty", "message": "You are not a required party for this proposal."})
+            if confirmation["status"] != SettlementConfirmationStatus.pending:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "AlreadyResponded", "message": "You have already responded."})
+            now = utcnow()
+            confirmation["status"] = SettlementConfirmationStatus.rejected
+            confirmation["responded_at"] = now
+            proposal["status"] = SettlementProposalStatus.rejected
+            proposal["resolved_at"] = now
+            self._record_group_event(group_id, user_id, "settlement_rejected", {"proposal_id": proposal_id})
+            for c in self.settlement_confirmations.values():
+                if c["proposal_id"] == proposal_id:
+                    self._notify(c["user_id"], NotificationType.settlement_rejected, "Settlement rejected", "A required party rejected the settlement.", None)
+            return self._serialise_proposal(proposal_id, viewer_id=user_id)
+
+    def sweep_settlement_proposals(self, group_id: str) -> None:
+        with self._lock:
+            now = utcnow()
+            for proposal in list(self.settlement_proposals.values()):
+                if proposal["group_id"] != group_id or proposal["status"] != SettlementProposalStatus.open:
+                    continue
+                if proposal["expires_at"] <= now:
+                    proposal["status"] = SettlementProposalStatus.expired
+                    proposal["resolved_at"] = now
+                    self._record_group_event(group_id, proposal["proposed_by"], "settlement_expired", {"proposal_id": proposal["id"]})
+                    for c in self.settlement_confirmations.values():
+                        if c["proposal_id"] == proposal["id"]:
+                            self._notify(c["user_id"], NotificationType.settlement_expired, "Settlement expired", "A settlement proposal has expired.", None)
+                    continue
+                # Near-expiry reminder (within 24h, idempotent).
+                if proposal["reminder_sent_at"] is None and proposal["expires_at"] - now <= timedelta(hours=24):
+                    proposal["reminder_sent_at"] = now
+                    for c in self.settlement_confirmations.values():
+                        if c["proposal_id"] == proposal["id"] and c["status"] == SettlementConfirmationStatus.pending:
+                            self._notify(c["user_id"], NotificationType.settlement_reminder, "Settlement expiring soon", "A settlement proposal is awaiting your response.", None)
+
+    def _apply_settlement(self, proposal_id: str) -> None:
+        """Atomically settle every snapshotted debt. On any error, restore prior
+        state, mark proposal settlement_failed, notify, and swallow the exception.
+        """
+        proposal = self.settlement_proposals[proposal_id]
+        # Snapshot prior state so we can roll back on failure.
+        debts_snapshot = {d.id: d.model_copy() for d in self.debts.values()}
+        debt_events_len = len(self.debt_events)
+        commitment_events_len = len(self.commitment_score_events)
+        profiles_snapshot = {uid: p.model_copy() for uid, p in self.profiles.items()}
+        try:
+            now = utcnow()
+            for debt_ref in proposal["snapshot"]:
+                debt = self.debts.get(debt_ref["debt_id"])
+                if debt is None or debt.status not in (DebtStatus.active, DebtStatus.overdue):
+                    raise RuntimeError("StaleSnapshot")
+                # Step 1: active|overdue → payment_pending_confirmation.
+                self.debts[debt.id] = debt.model_copy(update={"status": DebtStatus.payment_pending_confirmation, "updated_at": now})
+                self._add_event(debt.id, debt.debtor_id or proposal["proposed_by"], "marked_paid", "Group settlement", {"source": "group_settlement", "proposal_id": proposal_id})
+                # Step 2: payment_pending_confirmation → paid.
+                self.debts[debt.id] = self.debts[debt.id].model_copy(update={"status": DebtStatus.paid, "paid_at": now, "updated_at": now})
+                self._add_event(debt.id, debt.creditor_id, "payment_confirmed", "Group settlement", {"source": "group_settlement", "proposal_id": proposal_id})
+                # Step 3: neutral commitment event (delta 0), idempotent on (debt_id, proposal_id).
+                if debt.debtor_id:
+                    profile = self.profiles.get(debt.debtor_id)
+                    score_after = profile.commitment_score if profile else 50
+                    event = CommitmentScoreEventOut(
+                        id=str(uuid4()),
+                        user_id=debt.debtor_id,
+                        delta=0,
+                        score_after=score_after,
+                        reason="settlement_neutral",
+                        debt_id=debt.id,
+                        proposal_id=proposal_id,
+                        created_at=now,
+                    )
+                    self.commitment_score_events.append(event)
+            proposal["status"] = SettlementProposalStatus.settled
+            proposal["resolved_at"] = now
+            self._record_group_event(proposal["group_id"], proposal["proposed_by"], "settlement_settled", {"proposal_id": proposal_id})
+            for c in self.settlement_confirmations.values():
+                if c["proposal_id"] == proposal_id:
+                    self._notify(c["user_id"], NotificationType.settlement_settled, "Settlement complete", "All debts in the proposal are now paid.", None)
+        except Exception as exc:  # noqa: BLE001 — defensive rollback
+            # Roll back all in-memory changes.
+            self.debts.clear()
+            self.debts.update(debts_snapshot)
+            del self.debt_events[debt_events_len:]
+            del self.commitment_score_events[commitment_events_len:]
+            self.profiles.clear()
+            self.profiles.update(profiles_snapshot)
+            proposal["status"] = SettlementProposalStatus.settlement_failed
+            proposal["failure_reason"] = type(exc).__name__
+            proposal["resolved_at"] = utcnow()
+            self._record_group_event(proposal["group_id"], proposal["proposed_by"], "settlement_failed", {"proposal_id": proposal_id, "reason": type(exc).__name__})
+            for c in self.settlement_confirmations.values():
+                if c["proposal_id"] == proposal_id:
+                    self._notify(c["user_id"], NotificationType.settlement_failed, "Settlement failed", "The settlement could not be applied. All debts are unchanged.", None)
+
+    def _record_group_event(self, group_id: str, actor_id: str, event_type: str, metadata: dict[str, object] | None = None) -> None:
+        # Phase 8 stored group events in-memory via a list helper if present.
+        # The in-memory repo has historically been event-light for groups;
+        # we accept that and rely on debt_events for per-debt audit. This
+        # method exists for parity with the postgres path.
+        return
+
+    def _require_accepted_member(self, user_id: str, group_id: str) -> None:
+        group = self.groups.get(group_id)
+        if group is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotAGroupMember", "message": "Group not found."})
+        is_member = any(
+            m.group_id == group_id and m.user_id == user_id and m.status == GroupMemberStatus.accepted
+            for m in self.group_members
+        )
+        if not is_member:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotAGroupMember", "message": "You are not an accepted member."})
+
+    def _serialise_proposal(self, proposal_id: str, viewer_id: str) -> SettlementProposalOut:
+        proposal = self.settlement_proposals[proposal_id]
+        is_required = (proposal_id, viewer_id) in self.settlement_confirmations
+        # FR-007: only required parties see the snapshot; observers see None.
+        snapshot: list[SnapshotDebtOut] | None = None
+        if is_required:
+            snapshot = [
+                SnapshotDebtOut(
+                    debt_id=row["debt_id"],
+                    debtor_id=row["debtor_id"],
+                    creditor_id=row["creditor_id"],
+                    amount=row["amount"],
+                )
+                for row in proposal["snapshot"]
+            ]
+        transfers = [
+            ProposedTransferOut(payer_id=t["payer_id"], receiver_id=t["receiver_id"], amount=t["amount"])
+            for t in proposal["transfers"]
+        ]
+        confirmations = [
+            SettlementConfirmationOut(
+                user_id=c["user_id"],
+                status=c["status"],
+                responded_at=c["responded_at"],
+            )
+            for c in self.settlement_confirmations.values()
+            if c["proposal_id"] == proposal_id
+        ]
+        confirmations.sort(key=lambda c: c.user_id)
+        return SettlementProposalOut(
+            id=proposal["id"],
+            group_id=proposal["group_id"],
+            proposed_by=proposal["proposed_by"],
+            currency=proposal["currency"],
+            transfers=transfers,
+            snapshot=snapshot,
+            confirmations=confirmations,
+            status=proposal["status"],
+            failure_reason=proposal["failure_reason"],
+            created_at=proposal["created_at"],
+            expires_at=proposal["expires_at"],
+            resolved_at=proposal["resolved_at"],
+        )
 
     def merchant_facts(self, user_id: str) -> dict[str, object]:
         dashboard = self.creditor_dashboard(user_id)
