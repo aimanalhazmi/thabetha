@@ -161,7 +161,7 @@ Tests use `FastAPI.TestClient` via the `client` fixture. `conftest.py` forces `R
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at `specs/008-groups-mvp-surface/plan.md`.
+at `specs/009-groups-auto-netting/plan.md`.
 <!-- SPECKIT END -->
 
 ## Active Technologies

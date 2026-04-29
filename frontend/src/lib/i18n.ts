@@ -259,7 +259,33 @@ export type TranslationKey =
   | 'paymentPendingTitle'
   | 'paymentPendingBody'
   | 'feeLabel'
-  | 'grossAmount';
+  | 'grossAmount'
+  // Phase 9 — group settlement / auto-netting
+  | 'settlementCtaSettleGroup'
+  | 'settlementCtaNothingToSettle'
+  | 'settlementStatusOpen'
+  | 'settlementStatusRejected'
+  | 'settlementStatusExpired'
+  | 'settlementStatusSettled'
+  | 'settlementStatusFailed'
+  | 'settlementRolePayer'
+  | 'settlementRoleReceiver'
+  | 'settlementRoleObserver'
+  | 'settlementConfirm'
+  | 'settlementReject'
+  | 'settlementExpiresIn'
+  | 'settlementTransfersHeading'
+  | 'settlementProposedTitle'
+  | 'settlementReviewTitle'
+  | 'settlementCtaTryAgain'
+  | 'errorOpenProposalExists'
+  | 'errorMixedCurrency'
+  | 'errorNothingToSettle'
+  | 'errorNotARequiredParty'
+  | 'errorAlreadyResponded'
+  | 'errorProposalNotOpen'
+  | 'errorStaleSnapshot'
+  | 'errorLeaveBlockedByOpenProposal';
 
 type Translations = Record<TranslationKey, string>;
 
@@ -522,6 +548,32 @@ const ar: Translations = {
   paymentPendingBody: 'لم يُؤكَّد الدفع بعد — ستُحدَّث الحالة تلقائيًا عند وصول التأكيد.',
   feeLabel: 'رسوم البوابة',
   grossAmount: 'المبلغ الإجمالي',
+  // Phase 9 — group settlement / auto-netting
+  settlementCtaSettleGroup: 'تسوية المجموعة',
+  settlementCtaNothingToSettle: 'لا توجد ديون نشطة للتسوية.',
+  settlementStatusOpen: 'مفتوح',
+  settlementStatusRejected: 'مرفوض',
+  settlementStatusExpired: 'منتهي الصلاحية',
+  settlementStatusSettled: 'تمت التسوية',
+  settlementStatusFailed: 'فشلت التسوية',
+  settlementRolePayer: 'دافع',
+  settlementRoleReceiver: 'مستلم',
+  settlementRoleObserver: 'مشاهد',
+  settlementConfirm: 'تأكيد',
+  settlementReject: 'رفض',
+  settlementExpiresIn: 'تنتهي خلال',
+  settlementTransfersHeading: 'التحويلات المقترحة',
+  settlementProposedTitle: 'اقتراح تسوية',
+  settlementReviewTitle: 'مراجعة التسوية',
+  settlementCtaTryAgain: 'حاول مجددًا',
+  errorOpenProposalExists: 'يوجد اقتراح تسوية مفتوح في هذه المجموعة.',
+  errorMixedCurrency: 'لا يمكن تسوية ديون بعملات مختلفة تلقائيًا.',
+  errorNothingToSettle: 'لا توجد ديون قابلة للتسوية في هذه المجموعة.',
+  errorNotARequiredParty: 'لست طرفًا مطلوبًا في هذا الاقتراح.',
+  errorAlreadyResponded: 'لقد قمت بالرد على هذا الاقتراح بالفعل.',
+  errorProposalNotOpen: 'الاقتراح لم يعد مفتوحًا.',
+  errorStaleSnapshot: 'تغيرت حالة أحد الديون، يرجى إعادة المحاولة.',
+  errorLeaveBlockedByOpenProposal: 'لا يمكنك مغادرة المجموعة وأنت طرف في اقتراح تسوية مفتوح.',
 };
 
 const en: Translations = {
@@ -783,6 +835,32 @@ const en: Translations = {
   paymentPendingBody: "Payment not confirmed yet — status will update automatically when confirmation arrives.",
   feeLabel: 'Gateway fee',
   grossAmount: 'Gross amount',
+  // Phase 9 — group settlement / auto-netting
+  settlementCtaSettleGroup: 'Settle group',
+  settlementCtaNothingToSettle: 'No active debts to settle.',
+  settlementStatusOpen: 'Open',
+  settlementStatusRejected: 'Rejected',
+  settlementStatusExpired: 'Expired',
+  settlementStatusSettled: 'Settled',
+  settlementStatusFailed: 'Settlement failed',
+  settlementRolePayer: 'Payer',
+  settlementRoleReceiver: 'Receiver',
+  settlementRoleObserver: 'Observer',
+  settlementConfirm: 'Confirm',
+  settlementReject: 'Reject',
+  settlementExpiresIn: 'Expires in',
+  settlementTransfersHeading: 'Proposed transfers',
+  settlementProposedTitle: 'Settlement proposal',
+  settlementReviewTitle: 'Review settlement',
+  settlementCtaTryAgain: 'Try again',
+  errorOpenProposalExists: 'A settlement proposal is already open for this group.',
+  errorMixedCurrency: 'Mixed-currency debts cannot be auto-netted.',
+  errorNothingToSettle: 'There is nothing to settle in this group.',
+  errorNotARequiredParty: 'You are not a required party for this proposal.',
+  errorAlreadyResponded: 'You have already responded to this proposal.',
+  errorProposalNotOpen: 'The proposal is no longer open.',
+  errorStaleSnapshot: 'A debt in the snapshot changed state — please retry.',
+  errorLeaveBlockedByOpenProposal: 'You cannot leave while you are part of an open settlement proposal.',
 };
 
 const translations: Record<Language, Translations> = { ar, en };

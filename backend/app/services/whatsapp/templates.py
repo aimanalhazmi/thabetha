@@ -43,6 +43,13 @@ TEMPLATE_REGISTRY: dict[NotificationType, dict[Locale, TemplateBinding]] = {
     NotificationType.overdue: _bilingual("overdue_ar", "overdue_en", ["creditor_name", "amount", "currency", "due_date"]),
     NotificationType.payment_requested: _bilingual("payment_requested_ar", "payment_requested_en", _PAID_PARAMS),
     NotificationType.payment_confirmed: _bilingual("payment_confirmed_ar", "payment_confirmed_en", _PAID_PARAMS),
+    # Group lifecycle (Phase 8) and group settlement (Phase 9 / UC9 part 2)
+    # are deliberately in-app-only — they reference internal proposal state,
+    # not customer-facing debt terms, so no Meta-approved templates are
+    # registered. Adding entries below would require approved templates first.
+    # NotificationType.group_invite, .group_invite_accepted, .group_ownership_transferred
+    # NotificationType.settlement_proposed, .settlement_reminder, .settlement_confirmed,
+    # .settlement_rejected, .settlement_settled, .settlement_failed, .settlement_expired
 }
 
 

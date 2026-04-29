@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { Input, Panel } from "../components/Layout";
+import { SettlementProposalPanel } from "../components/SettlementProposalPanel";
 import { errorCode, groups as groupsApi } from "../lib/api";
 import { t, type TranslationKey } from "../lib/i18n";
 import type { Debt, GroupDetail, Language } from "../lib/types";
@@ -241,6 +242,12 @@ export function GroupDetailPage({ language }: Props) {
           ))}
         </ul>
       </Panel>
+
+      <SettlementProposalPanel
+        groupId={id}
+        language={language}
+        hasSettleableDebts={debts.some((d) => d.status === "active" || d.status === "overdue")}
+      />
     </section>
   );
 }
