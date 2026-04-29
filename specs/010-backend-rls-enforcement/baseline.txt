@@ -1,0 +1,24 @@
+# Phase 010 — RLS Enforcement: E2E baseline durations
+
+Reference for SC-004 / FR-013: post-change duration MUST be ≤ 110% of baseline.
+
+## Baseline (pre-change)
+
+- **Suite**: `cd backend && uv run pytest -q` (REPOSITORY_TYPE=memory; in-process FastAPI.TestClient)
+- **Captured**: 2026-04-29
+- **Branch state**: 010-backend-rls-enforcement HEAD; verified `git diff develop -- backend/ supabase/` is empty (backend/migrations identical to develop tip).
+- **Wall clock**: **6.64s** for **141 tests passed**
+- **Total process time** (incl. `uv run` startup + pytest collection): 7.07s user / 0.41s system / 7.84s total
+- **Machine**: Darwin 25.3.0 (local dev)
+
+## Why the in-memory suite is the chosen baseline
+
+Spec FR-013 / SC-004 specifies "the canonical happy-path E2E suite". The current canonical suite is `backend/tests/`, run with `REPOSITORY_TYPE=memory` via `tests/conftest.py`. The new `backend/tests/rls/` Postgres-backed suite is intentionally excluded from this baseline because it does not exist pre-change.
+
+Post-change measurement (T034) re-runs the same in-memory suite under `RLS_MODE=enforce`. The RLS layer is a Postgres concern; the in-memory repository is not affected by `RLS_MODE` and should produce a near-identical wall-clock time. SC-004 budget = ≤ 7.30s (110% of 6.64s).
+
+## Post-change (to be filled by T034)
+
+- **Wall clock**: TBD
+- **Result**: TBD (PASS if ≤ 7.30s)
+- **Captured**: TBD

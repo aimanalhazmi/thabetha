@@ -16,7 +16,7 @@ Today the backend connects to Supabase Postgres as a privileged role; RLS polici
 **Target Platform**: Linux server (FastAPI on uvicorn), Supabase-hosted Postgres.
 **Project Type**: Web service (backend-only change for this phase).
 **Performance Goals**: Aggregate wall-clock duration of the canonical happy-path E2E suite ≤ 110% of pre-change baseline (SC-004 / FR-013).
-**Constraints**: Connection pool is `psycopg_pool.ConnectionPool` directly (no PgBouncer in front of the backend today). `SET LOCAL` + `SET LOCAL ROLE` inside a per-request transaction are safe in this configuration. The `authenticator` role must be allowed to `SET ROLE` to `authenticated` only, and may not have direct table permissions outside the policies. The elevated session factory uses a separate pool bound to a higher-privilege role and is referenced from a single, allow-listed module.
+**Constraints**: Connection pool is `psycopg_pool.ConnectionPool` directly (no PgBouncer in front of the backend today). `SET LOCAL` + `SET LOCAL ROLE` inside a per-request transaction are safe in this configuration. The `authenticator` role must be allowed to `SET ROLE` to `app_authenticated` only, and may not have direct table permissions outside the policies. The elevated session factory uses a separate pool bound to a higher-privilege role and is referenced from a single, allow-listed module.
 **Scale/Scope**: Backend only. Affects every request-scoped query and a small number of system tasks. Migration touches role grants and adds policies; does not move data.
 
 ## Constitution Check

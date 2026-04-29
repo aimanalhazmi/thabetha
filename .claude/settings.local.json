@@ -35,7 +35,8 @@
       "Bash(npx eslint *)",
       "Bash(perl -pi -e 's/^- \\\\[ \\\\] \\\\Q__TRACKED_VAR__\\\\E /- [X] __TRACKED_VAR__ /' specs/008-groups-mvp-surface/tasks.md)",
       "Bash(perl -pi -e \"s/^- \\\\\\\\[ \\\\\\\\] T014 /- [X] T014 /\" specs/008-groups-mvp-surface/tasks.md)",
-      "Bash(perl -pi -e 's/^- \\\\[ \\\\] \\(T026|T027|T028|T029|T041|T043|T045|T046|T047|T048|T049|T050|T052\\) /- [X] $1 /g' specs/008-groups-mvp-surface/tasks.md)"
+      "Bash(perl -pi -e 's/^- \\\\[ \\\\] \\(T026|T027|T028|T029|T041|T043|T045|T046|T047|T048|T049|T050|T052\\) /- [X] $1 /g' specs/008-groups-mvp-surface/tasks.md)",
+      "Bash(supabase status *)"
     ]
   }
 }
