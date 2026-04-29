@@ -42,11 +42,18 @@ class OpenAITranscriptionProvider(TranscriptionProvider):
             )
         try:
             async with httpx.AsyncClient(timeout=90) as client:
+                files = {
+                    "file": (file_name, content, content_type or "audio/mpeg")
+                }
+                payload = {
+                    "model": "whisper-large-v2",
+                    "response_format": "json"
+                }
                 response = await client.post(
-                    "https://api.openai.com/v1/audio/transcriptions",
+                    "https://saia.gwdg.de/v1/audio/transcriptions",
                     headers={"Authorization": f"Bearer {settings.openai_api_key}"},
-                    data={"model": "whisper-1"},
-                    files={"file": (file_name, content, content_type or "application/octet-stream")},
+                    data=payload,
+                    files=files,
                 )
                 response.raise_for_status()
                 data = response.json()
