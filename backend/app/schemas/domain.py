@@ -515,9 +515,37 @@ class SettlementProposalOut(BaseModel):
     resolved_at: datetime | None = None
 
 
+class VoiceDraftFieldStatus(StrEnum):
+    extracted_unconfirmed = "extracted_unconfirmed"
+    missing = "missing"
+    confirmed = "confirmed"
+    edited = "edited"
+
+
+class VoiceDraftFieldConfirmations(BaseModel):
+    debtor_name: VoiceDraftFieldStatus = VoiceDraftFieldStatus.missing
+    amount: VoiceDraftFieldStatus = VoiceDraftFieldStatus.missing
+    currency: VoiceDraftFieldStatus = VoiceDraftFieldStatus.missing
+    description: VoiceDraftFieldStatus = VoiceDraftFieldStatus.missing
+    due_date: VoiceDraftFieldStatus = VoiceDraftFieldStatus.missing
+
+
 class VoiceDebtDraftRequest(BaseModel):
     transcript: str = Field(min_length=1)
-    default_currency: str = Field(default="SAR", min_length=3, max_length=3)
+    default_currency: str | None = Field(default=None, min_length=3, max_length=3)
+
+    @field_validator("transcript")
+    @classmethod
+    def normalize_transcript(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Transcript cannot be empty")
+        return stripped
+
+    @field_validator("default_currency")
+    @classmethod
+    def normalize_default_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value else None
 
 
 class VoiceDebtDraftOut(BaseModel):
@@ -528,6 +556,7 @@ class VoiceDebtDraftOut(BaseModel):
     due_date: date | None = None
     confidence: float = Field(ge=0, le=1)
     raw_transcript: str
+    field_confirmations: VoiceDraftFieldConfirmations = Field(default_factory=VoiceDraftFieldConfirmations)
 
 
 class MerchantChatRequest(BaseModel):

@@ -14,7 +14,7 @@ import noUntranslatedJsxRule from './eslint-rules/no-untranslated-jsx.js';
 
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**'],
+    ignores: ['dist/**', 'build/**', 'coverage/**', 'node_modules/**', '*.min.js'],
   },
   {
     files: ['src/**/*.{ts,tsx}', 'tests/**/*.{ts,tsx}'],

@@ -1437,3 +1437,42 @@ pre, .answer {
   font-weight: 600;
   cursor: pointer;
 }
+
+.secondary-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.voice-draft-panel {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.voice-draft-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.voice-draft-panel textarea {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+}
+
+.voice-draft-actions,
+.voice-draft-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.voice-draft-review {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}

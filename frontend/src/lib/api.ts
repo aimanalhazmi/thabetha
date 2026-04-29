@@ -7,6 +7,7 @@ import type {
   PaymentIntent,
   PayOnlineResult,
   SettlementProposal,
+  VoiceDraft,
 } from './types';
 import { supabase } from './supabaseClient';
 
@@ -126,4 +127,23 @@ export const settlements = {
       `/groups/${groupId}/settlement-proposals/${proposalId}/reject`,
       { method: 'POST', body: JSON.stringify({}) },
     ),
+};
+
+export const aiVoiceDrafts = {
+  fromTranscript: (transcript: string) =>
+    apiRequest<VoiceDraft>('/ai/debt-draft-from-voice', {
+      method: 'POST',
+      body: JSON.stringify({ transcript }),
+    }),
+  fromAudio: (audio: File, clientDurationSeconds?: number) => {
+    const form = new FormData();
+    form.set('audio', audio);
+    if (clientDurationSeconds !== undefined) {
+      form.set('client_duration_seconds', String(clientDurationSeconds));
+    }
+    return apiRequest<VoiceDraft>('/ai/debt-draft-from-voice', {
+      method: 'POST',
+      body: form,
+    });
+  },
 };

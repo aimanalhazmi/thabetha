@@ -102,5 +102,5 @@ No Supabase JWT — authenticated via HMAC SHA-256 (`X-Hub-Signature-256` header
 
 | Method | Path | Body | Response | Notes |
 |---|---|---|---|---|
-| POST | `/ai/debt-draft-from-voice` | `VoiceDebtDraftRequest` | `VoiceDebtDraftOut` | Transcript → structured draft (debtor name, amount, due date, confidence). |
+| POST | `/ai/debt-draft-from-voice` | `VoiceDebtDraftRequest` JSON transcript or multipart `{audio, client_duration_seconds?}` | `VoiceDebtDraftOut` | Arabic/English voice or transcript → editable debt draft with `raw_transcript` and per-field confirmation states. 403 if AI disabled, 429 if daily limit reached. |
 | POST | `/ai/merchant-chat` | `MerchantChatRequest` | `MerchantChatOut` | Ledger Q&A. |

@@ -2171,6 +2171,57 @@ class PostgresRepository(Repository):
             "alerts": dashboard.alerts,
         }
 
+    def get_ai_usage_count(self, user_id: str, feature: str, usage_date: date) -> int:
+        with self._connection() as conn:
+            conn.row_factory = dict_row
+            row = conn.execute(
+                """
+                SELECT count FROM ai_usage_records
+                WHERE user_id = %s AND usage_date = %s AND feature = %s
+                """,
+                (user_id, usage_date, feature),
+            ).fetchone()
+            return int(row["count"]) if row else 0
+
+    def increment_ai_usage(self, user_id: str, feature: str, usage_date: date, limit: int) -> int:
+        with self._connection() as conn:
+            conn.row_factory = dict_row
+            row = conn.execute(
+                """
+                INSERT INTO ai_usage_records (user_id, usage_date, feature, count, limit_value, updated_at)
+                VALUES (%s, %s, %s, 1, %s, now())
+                ON CONFLICT (user_id, usage_date, feature)
+                DO UPDATE SET count = ai_usage_records.count + 1, limit_value = EXCLUDED.limit_value, updated_at = now()
+                RETURNING count
+                """,
+                (user_id, usage_date, feature, limit),
+            ).fetchone()
+            conn.commit()
+            return int(row["count"])
+
+    async def save_temp_voice_note(self, user_id: str, file_name: str, content_type: str | None, content: bytes) -> str:
+        settings = get_settings()
+        safe_file_name = (file_name or "voice-note").replace("/", "_").replace("\\", "_")
+        storage_path = f"{user_id}/{uuid4()}-{safe_file_name}"
+        client = get_supabase_client()
+        if client is None:
+            save_local_receipt(f"voice-notes/{storage_path}", content, content_type, safe_file_name)
+            return storage_path
+        client.storage.from_(settings.ai_voice_notes_bucket).upload(
+            storage_path,
+            content,
+            {"content-type": content_type or "application/octet-stream", "upsert": "false"},
+        )
+        return storage_path
+
+    async def delete_temp_voice_note(self, user_id: str, storage_path: str) -> None:
+        if not storage_path.startswith(f"{user_id}/"):
+            return
+        client = get_supabase_client()
+        if client is None:
+            return
+        client.storage.from_(get_settings().ai_voice_notes_bucket).remove([storage_path])
+
     # ── Payment intents ───────────────────────────────────────────────
 
     def _intent_from_row(self, row: dict) -> PaymentIntentOut:

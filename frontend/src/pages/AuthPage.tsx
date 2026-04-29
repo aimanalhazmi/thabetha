@@ -204,7 +204,7 @@ export function AuthPage({ language, onToggleLanguage }: Props) {
                         required
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="name@example.com"
+                        placeholder={tr('emailPlaceholder')}
                       />
                     </label>
                     <label className="field">
@@ -215,7 +215,7 @@ export function AuthPage({ language, onToggleLanguage }: Props) {
                           required
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          placeholder="••••••••"
+                          placeholder={tr('passwordPlaceholder')}
                         />
                         <button
                           type="button"
@@ -254,7 +254,7 @@ export function AuthPage({ language, onToggleLanguage }: Props) {
                         required
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="name@example.com"
+                        placeholder={tr('emailPlaceholder')}
                       />
                     </label>
                     <label className="field">
@@ -266,7 +266,7 @@ export function AuthPage({ language, onToggleLanguage }: Props) {
                           minLength={6}
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          placeholder="••••••••"
+                          placeholder={tr('passwordPlaceholder')}
                         />
                         <button
                           type="button"
