@@ -59,6 +59,13 @@ class NotificationType(StrEnum):
     group_invite = "group_invite"
     group_invite_accepted = "group_invite_accepted"
     group_ownership_transferred = "group_ownership_transferred"
+    settlement_proposed = "settlement_proposed"
+    settlement_reminder = "settlement_reminder"
+    settlement_confirmed = "settlement_confirmed"
+    settlement_rejected = "settlement_rejected"
+    settlement_settled = "settlement_settled"
+    settlement_failed = "settlement_failed"
+    settlement_expired = "settlement_expired"
 
 
 class PaymentIntentStatus(StrEnum):
@@ -442,6 +449,69 @@ class SettlementOut(BaseModel):
     currency: str
     note: str | None = None
     created_at: datetime
+
+
+# ── Group auto-netting (Phase 9 / UC9 part 2) ──────────────────────────────
+
+
+class SettlementProposalStatus(StrEnum):
+    open = "open"
+    rejected = "rejected"
+    expired = "expired"
+    settlement_failed = "settlement_failed"
+    settled = "settled"
+
+
+class SettlementConfirmationStatus(StrEnum):
+    pending = "pending"
+    confirmed = "confirmed"
+    rejected = "rejected"
+
+
+class ProposedTransferOut(BaseModel):
+    payer_id: str
+    receiver_id: str
+    amount: Decimal
+
+
+class SnapshotDebtOut(BaseModel):
+    debt_id: str
+    debtor_id: str
+    creditor_id: str
+    amount: Decimal
+
+
+class SettlementConfirmationOut(BaseModel):
+    user_id: str
+    status: SettlementConfirmationStatus
+    responded_at: datetime | None = None
+
+
+class SettlementProposalCreate(BaseModel):
+    """Empty body — group_id is in the path. Server snapshots and computes."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SettlementConfirmationIn(BaseModel):
+    """Empty body — action is in the URL verb (`/confirm` or `/reject`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SettlementProposalOut(BaseModel):
+    id: str
+    group_id: str
+    proposed_by: str
+    currency: str
+    transfers: list[ProposedTransferOut]
+    snapshot: list[SnapshotDebtOut] | None = None
+    confirmations: list[SettlementConfirmationOut]
+    status: SettlementProposalStatus
+    failure_reason: str | None = None
+    created_at: datetime
+    expires_at: datetime
+    resolved_at: datetime | None = None
 
 
 class VoiceDebtDraftRequest(BaseModel):

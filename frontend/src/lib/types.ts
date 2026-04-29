@@ -195,6 +195,55 @@ export interface GroupInviteIn {
   phone?: string;
 }
 
+// ── Group auto-netting (Phase 9 / UC9 part 2) ──────────────────────────────
+
+export type SettlementProposalStatus =
+  | 'open'
+  | 'rejected'
+  | 'expired'
+  | 'settlement_failed'
+  | 'settled';
+
+export type SettlementConfirmationStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'rejected';
+
+export interface ProposedTransfer {
+  payer_id: string;
+  receiver_id: string;
+  amount: string;
+}
+
+export interface SnapshotDebt {
+  debt_id: string;
+  debtor_id: string;
+  creditor_id: string;
+  amount: string;
+}
+
+export interface SettlementConfirmation {
+  user_id: string;
+  status: SettlementConfirmationStatus;
+  responded_at: string | null;
+}
+
+export interface SettlementProposal {
+  id: string;
+  group_id: string;
+  proposed_by: string;
+  currency: string;
+  transfers: ProposedTransfer[];
+  /** Null for observers (zero-net members). FR-007. */
+  snapshot: SnapshotDebt[] | null;
+  confirmations: SettlementConfirmation[];
+  status: SettlementProposalStatus;
+  failure_reason: string | null;
+  created_at: string;
+  expires_at: string;
+  resolved_at: string | null;
+}
+
 export interface VoiceDraft {
   debtor_name: string | null;
   amount: string | null;
