@@ -13,7 +13,7 @@ Full product context: [`docs/product-requirements.md`](./docs/product-requiremen
 - **Bilateral confirmation is the differentiator.** A debt is binding only after the debtor accepts. A debt is `paid` only after the creditor confirms receipt.
 - **Use the canonical 7-state debt lifecycle.** See [`docs/debt-lifecycle.md`](./docs/debt-lifecycle.md). The string identifiers in code, DB, and UI must match exactly.
 - **Use the term "commitment indicator / مؤشر الالتزام"**, never "credit score" / "trust score". The indicator is internal to Thabetha and visible only in bilateral context.
-- **Per-user data isolation.** A user only ever sees debts where they are creditor, debtor, or accepted group member. Enforced both in API handlers and by Postgres RLS.
+- **Per-user data isolation.** A user only ever sees debts where they are creditor, debtor, or accepted group member. Postgres RLS is the authoritative boundary; API handlers should follow the same shape.
 - **Arabic-first.** New strings must land in `frontend/src/lib/i18n.ts` for both languages.
 - **Debtor cannot reject.** The only debtor pushback on a `pending_confirmation` debt is `request_edit`. The creditor then approves (debt updates → `pending_confirmation` for re-acceptance) or rejects (original terms stand → `pending_confirmation`). The `rejected` status no longer exists.
 - **Commitment indicator (`profiles.commitment_score`, 0–100, default 50) is automatic.** On creditor-confirmed payment: `+3` if paid before `due_date`, `+1` if on `due_date`, otherwise `−2 × 2^N` where N is the count of already-applied missed-reminder events for that debt. Each creditor-configured reminder date that passes unpaid fires its own `−2 × 2^N` penalty exactly once via the lazy sweeper that already runs on debt-list / dashboard reads. Events are recorded in `commitment_score_events` (with `reminder_date` for idempotency); score is clamped 0–100.
@@ -110,7 +110,7 @@ Full instructions, troubleshooting: [`docs/local-development.md`](./docs/local-d
 ## Auth and security
 
 - Backend validates JWTs in `core/security.py::get_current_user`. In `APP_ENV != production` it also accepts `x-demo-*` headers for tests and quick debugging.
-- Postgres RLS is enabled on all user-data tables (`001_initial_schema.sql`, refreshed in `002_*.sql`). Backend code currently runs as the Postgres role and so bypasses RLS — treat the policies as the authoritative authorisation contract and mirror them in handler code.
+- Postgres RLS is enabled on all user-data tables and is authoritative when `RLS_MODE=enforce`. Request-scoped queries use the non-privileged `app_authenticated` path; elevated work is allow-listed through `backend/app/repositories/system_tasks.py`. Rollout details live in [`specs/010-backend-rls-enforcement/quickstart.md`](./specs/010-backend-rls-enforcement/quickstart.md).
 - QR tokens are random UUIDs with a TTL (default 10 min); they resolve to a profile preview, never to credentials.
 - Storage objects are private; serve via signed URLs only.
 

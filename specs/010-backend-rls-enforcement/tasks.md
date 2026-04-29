@@ -27,9 +27,9 @@ Web service. Backend code under `backend/app/`, backend tests under `backend/tes
 
 **Purpose**: Capture the pre-change baseline and lay down directory skeletons. No behavior change.
 
-- [ ] T001 Capture pre-change E2E baseline duration on `develop` (record in `specs/010-backend-rls-enforcement/baseline.txt`); reference in PR for SC-004 / FR-013
-- [ ] T002 [P] Create empty directory `backend/tests/rls/` with a placeholder `__init__.py` so the new test suite has a home distinct from the in-memory suite
-- [ ] T003 [P] Create empty package `backend/app/observability/` with `__init__.py` (target home for `shadow_log.py`)
+- [X] T001 Capture pre-change E2E baseline duration on `develop` (record in `specs/010-backend-rls-enforcement/baseline.txt`); reference in PR for SC-004 / FR-013
+- [X] T002 [P] Create empty directory `backend/tests/rls/` with a placeholder `__init__.py` so the new test suite has a home distinct from the in-memory suite
+- [X] T003 [P] Create empty package `backend/app/observability/` with `__init__.py` (target home for `shadow_log.py`)
 
 ---
 
@@ -39,11 +39,11 @@ Web service. Backend code under `backend/app/`, backend tests under `backend/tes
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T004 Author migration `supabase/migrations/013_rls_enforcement.sql` — create roles `authenticator` (LOGIN, NOINHERIT, no table privileges), `app_authenticated` (NOLOGIN, NOINHERIT), `app_service` (LOGIN, NOINHERIT, BYPASSRLS); `GRANT app_authenticated TO authenticator`; column-level GRANTs on user-data tables per `data-model.md` §"Policy model"; header comment with the access-shape table
-- [ ] T005 [P] Extend `backend/app/core/config.py` to add `rls_mode: Literal["off","shadow","enforce"]` (default `"off"`), `app_database_url: str | None`, `system_database_url: str | None`; add a startup validator that refuses to boot if `rls_mode != "off"` and the corresponding URL/role is missing (per `contracts/enforcement-mode-flag.md` §"Failure modes")
-- [ ] T006 Refactor `backend/app/repositories/__init__.py` to build two `psycopg_pool.ConnectionPool` instances — `app_pool` (uses `app_database_url`, role `authenticator`) and `system_pool` (uses `system_database_url`, role `app_service`); preserve the legacy single-pool path when `rls_mode == "off"` and `app_database_url` is unset, so existing local dev keeps working
-- [ ] T007 [P] Create `backend/tests/rls/conftest.py` — forces `REPOSITORY_TYPE=postgres`, points at `supabase start` defaults, provides `as_user(uid)` fixture that mints a Supabase HS256 JWT and threads it through `Authorization`; provides `rls_mode(value)` fixture that monkey-patches `Settings.rls_mode` per test
-- [ ] T008 [P] Add `GET /api/v1/healthz` field `rls_mode` (extend existing healthz handler in `backend/app/api/health.py` if present, otherwise wire it in `backend/app/main.py`); non-sensitive, no auth required (per `contracts/enforcement-mode-flag.md` §"Observability")
+- [X] T004 Author migration `supabase/migrations/013_rls_enforcement.sql` — create roles `authenticator` (LOGIN, NOINHERIT, no table privileges), `app_authenticated` (NOLOGIN, NOINHERIT), `app_service` (LOGIN, NOINHERIT, BYPASSRLS); `GRANT app_authenticated TO authenticator`; column-level GRANTs on user-data tables per `data-model.md` §"Policy model"; header comment with the access-shape table
+- [X] T005 [P] Extend `backend/app/core/config.py` to add `rls_mode: Literal["off","shadow","enforce"]` (default `"off"`), `app_database_url: str | None`, `system_database_url: str | None`; add a startup validator that refuses to boot if `rls_mode != "off"` and the corresponding URL/role is missing (per `contracts/enforcement-mode-flag.md` §"Failure modes")
+- [X] T006 Refactor `backend/app/repositories/__init__.py` to build two `psycopg_pool.ConnectionPool` instances — `app_pool` (uses `app_database_url`, role `authenticator`) and `system_pool` (uses `system_database_url`, role `app_service`); preserve the legacy single-pool path when `rls_mode == "off"` and `app_database_url` is unset, so existing local dev keeps working
+- [X] T007 [P] Create `backend/tests/rls/conftest.py` — forces `REPOSITORY_TYPE=postgres`, points at `supabase start` defaults, provides `as_user(uid)` fixture that mints a Supabase HS256 JWT and threads it through `Authorization`; provides `rls_mode(value)` fixture that monkey-patches `Settings.rls_mode` per test
+- [X] T008 [P] Add `GET /api/v1/healthz` field `rls_mode` (extend existing healthz handler in `backend/app/api/health.py` if present, otherwise wire it in `backend/app/main.py`); non-sensitive, no auth required (per `contracts/enforcement-mode-flag.md` §"Observability")
 
 **Checkpoint**: Foundation ready. Dual pools exist, `RLS_MODE` is a real knob, the new test suite can find Postgres. User story implementation can now begin.
 
@@ -59,20 +59,20 @@ Web service. Backend code under `backend/app/`, backend tests under `backend/tes
 
 > Write these FIRST and ensure they FAIL before implementation.
 
-- [ ] T009 [P] [US1] Negative-isolation test in `backend/tests/rls/test_isolation_negative.py` — patches a debt-detail handler to remove its `creditor_id == caller_id` filter, asserts that `GET /api/v1/debts/{B_debt_id}` from A returns 404 / empty under `RLS_MODE=enforce` (SC-001)
-- [ ] T010 [P] [US1] Connection-pool reset test in `backend/tests/rls/test_session_reset.py` — issues request as A, then a second request as B that lands on the same physical connection (assert via pool size = 1); B must not see A's `request.jwt.claims` or role
-- [ ] T011 [P] [US1] QR-preview policy test in `backend/tests/rls/test_qr_preview_policy.py` — confirms FR-014: an authenticated caller can read the public-preview field set on `profiles` for any other user, but cannot read private fields (e.g., raw phone)
-- [ ] T012 [P] [US1] Group-shared-debt test in `backend/tests/rls/test_isolation_negative.py::test_group_member_sees_shared_debt` — covers acceptance scenario 4 (A reads group debts and sees B's tagged debt because both are accepted members of group G)
-- [ ] T013 [P] [US1] Unauthenticated-request test in `backend/tests/rls/test_isolation_negative.py::test_unauthenticated_denied_at_db_layer` — covers acceptance scenario 3
-- [ ] T013a [P] [US1] Deleted-user / stale-claim test in `backend/tests/rls/test_isolation_negative.py::test_deleted_user_denied_under_stale_token` — covers spec edge case "claims revoked / user deleted": delete the `auth.users` row mid-session, replay the still-valid JWT, assert RLS denies (decision: rely on `EXISTS (SELECT 1 FROM auth.users WHERE id = auth.uid())` predicate added to the `app_authenticated` policies that read user-data tables, OR token expiry — pick one and document in `013_rls_enforcement.sql` header)
+- [X] T009 [P] [US1] Negative-isolation test in `backend/tests/rls/test_isolation_negative.py` — patches a debt-detail handler to remove its `creditor_id == caller_id` filter, asserts that `GET /api/v1/debts/{B_debt_id}` from A returns 404 / empty under `RLS_MODE=enforce` (SC-001)
+- [X] T010 [P] [US1] Connection-pool reset test in `backend/tests/rls/test_session_reset.py` — issues request as A, then a second request as B that lands on the same physical connection (assert via pool size = 1); B must not see A's `request.jwt.claims` or role
+- [X] T011 [P] [US1] QR-preview policy test in `backend/tests/rls/test_qr_preview_policy.py` — confirms FR-014: an authenticated caller can read the public-preview field set on `profiles` for any other user, but cannot read private fields (e.g., raw phone)
+- [X] T012 [P] [US1] Group-shared-debt test in `backend/tests/rls/test_isolation_negative.py::test_group_member_sees_shared_debt` — covers acceptance scenario 4 (A reads group debts and sees B's tagged debt because both are accepted members of group G)
+- [X] T013 [P] [US1] Unauthenticated-request test in `backend/tests/rls/test_isolation_negative.py::test_unauthenticated_denied_at_db_layer` — covers acceptance scenario 3
+- [X] T013a [P] [US1] Deleted-user / stale-claim test in `backend/tests/rls/test_isolation_negative.py::test_deleted_user_denied_under_stale_token` — covers spec edge case "claims revoked / user deleted": delete the `auth.users` row mid-session, replay the still-valid JWT, assert RLS denies (decision: rely on `EXISTS (SELECT 1 FROM auth.users WHERE id = auth.uid())` predicate added to the `app_authenticated` policies that read user-data tables, OR token expiry — pick one and document in `013_rls_enforcement.sql` header)
 
 ### Implementation for User Story 1
 
-- [ ] T014 [US1] Implement `backend/app/core/db_session.py` — define `current_request_jwt: ContextVar[dict | None]` and a FastAPI middleware `RLSSessionMiddleware` that extracts verified claims from the existing `core/security.py` validator and stores them in the ContextVar; depends on T005
-- [ ] T015 [US1] Register `RLSSessionMiddleware` in `backend/app/main.py::create_app` ahead of routers; depends on T014
-- [ ] T016 [US1] In `backend/app/repositories/postgres.py`, replace direct pool acquisition with a helper `with request_scoped_connection() as conn:` that, when `rls_mode == "enforce"`, opens a transaction and runs `SET LOCAL ROLE app_authenticated` + `SET LOCAL request.jwt.claims = '<json>'`, and runs `RESET ALL` in `finally` before the connection returns to the pool; when `rls_mode == "off"` falls back to legacy behavior; depends on T006, T014
-- [ ] T017 [US1] Audit existing migrations 001 / 002 / 005 / 006 / 007 / 011 / 012 for tables lacking an `app_authenticated`-shaped policy and append the missing policies into `013_rls_enforcement.sql` (focus list per `research.md` §3: `business_profiles`, `notifications`, `attachments`, plus any tables added since); depends on T004
-- [ ] T018 [US1] Add the public-preview policy on `profiles` to `013_rls_enforcement.sql` — column GRANTs limited to `(id, name, commitment_score, phone_last4)` plus a `USING (auth.role() = 'authenticated')` policy; covers FR-014; depends on T004
+- [X] T014 [US1] Implement `backend/app/core/db_session.py` — define `current_request_jwt: ContextVar[dict | None]` and a FastAPI middleware `RLSSessionMiddleware` that extracts verified claims from the existing `core/security.py` validator and stores them in the ContextVar; depends on T005
+- [X] T015 [US1] Register `RLSSessionMiddleware` in `backend/app/main.py::create_app` ahead of routers; depends on T014
+- [X] T016 [US1] In `backend/app/repositories/postgres.py`, replace direct pool acquisition with a helper `with request_scoped_connection() as conn:` that, when `rls_mode == "enforce"`, opens a transaction and runs `SET LOCAL ROLE app_authenticated` + `SET LOCAL request.jwt.claims = '<json>'`, and runs `RESET ALL` in `finally` before the connection returns to the pool; when `rls_mode == "off"` falls back to legacy behavior; depends on T006, T014
+- [X] T017 [US1] Audit existing migrations 001 / 002 / 005 / 006 / 007 / 011 / 012 for tables lacking an `app_authenticated`-shaped policy and append the missing policies into `013_rls_enforcement.sql` (focus list per `research.md` §3: `business_profiles`, `notifications`, `attachments`, plus any tables added since); depends on T004
+- [X] T018 [US1] Add the public-preview policy on `profiles` to `013_rls_enforcement.sql` — column GRANTs limited to `(id, name, commitment_score, phone_last4)` plus a `USING (auth.role() = 'authenticated')` policy; covers FR-014; depends on T004
 
 **Checkpoint**: US1 is independently testable. Run `cd backend && uv run pytest tests/rls/test_isolation_negative.py tests/rls/test_session_reset.py tests/rls/test_qr_preview_policy.py -q` against `supabase start`. SC-001 demonstrated.
 
@@ -86,15 +86,15 @@ Web service. Backend code under `backend/app/`, backend tests under `backend/tes
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T019 [P] [US2] Sweeper-elevation test in `backend/tests/rls/test_system_task_paths.py::test_lazy_commitment_sweeper` — under `RLS_MODE=enforce`, request user has no direct write privilege on `profiles`; reading the debt list with an overdue reminder fires the sweeper, writes a `commitment_score_events` row, and updates `profiles.commitment_score` (acceptance scenario 1)
-- [ ] T020 [P] [US2] Signup-trigger test in `backend/tests/rls/test_system_task_paths.py::test_handle_new_user_inserts_profile` — a new auth user causes `handle_new_user` to insert into `profiles` without RLS denial (acceptance scenario 2)
-- [ ] T021 [P] [US2] Allow-list invariant test in `backend/tests/rls/test_system_task_paths.py::test_no_module_imports_system_pool_directly` — AST-walks `backend/app/` and asserts that only `repositories/system_tasks.py` imports `system_pool` from `repositories/__init__.py` (SC-005, acceptance scenario 3)
+- [X] T019 [P] [US2] Sweeper-elevation test in `backend/tests/rls/test_system_task_paths.py::test_lazy_commitment_sweeper` — under `RLS_MODE=enforce`, request user has no direct write privilege on `profiles`; reading the debt list with an overdue reminder fires the sweeper, writes a `commitment_score_events` row, and updates `profiles.commitment_score` (acceptance scenario 1)
+- [X] T020 [P] [US2] Signup-trigger test in `backend/tests/rls/test_system_task_paths.py::test_handle_new_user_inserts_profile` — a new auth user causes `handle_new_user` to insert into `profiles` without RLS denial (acceptance scenario 2)
+- [X] T021 [P] [US2] Allow-list invariant test in `backend/tests/rls/test_system_task_paths.py::test_no_module_imports_system_pool_directly` — AST-walks `backend/app/` and asserts that only `repositories/system_tasks.py` imports `system_pool` from `repositories/__init__.py` (SC-005, acceptance scenario 3)
 
 ### Implementation for User Story 2
 
-- [ ] T022 [US2] Create `backend/app/repositories/system_tasks.py` exposing `elevated_connection()` context manager that acquires from `system_pool`; module docstring lists the allow-listed callers per `data-model.md` §"Elevated session factory"; depends on T006
-- [ ] T023 [US2] Refactor the lazy commitment-score sweeper (`_refresh_overdue` and missed-reminder writer) in `backend/app/repositories/postgres.py` to acquire its connection via `system_tasks.elevated_connection()` instead of the request-scoped pool; preserve idempotency via existing partial unique index on `(debt_id, reminder_date)`; depends on T022
-- [ ] T024 [US2] Verify `handle_new_user` Postgres trigger in `supabase/migrations/` runs `SECURITY DEFINER` and is owned by a role that bypasses RLS; if not, append a `ALTER FUNCTION` statement to `013_rls_enforcement.sql`; depends on T004
+- [X] T022 [US2] Create `backend/app/repositories/system_tasks.py` exposing `elevated_connection()` context manager that acquires from `system_pool`; module docstring lists the allow-listed callers per `data-model.md` §"Elevated session factory"; depends on T006
+- [X] T023 [US2] Refactor the lazy commitment-score sweeper (`_refresh_overdue` and missed-reminder writer) in `backend/app/repositories/postgres.py` to acquire its connection via `system_tasks.elevated_connection()` instead of the request-scoped pool; preserve idempotency via existing partial unique index on `(debt_id, reminder_date)`; depends on T022
+- [X] T024 [US2] Verify `handle_new_user` Postgres trigger in `supabase/migrations/` runs `SECURITY DEFINER` and is owned by a role that bypasses RLS; if not, append a `ALTER FUNCTION` statement to `013_rls_enforcement.sql`; depends on T004
 
 **Checkpoint**: US2 is independently testable. Run `uv run pytest tests/rls/test_system_task_paths.py -q`. Constitution §III preserved; signup unbroken.
 
@@ -108,17 +108,17 @@ Web service. Backend code under `backend/app/`, backend tests under `backend/tes
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T025 [P] [US3] Shadow-zero test in `backend/tests/rls/test_shadow_mode.py::test_clean_run_emits_no_violations` — runs the canonical happy-path scenarios under `RLS_MODE=shadow`, captures stdout, asserts no `rls.shadow_violation` events (SC-002)
-- [ ] T026 [P] [US3] Shadow-detect test in `backend/tests/rls/test_shadow_mode.py::test_stripped_handler_logs_violation` — patches a handler to drop a per-record filter, runs the same probe, asserts a single `rls.shadow_violation` entry appears with the expected `route`, `table`, `caller_id` fields per `contracts/shadow-violation-event.md`
-- [ ] T027 [P] [US3] Dedupe test in `backend/tests/rls/test_shadow_mode.py::test_burst_collapses_into_single_event_with_count` — fires 100 identical violations within 1 second, asserts a single emitted entry with `count >= 100` (FR-015)
-- [ ] T028 [P] [US3] Toggle-revert test in `backend/tests/rls/test_shadow_mode.py::test_revert_from_enforce_to_shadow` — flips `RLS_MODE` from `enforce` to `shadow` mid-suite, sends `SIGHUP`, asserts the next request reflects the new mode in `/healthz` and behaves accordingly (SC-006)
+- [X] T025 [P] [US3] Shadow-zero test in `backend/tests/rls/test_shadow_mode.py::test_clean_run_emits_no_violations` — runs the canonical happy-path scenarios under `RLS_MODE=shadow`, captures stdout, asserts no `rls.shadow_violation` events (SC-002)
+- [X] T026 [P] [US3] Shadow-detect test in `backend/tests/rls/test_shadow_mode.py::test_stripped_handler_logs_violation` — patches a handler to drop a per-record filter, runs the same probe, asserts a single `rls.shadow_violation` entry appears with the expected `route`, `table`, `caller_id` fields per `contracts/shadow-violation-event.md`
+- [X] T027 [P] [US3] Dedupe test in `backend/tests/rls/test_shadow_mode.py::test_burst_collapses_into_single_event_with_count` — fires 100 identical violations within 1 second, asserts a single emitted entry with `count >= 100` (FR-015)
+- [X] T028 [P] [US3] Toggle-revert test in `backend/tests/rls/test_shadow_mode.py::test_revert_from_enforce_to_shadow` — flips `RLS_MODE` from `enforce` to `shadow` mid-suite, sends `SIGHUP`, asserts the next request reflects the new mode in `/healthz` and behaves accordingly (SC-006)
 
 ### Implementation for User Story 3
 
-- [ ] T029 [P] [US3] Create `backend/app/observability/shadow_log.py` exposing `log_shadow_violation(event_dict)` that writes structured JSON to stdout and applies a 60-second `(route, table, policy)` dedupe with rolled-up `count`, per `contracts/shadow-violation-event.md`; depends on T003
-- [ ] T030 [US3] Extend `backend/app/repositories/postgres.py::request_scoped_connection` to branch on `rls_mode == "shadow"`: connect as `app_service` with `request.jwt.claims` set, run probe queries that re-check access under `app_authenticated` for the touched user-data tables, and feed mismatches to `shadow_log.log_shadow_violation`; depends on T016, T029
-- [ ] T031 [P] [US3] In `backend/app/main.py`, install a `SIGHUP` handler that calls `get_settings.cache_clear()` so `RLS_MODE` changes take effect without a redeploy; emit `{"event": "rls.mode_changed", ...}` on each transition; depends on T005
-- [ ] T032 [P] [US3] Document the operator playbook callouts in the migration header of `013_rls_enforcement.sql` (one-paragraph "how to revert" pointer to `quickstart.md` §1.4); depends on T004
+- [X] T029 [P] [US3] Create `backend/app/observability/shadow_log.py` exposing `log_shadow_violation(event_dict)` that writes structured JSON to stdout and applies a 60-second `(route, table, policy)` dedupe with rolled-up `count`, per `contracts/shadow-violation-event.md`; depends on T003
+- [X] T030 [US3] Extend `backend/app/repositories/postgres.py::request_scoped_connection` to branch on `rls_mode == "shadow"`: connect as `app_service` with `request.jwt.claims` set, run probe queries that re-check access under `app_authenticated` for the touched user-data tables, and feed mismatches to `shadow_log.log_shadow_violation`; depends on T016, T029
+- [X] T031 [P] [US3] In `backend/app/main.py`, install a `SIGHUP` handler that calls `get_settings.cache_clear()` so `RLS_MODE` changes take effect without a redeploy; emit `{"event": "rls.mode_changed", ...}` on each transition; depends on T005
+- [X] T032 [P] [US3] Document the operator playbook callouts in the migration header of `013_rls_enforcement.sql` (one-paragraph "how to revert" pointer to `quickstart.md` §1.4); depends on T004
 
 **Checkpoint**: All three user stories independently functional. Shadow mode is the rollout mechanism; enforce is the destination state.
 
@@ -128,13 +128,13 @@ Web service. Backend code under `backend/app/`, backend tests under `backend/tes
 
 **Purpose**: Ship-readiness — CI wiring, docs touch-ups, and the post-change measurement that closes out SC-004.
 
-- [ ] T033 Add CI workflow `.github/workflows/rls.yml` — job runs on PRs that touch `backend/`, `supabase/migrations/`, or `specs/010-*`; steps: install `supabase` CLI → `supabase start` → apply migrations → `cd backend && REPOSITORY_TYPE=postgres uv run pytest tests/rls/ -q`; existing in-memory CI job remains unchanged
-- [ ] T034 Capture post-change E2E duration with `RLS_MODE=enforce` and record alongside the baseline in `specs/010-backend-rls-enforcement/baseline.txt`; verify ≤ 110% (SC-004 / FR-013); **also re-run the canonical happy-path suite under `RLS_MODE=enforce` (`cd backend && RLS_MODE=enforce uv run pytest tests/ -q`, excluding `tests/rls/`) and assert the same pass-set as the pre-change baseline — closes SC-003**; record both the comparison and the suite outcome in the PR description
-- [ ] T034a Migration-lint task in Phase 6: add `backend/tests/rls/test_migration_lint.py::test_new_user_data_tables_have_rls_and_policy` — scans `supabase/migrations/0*.sql` newer than `013_*.sql`; for each `CREATE TABLE` in a non-system schema, asserts the same migration also contains `ENABLE ROW LEVEL SECURITY` for that table and at least one `CREATE POLICY` referencing it (closes SC-007 / FR-012). Test is allowed to be skipped when no post-013 user-data migrations exist yet.
-- [ ] T035 [P] Update `CLAUDE.md` §"Auth and security" — replace the "Backend code currently runs as the Postgres role and so bypasses RLS" sentence with the post-Phase-10 reality (RLS authoritative; elevated paths via `system_tasks.py`); link to `specs/010-backend-rls-enforcement/quickstart.md`
-- [ ] T036 [P] Update `docs/supabase.md` to document the three roles (`authenticator`, `app_authenticated`, `app_service`), the dual-pool pattern, and the `RLS_MODE` flag
-- [ ] T037 [P] Add a one-paragraph note to `docs/local-development.md` pointing devs at `quickstart.md` §2.4 for running the RLS suite locally
-- [ ] T038 Run `quickstart.md` §1.2 end-to-end as the final validation: flip `RLS_MODE` from `off` → `shadow` → `enforce` → `shadow` on a local instance and confirm each transition surfaces in `/healthz` within one request
+- [X] T033 Add CI workflow `.github/workflows/rls.yml` — job runs on PRs that touch `backend/`, `supabase/migrations/`, or `specs/010-*`; steps: install `supabase` CLI → `supabase start` → apply migrations → `cd backend && REPOSITORY_TYPE=postgres uv run pytest tests/rls/ -q`; existing in-memory CI job remains unchanged
+- [X] T034 Capture post-change E2E duration with `RLS_MODE=enforce` and record alongside the baseline in `specs/010-backend-rls-enforcement/baseline.txt`; verify ≤ 110% (SC-004 / FR-013); **also re-run the canonical happy-path suite under `RLS_MODE=enforce` (`cd backend && RLS_MODE=enforce uv run pytest tests/ -q`, excluding `tests/rls/`) and assert the same pass-set as the pre-change baseline — closes SC-003**; record both the comparison and the suite outcome in the PR description
+- [X] T034a Migration-lint task in Phase 6: add `backend/tests/rls/test_migration_lint.py::test_new_user_data_tables_have_rls_and_policy` — scans `supabase/migrations/0*.sql` newer than `013_*.sql`; for each `CREATE TABLE` in a non-system schema, asserts the same migration also contains `ENABLE ROW LEVEL SECURITY` for that table and at least one `CREATE POLICY` referencing it (closes SC-007 / FR-012). Test is allowed to be skipped when no post-013 user-data migrations exist yet.
+- [X] T035 [P] Update `CLAUDE.md` §"Auth and security" — replace the "Backend code currently runs as the Postgres role and so bypasses RLS" sentence with the post-Phase-10 reality (RLS authoritative; elevated paths via `system_tasks.py`); link to `specs/010-backend-rls-enforcement/quickstart.md`
+- [X] T036 [P] Update `docs/supabase.md` to document the three roles (`authenticator`, `app_authenticated`, `app_service`), the dual-pool pattern, and the `RLS_MODE` flag
+- [X] T037 [P] Add a one-paragraph note to `docs/local-development.md` pointing devs at `quickstart.md` §2.4 for running the RLS suite locally
+- [X] T038 Run `quickstart.md` §1.2 end-to-end as the final validation: flip `RLS_MODE` from `off` → `shadow` → `enforce` → `shadow` on a local instance and confirm each transition surfaces in `/healthz` within one request
 
 ---
 

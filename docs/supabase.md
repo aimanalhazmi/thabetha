@@ -57,7 +57,15 @@ RLS is enabled on every user-data table from `001_initial_schema.sql`. The shape
 - **Commitment score events**: a user reads only their own deltas. Renamed in `002_*.sql` from the legacy `trust_score_events` table.
 - **Groups**: visible to owner and accepted members.
 
-The backend currently runs queries with the Postgres role (i.e., bypasses RLS) — RLS exists as a defence-in-depth layer for direct database access (e.g., from `supabase-js` if we move read paths client-side). Treat it as the authoritative authorisation contract; backend handlers must enforce the same rules in code.
+Backend rollout is controlled by `RLS_MODE=off|shadow|enforce`.
+
+| Role | Used by | Purpose |
+|---|---|---|
+| `authenticator` | request pool login | Has no direct table grants; can assume `app_authenticated`. |
+| `app_authenticated` | request-scoped queries | Runs normal API reads/writes with `request.jwt.claims` set so policies decide row access. |
+| `app_service` | system pool | Bypasses RLS for allow-listed system work such as the lazy commitment-score sweeper and signup trigger. |
+
+`backend/app/repositories/__init__.py` creates two pools when RLS is active: `app_pool` for request work and `system_pool` for elevated work. Application code must not import `system_pool` directly; use `backend/app/repositories/system_tasks.py::elevated_connection()` for reviewed system paths. `GET /api/v1/healthz` exposes the current `rls_mode` so operators can verify flag changes.
 
 ## Local Supabase workflow
 
@@ -77,4 +85,4 @@ Migrations are ordered by filename; new ones go in `supabase/migrations/NNN_desc
 
 ## Production
 
-For a hosted Supabase project, the only change is the values of `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, and `DATABASE_URL`. Migrations are applied with `supabase db push` against the remote project. The backend Docker image picks up these as environment variables.
+For a hosted Supabase project, set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `DATABASE_URL`, and, when `RLS_MODE` is `shadow` or `enforce`, `APP_DATABASE_URL` and `SYSTEM_DATABASE_URL`. Migrations are applied with `supabase db push` against the remote project. The backend Docker image picks up these as environment variables.

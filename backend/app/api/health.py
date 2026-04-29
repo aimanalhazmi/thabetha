@@ -8,8 +8,7 @@ from app.schemas.domain import HealthOut
 router = APIRouter()
 
 
-@router.get("/health", response_model=HealthOut)
-def health(settings: Annotated[Settings, Depends(get_settings)]) -> HealthOut:
+def _health_payload(settings: Settings) -> HealthOut:
     db_connected = False
 
     if settings.repository_type == "postgres" and settings.database_url:
@@ -27,4 +26,15 @@ def health(settings: Annotated[Settings, Depends(get_settings)]) -> HealthOut:
         service=settings.app_name,
         environment=settings.app_env,
         supabase_connected=db_connected,
+        rls_mode=settings.rls_mode,
     )
+
+
+@router.get("/health", response_model=HealthOut)
+def health(settings: Annotated[Settings, Depends(get_settings)]) -> HealthOut:
+    return _health_payload(settings)
+
+
+@router.get("/healthz", response_model=HealthOut)
+def healthz(settings: Annotated[Settings, Depends(get_settings)]) -> HealthOut:
+    return _health_payload(settings)

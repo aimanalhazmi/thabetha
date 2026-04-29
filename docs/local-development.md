@@ -62,6 +62,8 @@ Listens on http://127.0.0.1:8000. With `APP_ENV=local` and `REPOSITORY_TYPE=memo
 
 Health check: `curl http://127.0.0.1:8000/api/v1/health`.
 
+For the Postgres-backed RLS suite, use the feature playbook in `specs/010-backend-rls-enforcement/quickstart.md` §2.4. It runs against `supabase start` with `REPOSITORY_TYPE=postgres` and `RLS_MODE=enforce`; the default test suite remains in-memory.
+
 ## 4. Start the frontend
 
 ```bash
