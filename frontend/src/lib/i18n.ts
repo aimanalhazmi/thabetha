@@ -126,10 +126,24 @@ export type TranslationKey =
   | 'voiceTranscript'
   | 'draft'
   | 'askMerchantBot'
+  | 'voiceDraftTitle'
+  | 'voiceDraftRecord'
+  | 'voiceDraftUpload'
+  | 'voiceDraftUseTranscript'
+  | 'voiceDraftReview'
+  | 'voiceDraftConfirmField'
+  | 'voiceDraftConfirmed'
+  | 'voiceDraftNeedsConfirmation'
+  | 'voiceDraftAiRequired'
+  | 'voiceDraftProcessing'
+  | 'voiceDraftTranscript'
+  | 'voiceDraftNoDebtCreation'
   | 'signIn'
   | 'signUp'
   | 'email'
   | 'password'
+  | 'emailPlaceholder'
+  | 'passwordPlaceholder'
   | 'name'
   | 'phone'
   | 'accountType'
@@ -167,6 +181,11 @@ export type TranslationKey =
   | 'errorLoadNotifications'
   | 'errorTransitionStateChanged'
   | 'errorTransitionForbidden'
+  | 'errorAiSubscriptionRequired'
+  | 'errorAiDailyLimitReached'
+  | 'errorUnsupportedAudioType'
+  | 'errorAudioTooLong'
+  | 'errorTranscriptionFailed'
   | 'selectAccountType'
   | 'selectAccountTypeDesc'
   | 'shopOwner'
@@ -414,10 +433,24 @@ const ar: Translations = {
   voiceTranscript: 'النص الصوتي',
   draft: 'مسودة',
   askMerchantBot: 'اسأل مساعد التاجر',
+  voiceDraftTitle: 'مسودة دين بالصوت',
+  voiceDraftRecord: 'تسجيل صوتي',
+  voiceDraftUpload: 'رفع ملف صوتي',
+  voiceDraftUseTranscript: 'استخدام النص',
+  voiceDraftReview: 'راجع المسودة',
+  voiceDraftConfirmField: 'تأكيد الحقل',
+  voiceDraftConfirmed: 'تم التأكيد',
+  voiceDraftNeedsConfirmation: 'يحتاج تأكيدًا',
+  voiceDraftAiRequired: 'فعّل خطة الذكاء الاصطناعي لاستخدام المسودة الصوتية.',
+  voiceDraftProcessing: 'جاري إنشاء المسودة...',
+  voiceDraftTranscript: 'النص المسموع',
+  voiceDraftNoDebtCreation: 'لن يتم إنشاء دين حتى تؤكد الحقول وترسل النموذج.',
   signIn: 'تسجيل الدخول',
   signUp: 'إنشاء حساب',
   email: 'البريد الإلكتروني',
   password: 'كلمة المرور',
+  emailPlaceholder: 'name@example.com',
+  passwordPlaceholder: '••••••••',
   name: 'الاسم',
   phone: 'رقم الهاتف',
   accountType: 'نوع الحساب',
@@ -454,6 +487,11 @@ const ar: Translations = {
   errorLoadNotifications: 'تعذّر تحميل الإشعارات. حاول مرة أخرى.',
   errorTransitionStateChanged: 'تغيّرت حالة هذا الدين — يرجى التحديث.',
   errorTransitionForbidden: 'غير مسموح لك بتنفيذ هذا الإجراء.',
+  errorAiSubscriptionRequired: 'تتطلب هذه الميزة تفعيل خطة الذكاء الاصطناعي.',
+  errorAiDailyLimitReached: 'وصلت إلى الحد اليومي لمسودات الذكاء الاصطناعي.',
+  errorUnsupportedAudioType: 'صيغة الملف الصوتي غير مدعومة.',
+  errorAudioTooLong: 'يجب ألا يتجاوز التسجيل الصوتي ٦٠ ثانية.',
+  errorTranscriptionFailed: 'تعذّر تحويل الصوت إلى نص. حاول مرة أخرى.',
   loading: 'جاري التحميل...',
   selectAccountType: 'اختر نوع الحساب',
   selectAccountTypeDesc: 'كيف ستستخدم ثبتها؟',
@@ -701,10 +739,24 @@ const en: Translations = {
   voiceTranscript: 'Voice Transcript',
   draft: 'Draft',
   askMerchantBot: 'Ask Merchant Bot',
+  voiceDraftTitle: 'Voice debt draft',
+  voiceDraftRecord: 'Record audio',
+  voiceDraftUpload: 'Upload audio',
+  voiceDraftUseTranscript: 'Use transcript',
+  voiceDraftReview: 'Review draft',
+  voiceDraftConfirmField: 'Confirm field',
+  voiceDraftConfirmed: 'Confirmed',
+  voiceDraftNeedsConfirmation: 'Needs confirmation',
+  voiceDraftAiRequired: 'Enable the AI plan to use voice drafts.',
+  voiceDraftProcessing: 'Creating draft...',
+  voiceDraftTranscript: 'Heard transcript',
+  voiceDraftNoDebtCreation: 'No debt is created until you confirm fields and submit the form.',
   signIn: 'Sign In',
   signUp: 'Sign Up',
   email: 'Email',
   password: 'Password',
+  emailPlaceholder: 'name@example.com',
+  passwordPlaceholder: '••••••••',
   name: 'Full Name',
   phone: 'Phone Number',
   accountType: 'Account Type',
@@ -741,6 +793,11 @@ const en: Translations = {
   errorLoadNotifications: "Couldn't load your notifications. Please retry.",
   errorTransitionStateChanged: "This debt's status changed — please refresh.",
   errorTransitionForbidden: "You're not allowed to perform this action.",
+  errorAiSubscriptionRequired: 'This feature requires an active AI plan.',
+  errorAiDailyLimitReached: 'You reached the daily AI draft limit.',
+  errorUnsupportedAudioType: 'Unsupported audio format.',
+  errorAudioTooLong: 'Voice notes must be 60 seconds or shorter.',
+  errorTranscriptionFailed: 'Could not transcribe the audio. Try again.',
   loading: 'Loading...',
   selectAccountType: 'Select Account Type',
   selectAccountTypeDesc: 'How will you use Thabetha?',

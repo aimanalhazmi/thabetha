@@ -8,7 +8,7 @@ PostgresRepository (local Supabase / production).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from fastapi import UploadFile
@@ -255,6 +255,18 @@ class Repository(ABC):
 
     @abstractmethod
     def merchant_facts(self, user_id: str) -> dict[str, object]: ...
+
+    @abstractmethod
+    def get_ai_usage_count(self, user_id: str, feature: str, usage_date: date) -> int: ...
+
+    @abstractmethod
+    def increment_ai_usage(self, user_id: str, feature: str, usage_date: date, limit: int) -> int: ...
+
+    @abstractmethod
+    async def save_temp_voice_note(self, user_id: str, file_name: str, content_type: str | None, content: bytes) -> str: ...
+
+    @abstractmethod
+    async def delete_temp_voice_note(self, user_id: str, storage_path: str) -> None: ...
 
     # ── Payment intents ───────────────────────────────────────────────
 

@@ -1,15 +1,15 @@
-import { Check, CreditCard, ExternalLink, FileText, Image as ImageIcon, Pencil, RotateCcw, WalletCards, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Bot, Check, CreditCard, ExternalLink, FileText, Image as ImageIcon, Mic, Pencil, RotateCcw, Upload, WalletCards, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AttachmentUploader } from '../components/AttachmentUploader';
 import { CancelDebtDialog } from '../components/CancelDebtDialog';
 import { GroupSelector } from '../components/GroupSelector';
 import { Input, Panel } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
-import { apiRequest, payOnline } from '../lib/api';
+import { aiVoiceDrafts, apiRequest, payOnline } from '../lib/api';
 import { humanizeError } from '../lib/errors';
 import { t } from '../lib/i18n';
-import type { Attachment, Debt, DebtEvent, DebtStatus, Language, PayOnlineResult, Profile, ReceiptUploadItem } from '../lib/types';
+import type { Attachment, Debt, DebtEvent, DebtStatus, Language, PayOnlineResult, Profile, ReceiptUploadItem, VoiceDraft } from '../lib/types';
 
 type DebtorSource = 'manual' | 'qr-resolving' | 'qr-resolved' | 'qr-expired' | 'qr-self' | 'qr-error';
 
@@ -56,6 +56,8 @@ interface DebtAttachmentState {
 
 interface Props { language: Language }
 
+type VoiceDraftField = keyof VoiceDraft['field_confirmations'];
+
 const statusKeys: (DebtStatus | 'all')[] = [
   'all',
   'pending_confirmation',
@@ -77,6 +79,8 @@ const REMINDER_PRESETS: ReminderPreset[] = [
   { key: 'reminderPresetPlus14', offsetDays: 14 },
 ];
 
+const VOICE_DRAFT_FIELDS: VoiceDraftField[] = ['debtor_name', 'amount', 'currency', 'description', 'due_date'];
+
 function addDays(iso: string, days: number): string {
   const d = new Date(iso);
   d.setDate(d.getDate() + days);
@@ -87,9 +91,11 @@ export function DebtsPage({ language }: Props) {
   const tr = (key: Parameters<typeof t>[1]) => t(language, key);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
   const [searchParams] = useSearchParams();
   const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both' || user?.account_type === 'business';
   const [debts, setDebts] = useState<Debt[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [message, setMessage] = useState('');
   const [filter, setFilter] = useState<DebtStatus | 'all'>('all');
 
@@ -112,6 +118,10 @@ export function DebtsPage({ language }: Props) {
   const [reminderPresets, setReminderPresets] = useState<Set<number>>(new Set([3]));
   const [reminderCustom, setReminderCustom] = useState<string>('');
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [voiceDraft, setVoiceDraft] = useState<VoiceDraft | null>(null);
+  const [voiceDraftLoading, setVoiceDraftLoading] = useState(false);
+  const [voiceConfirmedFields, setVoiceConfirmedFields] = useState<Set<VoiceDraftField>>(new Set());
 
   // Debtor: id of the debt whose edit-request form is open, plus its draft fields.
   const [editingDebtId, setEditingDebtId] = useState<string | null>(null);
@@ -145,6 +155,74 @@ export function DebtsPage({ language }: Props) {
       if (next.has(days)) next.delete(days); else next.add(days);
       return next;
     });
+  }
+
+  function setDebtFormField(field: keyof typeof debtForm, value: string) {
+    setDebtForm((current) => ({ ...current, [field]: value }));
+    if (voiceDraft && field in voiceDraft.field_confirmations) {
+      setVoiceConfirmedFields((current) => new Set(current).add(field as VoiceDraftField));
+    }
+  }
+
+  function fieldLabel(field: VoiceDraftField): string {
+    const labels: Record<VoiceDraftField, Parameters<typeof t>[1]> = {
+      debtor_name: 'debtorName',
+      amount: 'amount',
+      currency: 'currency',
+      description: 'description',
+      due_date: 'dueDate',
+    };
+    return tr(labels[field]);
+  }
+
+  function voiceDraftFieldsToConfirm(draft: VoiceDraft | null = voiceDraft): VoiceDraftField[] {
+    if (!draft) return [];
+    return VOICE_DRAFT_FIELDS.filter((field) => draft.field_confirmations[field] === 'extracted_unconfirmed');
+  }
+
+  const voiceDraftReady = voiceDraftFieldsToConfirm().every((field) => voiceConfirmedFields.has(field));
+
+  function applyVoiceDraft(draft: VoiceDraft) {
+    setVoiceDraft(draft);
+    setVoiceConfirmedFields(new Set());
+    setDebtForm((current) => ({
+      ...current,
+      debtor_name: draft.debtor_name ?? current.debtor_name,
+      debtor_id: current.debtor_id,
+      amount: draft.amount ?? current.amount,
+      currency: draft.currency || current.currency,
+      description: draft.description ?? current.description,
+      due_date: draft.due_date ?? current.due_date,
+    }));
+  }
+
+  async function requestVoiceDraftFromTranscript() {
+    if (!voiceTranscript.trim()) return;
+    setVoiceDraftLoading(true);
+    try {
+      applyVoiceDraft(await aiVoiceDrafts.fromTranscript(voiceTranscript));
+      setMessage(tr('voiceDraftReview'));
+    } catch (err) {
+      setMessage(humanizeError(err, language, 'aiVoiceDraft'));
+    } finally {
+      setVoiceDraftLoading(false);
+    }
+  }
+
+  async function requestVoiceDraftFromAudio(file: File) {
+    setVoiceDraftLoading(true);
+    try {
+      applyVoiceDraft(await aiVoiceDrafts.fromAudio(file));
+      setMessage(tr('voiceDraftReview'));
+    } catch (err) {
+      setMessage(humanizeError(err, language, 'aiVoiceDraft'));
+    } finally {
+      setVoiceDraftLoading(false);
+    }
+  }
+
+  function confirmVoiceField(field: VoiceDraftField) {
+    setVoiceConfirmedFields((current) => new Set(current).add(field));
   }
 
   // T005a: shared clear-debtor handler — used by "change debtor" link and US2 error recovery
@@ -188,6 +266,10 @@ export function DebtsPage({ language }: Props) {
     try {
       const data = await apiRequest<Debt[]>('/debts');
       setDebts(data);
+      if (isCreditor) {
+        const currentProfile = await apiRequest<Profile>('/profiles/me');
+        setProfile(currentProfile);
+      }
       void loadAttachmentsForDebts(data);
     } catch (err) {
       setMessage(humanizeError(err, language, 'loadDebts'));
@@ -418,6 +500,10 @@ export function DebtsPage({ language }: Props) {
   }
 
   async function createDebtWithReceipts() {
+    if (voiceDraft && !voiceDraftReady) {
+      setMessage(tr('voiceDraftNeedsConfirmation'));
+      return;
+    }
     // Guard: submit should never be reachable from error/resolving/self states (defense-in-depth)
     if (debtorSource === 'qr-resolving' || debtorSource === 'qr-self' || debtorSource === 'qr-expired' || debtorSource === 'qr-error') return;
 
@@ -582,11 +668,11 @@ export function DebtsPage({ language }: Props) {
           {debtorSource === 'qr-resolved' ? (
             <Input label={`${tr('debtorName')} — ${tr('scannedDebtorLabel')}`} value={debtForm.debtor_name} onChange={() => {}} disabled />
           ) : (
-            <Input label={tr('debtorName')} value={debtForm.debtor_name} onChange={(v) => setDebtForm({ ...debtForm, debtor_name: v })} disabled={debtorSource === 'qr-resolving'} />
+            <Input label={tr('debtorName')} value={debtForm.debtor_name} onChange={(v) => setDebtFormField('debtor_name', v)} disabled={debtorSource === 'qr-resolving'} />
           )}
           {/* Hide debtor_id field when QR-resolved (it's set internally) */}
           {debtorSource !== 'qr-resolved' && (
-            <Input label={tr('debtorId')} value={debtForm.debtor_id} onChange={(v) => setDebtForm({ ...debtForm, debtor_id: v })} placeholder={tr('debtorIdPlaceholder')} disabled={debtorSource === 'qr-resolving'} />
+            <Input label={tr('debtorId')} value={debtForm.debtor_id} onChange={(v) => setDebtFormField('debtor_id', v)} placeholder={tr('debtorIdPlaceholder')} disabled={debtorSource === 'qr-resolving'} />
           )}
           <GroupSelector
             debtorId={debtForm.debtor_id || null}
@@ -594,10 +680,88 @@ export function DebtsPage({ language }: Props) {
             onChange={setSelectedGroupId}
             language={language}
           />
-          <Input label={tr('amount')} value={debtForm.amount} onChange={(v) => setDebtForm({ ...debtForm, amount: v })} disabled={debtorSource === 'qr-resolving'} />
-          <Input label={tr('currency')} value={debtForm.currency} onChange={(v) => setDebtForm({ ...debtForm, currency: v })} disabled={debtorSource === 'qr-resolving'} />
-          <Input label={tr('description')} value={debtForm.description} onChange={(v) => setDebtForm({ ...debtForm, description: v })} disabled={debtorSource === 'qr-resolving'} />
-          <Input label={tr('dueDate')} type="date" value={debtForm.due_date} onChange={(v) => setDebtForm({ ...debtForm, due_date: v })} disabled={debtorSource === 'qr-resolving'} />
+          <Input label={tr('amount')} value={debtForm.amount} onChange={(v) => setDebtFormField('amount', v)} disabled={debtorSource === 'qr-resolving'} />
+          <Input label={tr('currency')} value={debtForm.currency} onChange={(v) => setDebtFormField('currency', v)} disabled={debtorSource === 'qr-resolving'} />
+          <Input label={tr('description')} value={debtForm.description} onChange={(v) => setDebtFormField('description', v)} disabled={debtorSource === 'qr-resolving'} />
+          <Input label={tr('dueDate')} type="date" value={debtForm.due_date} onChange={(v) => setDebtFormField('due_date', v)} disabled={debtorSource === 'qr-resolving'} />
+
+          {isCreditor && (
+            <div className="voice-draft-panel">
+              <h3>{tr('voiceDraftTitle')}</h3>
+              {profile?.ai_enabled ? (
+                <>
+                  <textarea
+                    value={voiceTranscript}
+                    onChange={(event) => setVoiceTranscript(event.target.value)}
+                    placeholder={tr('voiceTranscript')}
+                  />
+                  <div className="voice-draft-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => void requestVoiceDraftFromTranscript()}
+                      disabled={voiceDraftLoading || !voiceTranscript.trim()}
+                    >
+                      <Bot size={16} />
+                      <span>{tr('voiceDraftUseTranscript')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => audioInputRef.current?.click()}
+                      disabled={voiceDraftLoading}
+                    >
+                      <Upload size={16} />
+                      <span>{tr('voiceDraftUpload')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => audioInputRef.current?.click()}
+                      disabled={voiceDraftLoading}
+                    >
+                      <Mic size={16} />
+                      <span>{tr('voiceDraftRecord')}</span>
+                    </button>
+                  </div>
+                  <input
+                    ref={audioInputRef}
+                    type="file"
+                    accept="audio/webm,audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/mp4,audio/m4a,audio/x-m4a"
+                    capture
+                    hidden
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = '';
+                      if (file) void requestVoiceDraftFromAudio(file);
+                    }}
+                  />
+                  {voiceDraftLoading && <p className="muted">{tr('voiceDraftProcessing')}</p>}
+                  {voiceDraft && (
+                    <div className="voice-draft-review">
+                      <p className="muted">{tr('voiceDraftNoDebtCreation')}</p>
+                      <p><strong>{tr('voiceDraftTranscript')}:</strong> {voiceDraft.raw_transcript}</p>
+                      <div className="voice-draft-fields">
+                        {voiceDraftFieldsToConfirm(voiceDraft).map((field) => (
+                          <button
+                            key={field}
+                            type="button"
+                            className={`filter-tab${voiceConfirmedFields.has(field) ? ' active' : ''}`}
+                            onClick={() => confirmVoiceField(field)}
+                          >
+                            <Check size={14} />
+                            <span>{fieldLabel(field)}: {voiceConfirmedFields.has(field) ? tr('voiceDraftConfirmed') : tr('voiceDraftConfirmField')}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="muted">{tr('voiceDraftAiRequired')}</p>
+              )}
+            </div>
+          )}
 
           <div className="reminder-picker">
             <label>{tr('reminderDates')}</label>
@@ -634,6 +798,7 @@ export function DebtsPage({ language }: Props) {
           {(debtorSource === 'manual' || debtorSource === 'qr-resolved') && (
             <button
               className="primary-button"
+              disabled={Boolean(voiceDraft && !voiceDraftReady)}
               onClick={() => void createDebtWithReceipts()}
             >
               <CreditCard size={18} />

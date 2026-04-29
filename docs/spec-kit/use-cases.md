@@ -84,9 +84,9 @@ Part 1 (008-groups-mvp-surface) ships Groups in nav for all users (`profiles.gro
 - Endpoints: 13 group routes (`GET /groups`, `POST /groups`, `GET /groups/{id}`, `GET /groups/{id}/members`, `GET /groups/{id}/invites`, `POST /groups/{id}/invite`, `POST /groups/{id}/accept`, `POST /groups/{id}/decline`, `POST /groups/{id}/leave`, `POST /groups/{id}/rename`, `POST /groups/{id}/transfer-ownership`, `DELETE /groups/{id}`, `DELETE /groups/{id}/invites/{user_id}`, `GET /groups/{id}/debts`, `POST /groups/{id}/settlements`, `GET /groups/shared`), `PATCH /debts/{id}` for group retag.
 - Tables: `groups`, `group_members` (widened `status` enum), `group_events` (audit), `group_settlements`, `debts.group_id`; `profiles.groups_enabled`.
 
-## UC10 — AI assistant (paid tier) · creditor · ⛔ (Could-Have, gated)
+## UC10 — AI assistant (paid tier) · creditor · 🟡 (Voice draft in progress, gated)
 
-Stubs only. Returns `403` unless `profile.ai_enabled = true`.
+Voice-to-debt draft is being upgraded from stub to a real Arabic/English transcript pipeline. Returns `403` unless `profile.ai_enabled = true`; voice drafts never create debts until the creditor confirms or edits every extracted field and submits through the normal create-debt flow.
 
-- Endpoints: `POST /ai/debt-draft-from-voice` (transcript → draft), `POST /ai/merchant-chat`.
-- Frontend: `frontend/src/pages/AIPage.tsx` (hard-gated).
+- Endpoints: `POST /ai/debt-draft-from-voice` (JSON transcript or multipart audio → draft), `POST /ai/merchant-chat`.
+- Frontend: create-debt form voice draft panel (creditor + AI tier), plus `frontend/src/pages/AIPage.tsx` compatibility surface.

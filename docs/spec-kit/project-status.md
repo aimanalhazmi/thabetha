@@ -26,7 +26,7 @@ deefc60 feat: implement debt edit request flow and commitment indicator logic
 - **QR identity** — rotating short-lived tokens, profile-preview resolution.
 - **In-app notifications** with read tracking and per-creditor WhatsApp opt-out preference.
 - **Group endpoints** (post-MVP) — exist behind nav, not yet surfaced in MVP UI.
-- **AI stubs** (`debt-draft-from-voice`, `merchant-chat`) gated by `profile.ai_enabled`.
+- **AI voice draft** (`debt-draft-from-voice`) upgraded from stub to transcript/audio draft flow on branch `012-ai-voice-debt-draft`; still gated by `profile.ai_enabled`. `merchant-chat` remains a stub.
 - **Partial business-profile updates** through `PATCH /profiles/me` (commit 2ceb740).
 
 ## In progress / pending (MVP)

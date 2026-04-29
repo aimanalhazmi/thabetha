@@ -199,14 +199,14 @@ export function GroupDetailPage({ language }: Props) {
               onClick={() => setInviteMode("email")}
               type="button"
             >
-              <Mail size={14} /> Email
+              <Mail size={14} /> <span>{tr("email")}</span>
             </button>
             <button
               className={inviteMode === "phone" ? "primary-button" : "ghost-button"}
               onClick={() => setInviteMode("phone")}
               type="button"
             >
-              <Phone size={14} /> Phone
+              <Phone size={14} /> <span>{tr("phone")}</span>
             </button>
           </div>
           <Input label={tr("groupsInviteByEmailOrPhone")} value={inviteValue} onChange={setInviteValue} />

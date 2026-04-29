@@ -107,6 +107,8 @@ class InMemoryRepository(Repository):
             self._edit_request_payloads: dict[str, dict[str, object]] = {}
             self._original_terms: dict[str, dict[str, object]] = {}
             self.payment_intents: dict[str, PaymentIntentOut] = {}
+            self.ai_usage_records: dict[tuple[str, date, str], int] = {}
+            self.temp_voice_notes: dict[str, dict[str, object]] = {}
 
     def ensure_profile(self, user: AuthenticatedUser) -> ProfileOut:
         with self._lock:
@@ -1154,6 +1156,35 @@ class InMemoryRepository(Repository):
             "paid_count": dashboard.paid_count,
             "alerts": dashboard.alerts,
         }
+
+    def get_ai_usage_count(self, user_id: str, feature: str, usage_date: date) -> int:
+        return self.ai_usage_records.get((user_id, usage_date, feature), 0)
+
+    def increment_ai_usage(self, user_id: str, feature: str, usage_date: date, limit: int) -> int:
+        with self._lock:
+            key = (user_id, usage_date, feature)
+            count = self.ai_usage_records.get(key, 0) + 1
+            self.ai_usage_records[key] = count
+            return count
+
+    async def save_temp_voice_note(self, user_id: str, file_name: str, content_type: str | None, content: bytes) -> str:
+        safe_file_name = (file_name or "voice-note").replace("/", "_").replace("\\", "_")
+        storage_path = f"{user_id}/{uuid4()}-{safe_file_name}"
+        self.temp_voice_notes[storage_path] = {
+            "owner_id": user_id,
+            "file_name": safe_file_name,
+            "content_type": content_type,
+            "content": content,
+            "created_at": utcnow(),
+            "deleted_at": None,
+        }
+        return storage_path
+
+    async def delete_temp_voice_note(self, user_id: str, storage_path: str) -> None:
+        note = self.temp_voice_notes.get(storage_path)
+        if note and note["owner_id"] == user_id:
+            note["deleted_at"] = utcnow()
+            note["content"] = b""
 
     # ── Payment intents ───────────────────────────────────────────────
 

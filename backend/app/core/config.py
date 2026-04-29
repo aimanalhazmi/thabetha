@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     receipt_archive_retention_months: int = 6
 
     openai_api_key: str | None = None
+    ai_transcription_provider: str = "mock"
+    ai_voice_draft_daily_limit: int = 50
+    ai_voice_max_duration_seconds: int = 60
+    ai_voice_notes_bucket: str = "voice-notes"
     whatsapp_provider: str = "mock"
     whatsapp_access_token: str | None = None
     whatsapp_from_number: str | None = None

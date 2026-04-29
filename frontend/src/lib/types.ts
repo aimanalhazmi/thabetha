@@ -250,6 +250,9 @@ export interface VoiceDraft {
   currency: string;
   description: string | null;
   due_date: string | null;
+  confidence: number;
+  raw_transcript: string;
+  field_confirmations: Record<'debtor_name' | 'amount' | 'currency' | 'description' | 'due_date', 'extracted_unconfirmed' | 'missing' | 'confirmed' | 'edited'>;
 }
 
 export interface PayOnlineResult {

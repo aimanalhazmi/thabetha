@@ -1,7 +1,8 @@
 import { Bot } from "lucide-react";
 import { useState } from "react";
 import { Panel } from "../components/Layout";
-import { apiRequest } from "../lib/api";
+import { aiVoiceDrafts, apiRequest } from "../lib/api";
+import { humanizeError } from "../lib/errors";
 import { t } from "../lib/i18n";
 import type { Language, VoiceDraft } from "../lib/types";
 
@@ -17,11 +18,11 @@ export function AIPage({ language }: Props) {
 
   async function draftFromVoice() {
     try {
-      const draft = await apiRequest<VoiceDraft>("/ai/debt-draft-from-voice", { method: "POST", body: JSON.stringify({ transcript, default_currency: "SAR" }) });
+      const draft = await aiVoiceDrafts.fromTranscript(transcript);
       setVoiceDraft(draft);
       setMessage("Draft extracted");
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Failed");
+      setMessage(humanizeError(err, language, "aiVoiceDraft"));
     }
   }
 

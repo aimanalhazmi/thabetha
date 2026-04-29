@@ -87,4 +87,5 @@ def test_ai_requires_subscription_and_extracts_draft(client: TestClient) -> None
     assert draft.status_code == 200
     assert draft.json()["amount"] == "25"
     assert draft.json()["currency"] == "SAR"
-
+    assert draft.json()["raw_transcript"] == "على Ahmed 25 SAR groceries due 2026-05-01"
+    assert draft.json()["field_confirmations"]["amount"] == "extracted_unconfirmed"

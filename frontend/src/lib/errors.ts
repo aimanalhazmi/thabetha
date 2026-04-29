@@ -6,6 +6,7 @@ export type ErrorContext =
   | 'loadDashboard'
   | 'loadNotifications'
   | 'transition'
+  | 'aiVoiceDraft'
   | 'qrResolve'
   | 'generic';
 
@@ -14,6 +15,14 @@ const STATUS_CONTEXT_MAP: Record<string, Record<string, Parameters<typeof t>[1]>
   loadDashboard: { default: 'errorLoadDashboard' },
   loadNotifications: { default: 'errorLoadNotifications' },
   transition: { '409': 'errorTransitionStateChanged', '403': 'errorTransitionForbidden', default: 'errorGeneric' },
+  aiVoiceDraft: {
+    '403': 'errorAiSubscriptionRequired',
+    '413': 'errorAudioTooLong',
+    '415': 'errorUnsupportedAudioType',
+    '422': 'errorTranscriptionFailed',
+    '429': 'errorAiDailyLimitReached',
+    default: 'errorGeneric',
+  },
   qrResolve: { '404': 'qrExpiredAskRefresh', '410': 'qrExpiredAskRefresh', default: 'errorGeneric' },
   generic: { default: 'errorGeneric' },
 };
