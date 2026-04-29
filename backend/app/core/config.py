@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     receipt_archive_retention_months: int = 6
 
     openai_api_key: str | None = None
-    ai_transcription_provider: str = "mock"
+    ai_transcription_provider: str = "openai"
     ai_voice_draft_daily_limit: int = 50
     ai_voice_max_duration_seconds: int = 60
     ai_voice_notes_bucket: str = "voice-notes"
