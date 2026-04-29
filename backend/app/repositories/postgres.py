@@ -31,9 +31,12 @@ from app.schemas.domain import (
     DebtorDashboardOut,
     DebtOut,
     GroupCreate,
+    GroupDetailOut,
     GroupInviteIn,
     GroupMemberOut,
     GroupOut,
+    GroupOwnershipTransferIn,
+    GroupRenameIn,
     NotificationOut,
     NotificationPreferenceIn,
     NotificationPreferenceOut,
@@ -43,10 +46,16 @@ from app.schemas.domain import (
     PayOnlineOut,
     ProfileOut,
     ProfileUpdate,
+    ProposedTransferOut,
+    SettlementConfirmationOut,
     SettlementCreate,
     SettlementOut,
+    SettlementProposalOut,
+    SnapshotDebtOut,
     utcnow,
 )
+from app.services.netting import SnapshotDebt as _NetSnapshotDebt
+from app.services.netting import compute_transfers as _compute_transfers
 from app.services.whatsapp.provider import SendOutcome, SendResult, StatusUpdate
 
 
@@ -1139,17 +1148,59 @@ class PostgresRepository(Repository):
             conn.row_factory = dict_row
             rows = conn.execute(
                 """
-                SELECT g.* FROM groups g
-                JOIN group_members gm ON gm.group_id = g.id
-                WHERE gm.user_id = %s AND gm.status = 'accepted'
-                ORDER BY g.created_at DESC
+                SELECT g.*,
+                       gm.status AS member_status,
+                       (SELECT count(*) FROM group_members m
+                          WHERE m.group_id = g.id AND m.status = 'accepted') AS member_count
+                  FROM groups g
+                  JOIN group_members gm ON gm.group_id = g.id
+                 WHERE gm.user_id = %s AND gm.status IN ('pending', 'accepted')
+                 ORDER BY (gm.status = 'accepted') DESC,
+                          COALESCE(g.updated_at, g.created_at) DESC
                 """,
                 (user_id,),
             ).fetchall()
             return [
-                GroupOut(id=str(r["id"]), owner_id=str(r["owner_id"]), name=r["name"], description=r.get("description"), created_at=r["created_at"])
+                GroupOut(
+                    id=str(r["id"]),
+                    owner_id=str(r["owner_id"]),
+                    name=r["name"],
+                    description=r.get("description"),
+                    member_count=int(r["member_count"]),
+                    member_status=r["member_status"],
+                    created_at=r["created_at"],
+                    updated_at=r.get("updated_at"),
+                )
                 for r in rows
             ]
+
+    def _resolve_invite_target_pg(self, conn, payload: GroupInviteIn) -> str:
+        if payload.user_id is not None:
+            row = conn.execute("SELECT 1 FROM profiles WHERE id = %s", (payload.user_id,)).fetchone()
+            if not row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": "NotPlatformUser", "message": "Recipient is not a platform user."},
+                )
+            return payload.user_id
+        if payload.email:
+            row = conn.execute(
+                "SELECT id FROM profiles WHERE lower(email) = lower(%s) LIMIT 1",
+                (payload.email.strip(),),
+            ).fetchone()
+            if row:
+                return str(row["id"])
+        if payload.phone:
+            row = conn.execute(
+                "SELECT id FROM profiles WHERE phone = %s LIMIT 1",
+                (payload.phone.strip(),),
+            ).fetchone()
+            if row:
+                return str(row["id"])
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "NotPlatformUser", "message": "Recipient is not a platform user."},
+        )
 
     def invite_group_member(self, actor_id: str, group_id: str, payload: GroupInviteIn) -> GroupMemberOut:
         with self._pool.connection() as conn:
@@ -1159,32 +1210,31 @@ class PostgresRepository(Repository):
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
             if str(group["owner_id"]) != actor_id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the group owner can invite members")
-            existing = conn.execute("SELECT * FROM group_members WHERE group_id = %s AND user_id = %s", (group_id, payload.user_id)).fetchone()
+            target_id = self._resolve_invite_target_pg(conn, payload)
+            if target_id == actor_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"code": "InviteToSelf", "message": "Cannot invite yourself."},
+                )
+            existing = conn.execute(
+                "SELECT * FROM group_members WHERE group_id = %s AND user_id = %s AND status IN ('pending', 'accepted')",
+                (group_id, target_id),
+            ).fetchone()
             if existing:
-                return GroupMemberOut(
-                    id=str(existing["id"]),
-                    group_id=str(existing["group_id"]),
-                    user_id=str(existing["user_id"]),
-                    status=existing["status"],
-                    created_at=existing["created_at"],
-                    accepted_at=existing.get("accepted_at"),
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "AlreadyMember", "message": "Recipient is already a member or has a pending invite.", "status": existing["status"]},
                 )
             member_id = str(uuid4())
             conn.execute(
                 "INSERT INTO group_members (id, group_id, user_id, status, created_at) VALUES (%s, %s, %s, 'pending', now())",
-                (member_id, group_id, payload.user_id),
+                (member_id, group_id, target_id),
             )
-            self._notify_raw(conn, payload.user_id, "debt_created", "Group invitation", f"You were invited to {group['name']}", None)
+            self._insert_group_event(conn, group_id, actor_id, "member_invited", metadata={"target_user_id": target_id})
+            self._notify_raw(conn, target_id, "group_invite", "Group invitation", f"You were invited to {group['name']}", None)
             conn.commit()
-            row = conn.execute("SELECT * FROM group_members WHERE id = %s", (member_id,)).fetchone()
-            return GroupMemberOut(
-                id=str(row["id"]),
-                group_id=str(row["group_id"]),
-                user_id=str(row["user_id"]),
-                status=row["status"],
-                created_at=row["created_at"],
-                accepted_at=row.get("accepted_at"),
-            )
+            row = conn.execute(self._MEMBER_SELECT + "WHERE gm.id = %s", (member_id,)).fetchone()
+            return self._member_from_row(row)
 
     def accept_group_invite(self, user_id: str, group_id: str) -> GroupMemberOut:
         with self._pool.connection() as conn:
@@ -1228,45 +1278,348 @@ class PostgresRepository(Repository):
             return [_debt_from_row(r) for r in rows]
 
     # ── Group lifecycle (008-groups-mvp-surface) ─────────────────────
-    # MVP note: full Postgres parity with InMemoryRepository is tracked under
-    # task T013. Until then these stubs raise so production deployments fail
-    # loud rather than silently diverge from the in-memory contract.
+
+    @staticmethod
+    def _member_from_row(row: dict) -> GroupMemberOut:
+        return GroupMemberOut(
+            id=str(row["id"]),
+            group_id=str(row["group_id"]),
+            user_id=str(row["user_id"]),
+            status=row["status"],
+            created_at=row["created_at"],
+            accepted_at=row.get("accepted_at"),
+            name=row.get("profile_name"),
+            commitment_score=row.get("profile_commitment_score"),
+        )
+
+    @staticmethod
+    def _group_from_row(row: dict, member_count: int) -> GroupOut:
+        return GroupOut(
+            id=str(row["id"]),
+            owner_id=str(row["owner_id"]),
+            name=row["name"],
+            description=row.get("description"),
+            member_count=member_count,
+            created_at=row["created_at"],
+            updated_at=row.get("updated_at"),
+        )
+
+    @staticmethod
+    def _accepted_member_count(conn, group_id: str) -> int:
+        row = conn.execute(
+            "SELECT count(*) AS c FROM group_members WHERE group_id = %s AND status = 'accepted'",
+            (group_id,),
+        ).fetchone()
+        return int(row["c"]) if row else 0
+
+    def _require_group_owner_pg(self, conn, owner_id: str, group_id: str) -> dict:
+        group = conn.execute("SELECT * FROM groups WHERE id = %s", (group_id,)).fetchone()
+        if not group:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+        if str(group["owner_id"]) != owner_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the group owner can perform this action")
+        return group
+
+    @staticmethod
+    def _insert_group_event(conn, group_id: str | None, actor_id: str | None, event_type: str, message: str | None = None, metadata: dict | None = None) -> None:
+        conn.execute(
+            "INSERT INTO group_events (id, group_id, actor_id, event_type, message, metadata, created_at) VALUES (%s, %s, %s, %s, %s, %s, now())",
+            (str(uuid4()), group_id, actor_id, event_type, message, json.dumps(metadata or {})),
+        )
+
+    _MEMBER_SELECT = (
+        "SELECT gm.*, p.name AS profile_name, p.commitment_score AS profile_commitment_score "
+        "FROM group_members gm LEFT JOIN profiles p ON p.id = gm.user_id "
+    )
 
     def decline_group_invite(self, user_id: str, group_id: str) -> GroupMemberOut:  # type: ignore[override]
-        raise NotImplementedError("decline_group_invite: Postgres parity pending (T013)")
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            updated = conn.execute(
+                "UPDATE group_members SET status = 'declined' WHERE group_id = %s AND user_id = %s AND status = 'pending' RETURNING id",
+                (group_id, user_id),
+            ).fetchone()
+            if not updated:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": "NoPendingInvite", "message": "No pending invite for this group."},
+                )
+            self._insert_group_event(conn, group_id, user_id, "member_declined")
+            conn.commit()
+            row = conn.execute(self._MEMBER_SELECT + "WHERE gm.id = %s", (updated["id"],)).fetchone()
+            return self._member_from_row(row)
 
     def leave_group(self, user_id: str, group_id: str) -> GroupMemberOut:  # type: ignore[override]
-        raise NotImplementedError("leave_group: Postgres parity pending (T013)")
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            group = conn.execute("SELECT * FROM groups WHERE id = %s", (group_id,)).fetchone()
+            if not group:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": "NotAGroupMember", "message": "Group not found."},
+                )
+            if str(group["owner_id"]) == user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"code": "OwnerCannotLeave", "message": "Owner must transfer ownership before leaving."},
+                )
+            blocked = conn.execute(
+                """
+                SELECT 1 FROM group_settlement_proposals p,
+                            jsonb_array_elements(p.transfers) AS t
+                WHERE p.group_id = %s
+                  AND p.status = 'open'
+                  AND (t->>'payer_id' = %s OR t->>'receiver_id' = %s)
+                LIMIT 1
+                """,
+                (group_id, user_id, user_id),
+            ).fetchone()
+            if blocked:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "LeaveBlockedByOpenProposal", "message": "You cannot leave while an open settlement proposal includes you."},
+                )
+            updated = conn.execute(
+                "UPDATE group_members SET status = 'left' WHERE group_id = %s AND user_id = %s AND status = 'accepted' RETURNING id",
+                (group_id, user_id),
+            ).fetchone()
+            if not updated:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": "NotAGroupMember", "message": "You are not an accepted member."},
+                )
+            self._insert_group_event(conn, group_id, user_id, "member_left")
+            conn.commit()
+            row = conn.execute(self._MEMBER_SELECT + "WHERE gm.id = %s", (updated["id"],)).fetchone()
+            return self._member_from_row(row)
 
-    def rename_group(self, owner_id, group_id, payload):  # type: ignore[override]
-        raise NotImplementedError("rename_group: Postgres parity pending (T013)")
+    def rename_group(self, owner_id: str, group_id: str, payload: GroupRenameIn) -> GroupOut:  # type: ignore[override]
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            self._require_group_owner_pg(conn, owner_id, group_id)
+            conn.execute("UPDATE groups SET name = %s WHERE id = %s", (payload.name, group_id))
+            self._insert_group_event(conn, group_id, owner_id, "renamed", metadata={"new_name": payload.name})
+            conn.commit()
+            row = conn.execute("SELECT * FROM groups WHERE id = %s", (group_id,)).fetchone()
+            return self._group_from_row(row, self._accepted_member_count(conn, group_id))
 
-    def transfer_group_ownership(self, owner_id, group_id, payload):  # type: ignore[override]
-        raise NotImplementedError("transfer_group_ownership: Postgres parity pending (T013)")
+    def transfer_group_ownership(self, owner_id: str, group_id: str, payload: GroupOwnershipTransferIn) -> GroupOut:  # type: ignore[override]
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            group = self._require_group_owner_pg(conn, owner_id, group_id)
+            target = payload.new_owner_user_id
+            if target == owner_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"code": "SameOwner", "message": "Target is already the owner."},
+                )
+            target_member = conn.execute(
+                "SELECT 1 FROM group_members WHERE group_id = %s AND user_id = %s AND status = 'accepted'",
+                (group_id, target),
+            ).fetchone()
+            if not target_member:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "NotAGroupMember", "message": "Target must be an accepted member."},
+                )
+            conn.execute("UPDATE groups SET owner_id = %s WHERE id = %s", (target, group_id))
+            self._insert_group_event(conn, group_id, owner_id, "ownership_transferred", metadata={"from": owner_id, "to": target})
+            self._notify_raw(conn, target, "group_ownership_transferred", "You're now the owner", f"You are now the owner of {group['name']}", None)
+            conn.commit()
+            row = conn.execute("SELECT * FROM groups WHERE id = %s", (group_id,)).fetchone()
+            return self._group_from_row(row, self._accepted_member_count(conn, group_id))
 
     def delete_group(self, owner_id: str, group_id: str) -> None:  # type: ignore[override]
-        raise NotImplementedError("delete_group: Postgres parity pending (T013)")
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            self._require_group_owner_pg(conn, owner_id, group_id)
+            attached_row = conn.execute("SELECT count(*) AS c FROM debts WHERE group_id = %s", (group_id,)).fetchone()
+            attached = int(attached_row["c"]) if attached_row else 0
+            if attached > 0:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "GroupHasDebts", "message": "Group has attached debts. Settle or detach them first.", "count": attached},
+                )
+            # Insert audit row before delete; FK is ON DELETE SET NULL so the
+            # row survives deletion of the parent group.
+            self._insert_group_event(conn, group_id, owner_id, "deleted")
+            conn.execute("DELETE FROM group_settlements WHERE group_id = %s", (group_id,))
+            conn.execute("DELETE FROM group_members WHERE group_id = %s", (group_id,))
+            # group_settlement_proposals has ON DELETE CASCADE, so the next
+            # statement also drops any (necessarily non-open here, since
+            # proposals require accepted members and we just deleted them
+            # — and tests do not delete groups with live proposals) rows.
+            conn.execute("DELETE FROM groups WHERE id = %s", (group_id,))
+            conn.commit()
 
     def revoke_group_invite(self, owner_id: str, group_id: str, target_user_id: str) -> None:  # type: ignore[override]
-        raise NotImplementedError("revoke_group_invite: Postgres parity pending (T013)")
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            self._require_group_owner_pg(conn, owner_id, group_id)
+            deleted = conn.execute(
+                "DELETE FROM group_members WHERE group_id = %s AND user_id = %s AND status = 'pending' RETURNING id",
+                (group_id, target_user_id),
+            ).fetchone()
+            if not deleted:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": "NoPendingInvite", "message": "No pending invite for this user."},
+                )
+            self._insert_group_event(conn, group_id, owner_id, "invite_revoked", metadata={"target_user_id": target_user_id})
+            conn.commit()
 
-    def list_pending_group_invites(self, owner_id: str, group_id: str) -> list:  # type: ignore[override]
-        raise NotImplementedError("list_pending_group_invites: Postgres parity pending (T013)")
+    def list_pending_group_invites(self, owner_id: str, group_id: str) -> list[GroupMemberOut]:  # type: ignore[override]
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            self._require_group_owner_pg(conn, owner_id, group_id)
+            rows = conn.execute(
+                self._MEMBER_SELECT + "WHERE gm.group_id = %s AND gm.status = 'pending' ORDER BY gm.created_at",
+                (group_id,),
+            ).fetchall()
+            return [self._member_from_row(r) for r in rows]
 
-    def list_group_members(self, viewer_id: str, group_id: str) -> list:  # type: ignore[override]
-        raise NotImplementedError("list_group_members: Postgres parity pending (T013)")
+    def list_group_members(self, viewer_id: str, group_id: str) -> list[GroupMemberOut]:  # type: ignore[override]
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            group = conn.execute("SELECT * FROM groups WHERE id = %s", (group_id,)).fetchone()
+            if not group:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": "NotAGroupMember", "message": "Group not found."},
+                )
+            is_member = conn.execute(
+                "SELECT 1 FROM group_members WHERE group_id = %s AND user_id = %s AND status = 'accepted'",
+                (group_id, viewer_id),
+            ).fetchone()
+            if not is_member:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"code": "NotAGroupMember", "message": "You are not an accepted member."},
+                )
+            statuses = ("accepted", "pending") if str(group["owner_id"]) == viewer_id else ("accepted",)
+            rows = conn.execute(
+                self._MEMBER_SELECT
+                + "WHERE gm.group_id = %s AND gm.status = ANY(%s) "
+                + "ORDER BY (gm.status = 'accepted') DESC, gm.created_at",
+                (group_id, list(statuses)),
+            ).fetchall()
+            return [self._member_from_row(r) for r in rows]
 
-    def get_group_detail(self, viewer_id: str, group_id: str):  # type: ignore[override]
-        raise NotImplementedError("get_group_detail: Postgres parity pending (T013)")
+    def get_group_detail(self, viewer_id: str, group_id: str) -> GroupDetailOut:  # type: ignore[override]
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            group = conn.execute("SELECT * FROM groups WHERE id = %s", (group_id,)).fetchone()
+            if not group:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": "NotAGroupMember", "message": "Group not found."},
+                )
+            is_member = conn.execute(
+                "SELECT 1 FROM group_members WHERE group_id = %s AND user_id = %s AND status = 'accepted'",
+                (group_id, viewer_id),
+            ).fetchone()
+            if not is_member:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"code": "NotAGroupMember", "message": "You are not an accepted member."},
+                )
+            accepted_rows = conn.execute(
+                self._MEMBER_SELECT + "WHERE gm.group_id = %s AND gm.status = 'accepted' ORDER BY gm.created_at",
+                (group_id,),
+            ).fetchall()
+            members = [self._member_from_row(r) for r in accepted_rows]
+            pending: list[GroupMemberOut] | None = None
+            if str(group["owner_id"]) == viewer_id:
+                pending_rows = conn.execute(
+                    self._MEMBER_SELECT + "WHERE gm.group_id = %s AND gm.status = 'pending' ORDER BY gm.created_at",
+                    (group_id,),
+                ).fetchall()
+                pending = [self._member_from_row(r) for r in pending_rows]
+            base = self._group_from_row(group, len(members))
+            return GroupDetailOut(**base.model_dump(), members=members, pending_invites=pending)
 
-    def shared_accepted_groups(self, user_a: str, user_b: str) -> list:  # type: ignore[override]
-        raise NotImplementedError("shared_accepted_groups: Postgres parity pending (T013)")
+    def shared_accepted_groups(self, user_a: str, user_b: str) -> list[GroupOut]:  # type: ignore[override]
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            rows = conn.execute(
+                """
+                SELECT g.*,
+                       (SELECT count(*) FROM group_members m
+                          WHERE m.group_id = g.id AND m.status = 'accepted') AS member_count
+                  FROM groups g
+                  JOIN group_members ga ON ga.group_id = g.id AND ga.user_id = %s AND ga.status = 'accepted'
+                  JOIN group_members gb ON gb.group_id = g.id AND gb.user_id = %s AND gb.status = 'accepted'
+                """,
+                (user_a, user_b),
+            ).fetchall()
+            return [self._group_from_row(r, int(r["member_count"])) for r in rows]
 
-    def update_debt_group_tag(self, creditor_id: str, debt_id: str, group_id: str | None):  # type: ignore[override]
-        raise NotImplementedError("update_debt_group_tag: Postgres parity pending (T013)")
+    def update_debt_group_tag(self, creditor_id: str, debt_id: str, group_id: str | None) -> DebtOut:  # type: ignore[override]
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            debt = conn.execute("SELECT * FROM debts WHERE id = %s", (debt_id,)).fetchone()
+            if not debt:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": "DebtNotFound", "message": "Debt not found."},
+                )
+            if str(debt["creditor_id"]) != creditor_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"code": "NotDebtCreditor", "message": "Only the creditor can change the group tag."},
+                )
+            if debt["status"] not in ("pending_confirmation", "edit_requested"):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "GroupTagLocked", "message": "Group tag is locked once the debt is binding."},
+                )
+            if group_id is not None:
+                if not debt.get("debtor_id"):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail={"code": "DebtorRequired", "message": "Group tag requires a registered debtor."},
+                    )
+                shared = conn.execute(
+                    """
+                    SELECT 1 FROM groups g
+                      JOIN group_members ga ON ga.group_id = g.id AND ga.user_id = %s AND ga.status = 'accepted'
+                      JOIN group_members gb ON gb.group_id = g.id AND gb.user_id = %s AND gb.status = 'accepted'
+                     WHERE g.id = %s
+                    """,
+                    (creditor_id, str(debt["debtor_id"]), group_id),
+                ).fetchone()
+                if not shared:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={"code": "NotInSharedGroup", "message": "Both parties must be accepted members of the group."},
+                    )
+            row = conn.execute(
+                "UPDATE debts SET group_id = %s, updated_at = now() WHERE id = %s RETURNING *",
+                (group_id, debt_id),
+            ).fetchone()
+            conn.commit()
+            return _debt_from_row(row)
 
-    def find_profile_by_email_or_phone(self, *, email: str | None = None, phone: str | None = None):  # type: ignore[override]
-        raise NotImplementedError("find_profile_by_email_or_phone: Postgres parity pending (T013)")
+    def find_profile_by_email_or_phone(self, *, email: str | None = None, phone: str | None = None) -> ProfileOut | None:  # type: ignore[override]
+        if not email and not phone:
+            return None
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            if email:
+                row = conn.execute(
+                    "SELECT * FROM profiles WHERE lower(email) = lower(%s) LIMIT 1",
+                    (email.strip(),),
+                ).fetchone()
+                if row:
+                    return _profile_from_row(row)
+            if phone:
+                row = conn.execute(
+                    "SELECT * FROM profiles WHERE phone = %s LIMIT 1",
+                    (phone.strip(),),
+                ).fetchone()
+                if row:
+                    return _profile_from_row(row)
+            return None
 
     def create_settlement(self, payer_id: str, group_id: str, payload: SettlementCreate) -> SettlementOut:
         with self._pool.connection() as conn:
@@ -1312,32 +1665,391 @@ class PostgresRepository(Repository):
             )
 
     # ── Group settlement proposals (UC9 part 2) ──────────────────────
-    # In-memory parity is the CI path; full Postgres parity for the
-    # group surface remains pending (Phase 8 also stubbed `leave_group`,
-    # `rename_group`, `transfer_group_ownership`, etc. on this path).
-    # The schema (migration 012) is fully applied so a follow-up that
-    # implements these methods does not need to touch SQL.
 
-    def create_settlement_proposal(self, user_id: str, group_id: str):  # type: ignore[override]
-        # T036: when implementing, check len({d.currency for d in snapshot}) > 1 BEFORE any INSERT
-        # and raise the same 409 MixedCurrency HTTPException used in memory.py — the guard must
-        # front-run compute_transfers so no group_settlement_proposals row is ever created on this path.
-        raise NotImplementedError("create_settlement_proposal: Postgres parity pending (T015)")
+    def _require_accepted_member_pg(self, conn, user_id: str, group_id: str) -> None:
+        group = conn.execute("SELECT 1 FROM groups WHERE id = %s", (group_id,)).fetchone()
+        if not group:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "NotAGroupMember", "message": "Group not found."},
+            )
+        is_member = conn.execute(
+            "SELECT 1 FROM group_members WHERE group_id = %s AND user_id = %s AND status = 'accepted'",
+            (group_id, user_id),
+        ).fetchone()
+        if not is_member:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "NotAGroupMember", "message": "You are not an accepted member."},
+            )
 
-    def get_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str):  # type: ignore[override]
-        raise NotImplementedError("get_settlement_proposal: Postgres parity pending (T015)")
+    def _serialise_proposal_pg(self, conn, proposal_id: str, viewer_id: str) -> SettlementProposalOut:
+        row = conn.execute("SELECT * FROM group_settlement_proposals WHERE id = %s", (proposal_id,)).fetchone()
+        confirmations_rows = conn.execute(
+            "SELECT user_id, status, responded_at FROM group_settlement_confirmations WHERE proposal_id = %s ORDER BY user_id",
+            (proposal_id,),
+        ).fetchall()
+        is_required = any(str(c["user_id"]) == viewer_id for c in confirmations_rows)
+        snapshot_rows = row["snapshot"] or []
+        transfers_rows = row["transfers"] or []
+        snapshot: list[SnapshotDebtOut] | None = None
+        if is_required:
+            snapshot = [
+                SnapshotDebtOut(
+                    debt_id=s["debt_id"],
+                    debtor_id=s["debtor_id"],
+                    creditor_id=s["creditor_id"],
+                    amount=Decimal(str(s["amount"])),
+                )
+                for s in snapshot_rows
+            ]
+        transfers = [
+            ProposedTransferOut(
+                payer_id=t["payer_id"],
+                receiver_id=t["receiver_id"],
+                amount=Decimal(str(t["amount"])),
+            )
+            for t in transfers_rows
+        ]
+        confirmations = [
+            SettlementConfirmationOut(
+                user_id=str(c["user_id"]),
+                status=c["status"],
+                responded_at=c["responded_at"],
+            )
+            for c in confirmations_rows
+        ]
+        return SettlementProposalOut(
+            id=str(row["id"]),
+            group_id=str(row["group_id"]),
+            proposed_by=str(row["proposed_by"]),
+            currency=row["currency"],
+            transfers=transfers,
+            snapshot=snapshot,
+            confirmations=confirmations,
+            status=row["status"],
+            failure_reason=row.get("failure_reason"),
+            created_at=row["created_at"],
+            expires_at=row["expires_at"],
+            resolved_at=row.get("resolved_at"),
+        )
 
-    def list_settlement_proposals(self, user_id: str, group_id: str, status_filter: str | None = None):  # type: ignore[override]
-        raise NotImplementedError("list_settlement_proposals: Postgres parity pending (T015)")
+    def _sweep_proposals_pg(self, conn, group_id: str) -> None:
+        now_row = conn.execute("SELECT now() AS n").fetchone()
+        now = now_row["n"]
+        open_rows = conn.execute(
+            "SELECT id, proposed_by, expires_at, reminder_sent_at FROM group_settlement_proposals WHERE group_id = %s AND status = 'open'",
+            (group_id,),
+        ).fetchall()
+        for p in open_rows:
+            pid = str(p["id"])
+            if p["expires_at"] <= now:
+                conn.execute(
+                    "UPDATE group_settlement_proposals SET status = 'expired', resolved_at = now() WHERE id = %s",
+                    (pid,),
+                )
+                self._insert_group_event(conn, group_id, str(p["proposed_by"]), "settlement_expired", metadata={"proposal_id": pid})
+                confs = conn.execute(
+                    "SELECT user_id FROM group_settlement_confirmations WHERE proposal_id = %s",
+                    (pid,),
+                ).fetchall()
+                for c in confs:
+                    self._notify_raw(conn, str(c["user_id"]), "settlement_expired", "Settlement expired", "A settlement proposal has expired.", None)
+                continue
+            if p["reminder_sent_at"] is None and p["expires_at"] - now <= timedelta(hours=24):
+                conn.execute(
+                    "UPDATE group_settlement_proposals SET reminder_sent_at = now() WHERE id = %s",
+                    (pid,),
+                )
+                pending = conn.execute(
+                    "SELECT user_id FROM group_settlement_confirmations WHERE proposal_id = %s AND status = 'pending'",
+                    (pid,),
+                ).fetchall()
+                for c in pending:
+                    self._notify_raw(conn, str(c["user_id"]), "settlement_reminder", "Settlement expiring soon", "A settlement proposal is awaiting your response.", None)
 
-    def confirm_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str):  # type: ignore[override]
-        raise NotImplementedError("confirm_settlement_proposal: Postgres parity pending (T015)")
+    def _apply_settlement_pg(self, conn, proposal_id: str) -> None:
+        proposal = conn.execute("SELECT * FROM group_settlement_proposals WHERE id = %s", (proposal_id,)).fetchone()
+        snapshot_refs = proposal["snapshot"] or []
+        try:
+            for ref in snapshot_refs:
+                debt_id = ref["debt_id"]
+                debt = conn.execute("SELECT * FROM debts WHERE id = %s FOR UPDATE", (debt_id,)).fetchone()
+                if not debt or debt["status"] not in ("active", "overdue"):
+                    raise RuntimeError("StaleSnapshot")
+                actor = str(debt["debtor_id"]) if debt.get("debtor_id") else str(proposal["proposed_by"])
+                conn.execute(
+                    "UPDATE debts SET status = 'payment_pending_confirmation', updated_at = now() WHERE id = %s",
+                    (debt_id,),
+                )
+                self._add_event_raw(conn, debt_id, actor, "marked_paid", "Group settlement", {"source": "group_settlement", "proposal_id": proposal_id})
+                conn.execute(
+                    "UPDATE debts SET status = 'paid', paid_at = now(), updated_at = now() WHERE id = %s",
+                    (debt_id,),
+                )
+                self._add_event_raw(conn, debt_id, str(debt["creditor_id"]), "payment_confirmed", "Group settlement", {"source": "group_settlement", "proposal_id": proposal_id})
+                if debt.get("debtor_id"):
+                    score_row = conn.execute("SELECT commitment_score FROM profiles WHERE id = %s", (debt["debtor_id"],)).fetchone()
+                    score_after = int(score_row["commitment_score"]) if score_row else 50
+                    conn.execute(
+                        """
+                        INSERT INTO commitment_score_events (id, user_id, delta, score_after, reason, debt_id, proposal_id, created_at)
+                        VALUES (%s, %s, 0, %s, 'settlement_neutral', %s, %s, now())
+                        ON CONFLICT DO NOTHING
+                        """,
+                        (str(uuid4()), str(debt["debtor_id"]), score_after, debt_id, proposal_id),
+                    )
+            conn.execute(
+                "UPDATE group_settlement_proposals SET status = 'settled', resolved_at = now() WHERE id = %s",
+                (proposal_id,),
+            )
+            self._insert_group_event(conn, str(proposal["group_id"]), str(proposal["proposed_by"]), "settlement_settled", metadata={"proposal_id": proposal_id})
+            confs = conn.execute("SELECT user_id FROM group_settlement_confirmations WHERE proposal_id = %s", (proposal_id,)).fetchall()
+            for c in confs:
+                self._notify_raw(conn, str(c["user_id"]), "settlement_settled", "Settlement complete", "All debts in the proposal are now paid.", None)
+        except Exception as exc:  # noqa: BLE001 — defensive rollback
+            # Roll back current transaction state and start a fresh one to record the failure.
+            conn.rollback()
+            conn.execute(
+                "UPDATE group_settlement_proposals SET status = 'settlement_failed', failure_reason = %s, resolved_at = now() WHERE id = %s",
+                (type(exc).__name__, proposal_id),
+            )
+            self._insert_group_event(conn, str(proposal["group_id"]), str(proposal["proposed_by"]), "settlement_failed", metadata={"proposal_id": proposal_id, "reason": type(exc).__name__})
+            confs = conn.execute("SELECT user_id FROM group_settlement_confirmations WHERE proposal_id = %s", (proposal_id,)).fetchall()
+            for c in confs:
+                self._notify_raw(conn, str(c["user_id"]), "settlement_failed", "Settlement failed", "The settlement could not be applied. All debts are unchanged.", None)
 
-    def reject_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str):  # type: ignore[override]
-        raise NotImplementedError("reject_settlement_proposal: Postgres parity pending (T015)")
+    def create_settlement_proposal(self, user_id: str, group_id: str) -> SettlementProposalOut:  # type: ignore[override]
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            self._require_accepted_member_pg(conn, user_id, group_id)
+            self._sweep_proposals_pg(conn, group_id)
+            existing = conn.execute(
+                "SELECT id FROM group_settlement_proposals WHERE group_id = %s AND status = 'open' LIMIT 1",
+                (group_id,),
+            ).fetchone()
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "OpenProposalExists", "message": "An open proposal already exists for this group.", "existing_proposal_id": str(existing["id"])},
+                )
+            snapshot_rows = conn.execute(
+                """
+                SELECT id, debtor_id, creditor_id, amount, currency
+                  FROM debts
+                 WHERE group_id = %s
+                   AND status IN ('active', 'overdue')
+                   AND debtor_id IS NOT NULL
+                 ORDER BY id
+                """,
+                (group_id,),
+            ).fetchall()
+            if not snapshot_rows:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "NothingToSettle", "message": "Nothing to settle in this group."},
+                )
+            currencies = {r["currency"].strip() for r in snapshot_rows}
+            if len(currencies) > 1:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "MixedCurrency", "message": "Cannot auto-net mixed currencies."},
+                )
+            currency = next(iter(currencies))
+            net_inputs = [
+                _NetSnapshotDebt(
+                    debt_id=str(r["id"]),
+                    debtor_id=str(r["debtor_id"]),
+                    creditor_id=str(r["creditor_id"]),
+                    amount=Decimal(str(r["amount"])),
+                    currency=r["currency"].strip(),
+                )
+                for r in snapshot_rows
+            ]
+            transfers = _compute_transfers(net_inputs)
+            transfers_list = [
+                {"payer_id": t.payer_id, "receiver_id": t.receiver_id, "amount": str(t.amount)}
+                for t in transfers
+            ]
+            snapshot_list = [
+                {"debt_id": str(r["id"]), "debtor_id": str(r["debtor_id"]), "creditor_id": str(r["creditor_id"]), "amount": str(r["amount"])}
+                for r in snapshot_rows
+            ]
+            required_users: set[str] = set()
+            for t in transfers_list:
+                required_users.add(t["payer_id"])
+                required_users.add(t["receiver_id"])
+            pid = str(uuid4())
+            conn.execute(
+                """
+                INSERT INTO group_settlement_proposals
+                       (id, group_id, proposed_by, currency, snapshot, transfers, status, created_at, expires_at)
+                VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb, 'open', now(), now() + interval '7 days')
+                """,
+                (pid, group_id, user_id, currency, json.dumps(snapshot_list), json.dumps(transfers_list)),
+            )
+            for uid in sorted(required_users):
+                conn.execute(
+                    "INSERT INTO group_settlement_confirmations (proposal_id, user_id, status) VALUES (%s, %s, 'pending')",
+                    (pid, uid),
+                )
+            self._insert_group_event(conn, group_id, user_id, "settlement_proposed", metadata={"proposal_id": pid, "transfer_count": len(transfers_list)})
+            for uid in required_users:
+                their_amount = sum(
+                    (Decimal(t["amount"]) for t in transfers_list if t["payer_id"] == uid),
+                    Decimal("0"),
+                ) or sum(
+                    (Decimal(t["amount"]) for t in transfers_list if t["receiver_id"] == uid),
+                    Decimal("0"),
+                )
+                self._notify_raw(conn, uid, "settlement_proposed", "Settlement proposal", f"{their_amount} {currency} settlement proposed in your group", None)
+            if not required_users:
+                # Net-zero cycle — settle immediately.
+                self._apply_settlement_pg(conn, pid)
+            conn.commit()
+            return self._serialise_proposal_pg(conn, pid, viewer_id=user_id)
+
+    def get_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str) -> SettlementProposalOut:  # type: ignore[override]
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            self._require_accepted_member_pg(conn, user_id, group_id)
+            self._sweep_proposals_pg(conn, group_id)
+            row = conn.execute(
+                "SELECT 1 FROM group_settlement_proposals WHERE id = %s AND group_id = %s",
+                (proposal_id, group_id),
+            ).fetchone()
+            if not row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": "ProposalNotFound", "message": "Proposal not found."},
+                )
+            conn.commit()
+            return self._serialise_proposal_pg(conn, proposal_id, viewer_id=user_id)
+
+    def list_settlement_proposals(self, user_id: str, group_id: str, status_filter: str | None = None) -> list[SettlementProposalOut]:  # type: ignore[override]
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            self._require_accepted_member_pg(conn, user_id, group_id)
+            self._sweep_proposals_pg(conn, group_id)
+            if status_filter and status_filter != "all":
+                rows = conn.execute(
+                    "SELECT id FROM group_settlement_proposals WHERE group_id = %s AND status = %s ORDER BY created_at DESC",
+                    (group_id, status_filter),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id FROM group_settlement_proposals WHERE group_id = %s ORDER BY created_at DESC",
+                    (group_id,),
+                ).fetchall()
+            conn.commit()
+            return [self._serialise_proposal_pg(conn, str(r["id"]), viewer_id=user_id) for r in rows]
+
+    def confirm_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str) -> SettlementProposalOut:  # type: ignore[override]
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            self._require_accepted_member_pg(conn, user_id, group_id)
+            self._sweep_proposals_pg(conn, group_id)
+            proposal = conn.execute(
+                "SELECT * FROM group_settlement_proposals WHERE id = %s AND group_id = %s",
+                (proposal_id, group_id),
+            ).fetchone()
+            if not proposal:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": "ProposalNotFound", "message": "Proposal not found."},
+                )
+            if proposal["status"] != "open":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "ProposalNotOpen", "message": "Proposal is not open."},
+                )
+            confirmation = conn.execute(
+                "SELECT status FROM group_settlement_confirmations WHERE proposal_id = %s AND user_id = %s",
+                (proposal_id, user_id),
+            ).fetchone()
+            if not confirmation:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"code": "NotARequiredParty", "message": "You are not a required party for this proposal."},
+                )
+            if confirmation["status"] == "confirmed":
+                conn.commit()
+                return self._serialise_proposal_pg(conn, proposal_id, viewer_id=user_id)
+            if confirmation["status"] == "rejected":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "AlreadyResponded", "message": "You have already rejected this proposal."},
+                )
+            conn.execute(
+                "UPDATE group_settlement_confirmations SET status = 'confirmed', responded_at = now() WHERE proposal_id = %s AND user_id = %s",
+                (proposal_id, user_id),
+            )
+            self._insert_group_event(conn, group_id, user_id, "settlement_confirmed", metadata={"proposal_id": proposal_id})
+            roster = conn.execute(
+                "SELECT status FROM group_settlement_confirmations WHERE proposal_id = %s",
+                (proposal_id,),
+            ).fetchall()
+            if all(c["status"] == "confirmed" for c in roster):
+                self._apply_settlement_pg(conn, proposal_id)
+            conn.commit()
+            return self._serialise_proposal_pg(conn, proposal_id, viewer_id=user_id)
+
+    def reject_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str) -> SettlementProposalOut:  # type: ignore[override]
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            self._require_accepted_member_pg(conn, user_id, group_id)
+            self._sweep_proposals_pg(conn, group_id)
+            proposal = conn.execute(
+                "SELECT status FROM group_settlement_proposals WHERE id = %s AND group_id = %s",
+                (proposal_id, group_id),
+            ).fetchone()
+            if not proposal:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": "ProposalNotFound", "message": "Proposal not found."},
+                )
+            if proposal["status"] != "open":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "ProposalNotOpen", "message": "Proposal is not open."},
+                )
+            confirmation = conn.execute(
+                "SELECT status FROM group_settlement_confirmations WHERE proposal_id = %s AND user_id = %s",
+                (proposal_id, user_id),
+            ).fetchone()
+            if not confirmation:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"code": "NotARequiredParty", "message": "You are not a required party for this proposal."},
+                )
+            if confirmation["status"] != "pending":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "AlreadyResponded", "message": "You have already responded."},
+                )
+            conn.execute(
+                "UPDATE group_settlement_confirmations SET status = 'rejected', responded_at = now() WHERE proposal_id = %s AND user_id = %s",
+                (proposal_id, user_id),
+            )
+            conn.execute(
+                "UPDATE group_settlement_proposals SET status = 'rejected', resolved_at = now() WHERE id = %s",
+                (proposal_id,),
+            )
+            self._insert_group_event(conn, group_id, user_id, "settlement_rejected", metadata={"proposal_id": proposal_id})
+            confs = conn.execute(
+                "SELECT user_id FROM group_settlement_confirmations WHERE proposal_id = %s",
+                (proposal_id,),
+            ).fetchall()
+            for c in confs:
+                self._notify_raw(conn, str(c["user_id"]), "settlement_rejected", "Settlement rejected", "A required party rejected the settlement.", None)
+            conn.commit()
+            return self._serialise_proposal_pg(conn, proposal_id, viewer_id=user_id)
 
     def sweep_settlement_proposals(self, group_id: str) -> None:  # type: ignore[override]
-        raise NotImplementedError("sweep_settlement_proposals: Postgres parity pending (T015)")
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            self._sweep_proposals_pg(conn, group_id)
+            conn.commit()
 
     # ── AI / analytics ────────────────────────────────────────────────
 
