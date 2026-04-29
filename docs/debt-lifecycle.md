@@ -65,6 +65,23 @@ Any other transition must raise `409 Conflict`.
 - `cancelled` is reachable only from non-binding states (`pending_confirmation`, `edit_requested`). An `active`/`overdue`/`payment_pending_confirmation`/`paid` debt cannot be cancelled — the creditor must instead settle or write off through accounting.
 - All transitions append a row to `debt_events` for the audit trail.
 
+## Group auto-netting transition path (UC9)
+
+When a group settlement proposal is accepted by all required parties, the following happens **atomically** for every debt captured in the proposal snapshot:
+
+| Step | Transition | Triggered by |
+|---|---|---|
+| 1 | `active` or `overdue` → `payment_pending_confirmation` | group settlement (system) |
+| 2 | `payment_pending_confirmation` → `paid` | group settlement (system) |
+
+Both transitions are recorded in `debt_events` carrying `metadata.source='group_settlement'` to distinguish them from individual mark-paid / confirm-payment flows.
+
+**Commitment-indicator impact**: Each settled debt receives a `commitment_score_events` row with `event_type='settlement_neutral'` and `delta=0`. This records that the debt was cleared through group netting without penalising or rewarding any party. Idempotency is enforced by a partial-unique index on `(debt_id, proposal_id) WHERE reason='settlement_neutral'`.
+
+**Mixed-currency guard**: A proposal is rejected with `409 MixedCurrency` if the snapshot contains debts in more than one currency. No proposal row is inserted in this case. This is enforced before calling `compute_transfers` in `services/netting.py`.
+
+Reference: `specs/009-groups-auto-netting/` and `supabase/migrations/012_group_settlement_proposals.sql`.
+
 ## Commitment-indicator impact
 
 The creditor configures `debts.reminder_dates` (a list of `date`s) at creation. As each reminder passes unpaid, a one-time penalty fires for that `(debt_id, reminder_date)`.

@@ -538,3 +538,169 @@ class TestExpirySweep:
         for uid in (payer_id, receiver_id):
             notifs = [n for n in client.get("/api/v1/notifications", headers=auth_headers(uid)).json() if n["notification_type"] == "settlement_reminder"]
             assert len(notifs) == 1, f"{uid} should still have only one settlement_reminder"
+
+
+# ── T035: TestMixedCurrencyRejection ─────────────────────────────────────────
+
+
+class TestMixedCurrencyRejection:
+    """US3 — Mixed-currency guard (Phase 5).
+
+    Covers SC-004 and FR-004.
+    """
+
+    def test_mixed_currency_returns_409_and_no_proposal_row(self, client: TestClient, reset_repository) -> None:
+        """SAR + USD debts in one group → 409 MixedCurrency, no proposal inserted."""
+        gid = _setup_3_member_group(client, "mx1a", "mx1b", "mx1c")
+        _create_active_debt(client, "mx1a", "mx1b", "100.00", gid, currency="SAR")
+        _create_active_debt(client, "mx1b", "mx1c", "50.00", gid, currency="SAR")
+        _create_active_debt(client, "mx1c", "mx1a", "80.00", gid, currency="SAR")
+        _create_active_debt(client, "mx1a", "mx1c", "10.00", gid, currency="USD")
+
+        r = client.post(f"/api/v1/groups/{gid}/settlement-proposals", headers=auth_headers("mx1a"))
+        assert r.status_code == 409, r.text
+        assert r.json()["detail"]["code"] == "MixedCurrency"
+
+        # No proposal row created.
+        listed = client.get(f"/api/v1/groups/{gid}/settlement-proposals", headers=auth_headers("mx1a"))
+        assert listed.status_code == 200
+        assert listed.json() == []
+
+    def test_mixed_currency_no_notification_dispatched(self, client: TestClient, reset_repository) -> None:
+        """MixedCurrency 409 must not dispatch any settlement notification to any member."""
+        gid = _setup_3_member_group(client, "mx2a", "mx2b", "mx2c")
+        _create_active_debt(client, "mx2a", "mx2b", "70.00", gid, currency="SAR")
+        _create_active_debt(client, "mx2a", "mx2c", "20.00", gid, currency="USD")
+
+        client.post(f"/api/v1/groups/{gid}/settlement-proposals", headers=auth_headers("mx2a"))
+
+        settlement_notification_types = {
+            "settlement_proposed",
+            "settlement_confirmed",
+            "settlement_rejected",
+            "settlement_expired",
+            "settlement_reminder",
+            "settlement_settled",
+            "settlement_failed",
+        }
+        for uid in ("mx2a", "mx2b", "mx2c"):
+            notifs = client.get("/api/v1/notifications", headers=auth_headers(uid)).json()
+            types = {n["notification_type"] for n in notifs}
+            settlement_notifs = types & settlement_notification_types
+            assert not settlement_notifs, f"{uid} should have no settlement notifications, got {settlement_notifs}"
+
+    def test_same_currency_group_creates_proposal(self, client: TestClient, reset_repository) -> None:
+        """Regression: same-currency group still produces 201 after mixed-currency guard is in place."""
+        gid = _setup_3_member_group(client, "mx3a", "mx3b", "mx3c")
+        _create_active_debt(client, "mx3a", "mx3b", "60.00", gid, currency="SAR")
+        _create_active_debt(client, "mx3b", "mx3c", "40.00", gid, currency="SAR")
+
+        r = client.post(f"/api/v1/groups/{gid}/settlement-proposals", headers=auth_headers("mx3a"))
+        assert r.status_code == 201, r.text
+        assert r.json()["status"] in {"open", "settled"}
+
+
+# ── T041: E2E Regression — quickstart §3–§5 ──────────────────────────────────
+
+
+class TestE2EQuickstartAsymmetric:
+    """E2E regression walking quickstart.md §3–§5 (asymmetric A→B 150 SAR variant).
+
+    Three users in a group. A is creditor of 150 SAR to B (tagged to group).
+    Net: A = +150, B = −150, C = 0.
+    Algorithm should produce exactly one transfer: B pays A 150 SAR.
+    All three debts in the snapshot (only one here) are confirmed paid after both parties confirm.
+    """
+
+    def test_e2e_asymmetric_a_to_b_50_sar(self, client: TestClient, reset_repository) -> None:  # noqa: PLR0915
+        """Full quickstart §3–§5: propose → confirm (payer) → confirm (receiver) → settled."""
+        from app.repositories import get_repository
+        from app.repositories.memory import InMemoryRepository
+
+        a, b, c = "e2e_a", "e2e_b", "e2e_c"
+        _ensure_profiles(client, a, b, c)
+        gid = _create_group(client, a, name="E2E Squad")
+        _invite_and_accept(client, gid, a, b)
+        _invite_and_accept(client, gid, a, c)
+
+        # §3: Create one debt — A creditor, B debtor, 150 SAR.
+        debt_id = _create_active_debt(client, a, b, "150.00", gid, currency="SAR")
+
+        # Verify pre-proposal debt status.
+        d = client.get(f"/api/v1/debts/{debt_id}", headers=auth_headers(a)).json()
+        assert d["status"] == "active"
+
+        # §3: A proposes settlement.
+        r = client.post(f"/api/v1/groups/{gid}/settlement-proposals", headers=auth_headers(a))
+        assert r.status_code == 201, r.text
+        proposal = r.json()
+        pid = proposal["id"]
+        assert proposal["status"] == "open"
+        # SC-001: exactly 1 transfer (N−1 = 1 for 2 required parties).
+        assert len(proposal["transfers"]) == 1
+        transfer = proposal["transfers"][0]
+        payer_id = transfer["payer_id"]
+        receiver_id = transfer["receiver_id"]
+        assert {payer_id, receiver_id} == {a, b}
+
+        # Confirmation roster: exactly payer + receiver.
+        assert len(proposal["confirmations"]) == 2
+        roster_ids = {conf["user_id"] for conf in proposal["confirmations"]}
+        assert roster_ids == {payer_id, receiver_id}
+
+        # C is observer → snapshot null.
+        c_view = client.get(f"/api/v1/groups/{gid}/settlement-proposals/{pid}", headers=auth_headers(c)).json()
+        assert c_view["snapshot"] is None
+
+        # §4: Payer confirms.
+        r_payer = client.post(
+            f"/api/v1/groups/{gid}/settlement-proposals/{pid}/confirm",
+            headers=auth_headers(payer_id),
+        )
+        assert r_payer.status_code == 200, r_payer.text
+        assert r_payer.json()["status"] == "open"  # Still open — receiver hasn't confirmed yet.
+
+        # §4: Receiver confirms — triggers atomic settlement.
+        r_recv = client.post(
+            f"/api/v1/groups/{gid}/settlement-proposals/{pid}/confirm",
+            headers=auth_headers(receiver_id),
+        )
+        assert r_recv.status_code == 200, r_recv.text
+        settled = r_recv.json()
+        # SC-002: proposal flips to settled.
+        assert settled["status"] == "settled"
+
+        # §5: Cross-checks.
+        # All debts in snapshot are now paid.
+        for snap_debt in settled.get("snapshot") or []:
+            d_check = client.get(f"/api/v1/debts/{snap_debt['debt_id']}", headers=auth_headers(a)).json()
+            assert d_check["status"] == "paid", f"Debt {snap_debt['debt_id']} should be paid"
+
+        # Verify via repo internals: paired debt_events + settlement_neutral commitment events.
+        repo = get_repository()
+        assert isinstance(repo, InMemoryRepository)
+
+        debt_events_for_debt = [e for e in repo.debt_events if e.debt_id == debt_id]
+        event_types = [e.event_type for e in debt_events_for_debt]
+        assert "marked_paid" in event_types, "debt_events must contain marked_paid"
+        assert "payment_confirmed" in event_types, "debt_events must contain payment_confirmed"
+        for ev in debt_events_for_debt:
+            if ev.event_type in ("marked_paid", "payment_confirmed"):
+                meta = ev.metadata or {}
+                assert meta.get("source") == "group_settlement", (
+                    f"Event {ev.event_type} must carry metadata.source='group_settlement'"
+                )
+
+        # settlement_neutral commitment events: one per settled debt.
+        cse = [e for e in repo.commitment_score_events if e.reason == "settlement_neutral"]
+        assert len(cse) >= 1, "Expected at least one settlement_neutral commitment_score_event"
+        for ev in cse:
+            assert ev.delta == 0, "settlement_neutral delta must be 0"
+
+        # Commitment scores unchanged (neutral delta = no net change).
+        pre_scores = {uid: 50 for uid in (a, b, c)}  # default score
+        for uid, expected in pre_scores.items():
+            profile = client.get("/api/v1/profiles/me", headers=auth_headers(uid)).json()
+            assert profile["commitment_score"] == expected, (
+                f"{uid} score should be unchanged at {expected}, got {profile['commitment_score']}"
+            )

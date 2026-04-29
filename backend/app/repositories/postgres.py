@@ -1319,6 +1319,9 @@ class PostgresRepository(Repository):
     # implements these methods does not need to touch SQL.
 
     def create_settlement_proposal(self, user_id: str, group_id: str):  # type: ignore[override]
+        # T036: when implementing, check len({d.currency for d in snapshot}) > 1 BEFORE any INSERT
+        # and raise the same 409 MixedCurrency HTTPException used in memory.py — the guard must
+        # front-run compute_transfers so no group_settlement_proposals row is ever created on this path.
         raise NotImplementedError("create_settlement_proposal: Postgres parity pending (T015)")
 
     def get_settlement_proposal(self, user_id: str, group_id: str, proposal_id: str):  # type: ignore[override]
