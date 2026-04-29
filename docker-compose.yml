@@ -10,7 +10,11 @@
 
 services:
   web:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-http://127.0.0.1:55321}
+        VITE_SUPABASE_PUBLISHABLE: ${VITE_SUPABASE_ANON_KEY:-}
     ports:
       - "8000:8000"
     environment:

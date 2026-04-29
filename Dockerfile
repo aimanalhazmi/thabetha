@@ -2,10 +2,12 @@
 
 FROM node:22-alpine AS frontend
 WORKDIR /frontend
+ARG VITE_SUPABASE_URL=http://127.0.0.1:55321
+ARG VITE_SUPABASE_PUBLISHABLE=
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
-RUN npm run build
+RUN VITE_SUPABASE_URL="${VITE_SUPABASE_URL}" VITE_SUPABASE_ANON_KEY="${VITE_SUPABASE_PUBLISHABLE}" npm run build
 
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS runtime
 ENV UV_COMPILE_BYTECODE=1 \
@@ -21,4 +23,3 @@ COPY supabase/migrations /supabase/migrations
 COPY --from=frontend /frontend/dist ./static
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-

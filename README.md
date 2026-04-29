@@ -44,6 +44,20 @@ cd backend && uv run pytest          # in-memory repo, no DB needed
 cd frontend && npm run typecheck && npm run build
 ```
 
+## Production-style Docker smoke
+
+The root `Dockerfile` builds the React/Vite website and copies `frontend/dist`
+into the FastAPI image, so one container serves both `/api/v1/*` and the SPA
+fallback on `:8000`.
+
+```bash
+supabase start
+cp .env.example .env                 # set VITE_SUPABASE_ANON_KEY from supabase status -o env
+docker compose up --build web
+```
+
+Open http://127.0.0.1:8000.
+
 ## Repository layout
 
 - `backend/app/` — FastAPI app, repositories (memory + postgres), schemas, security.
