@@ -6,6 +6,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DebtsPage } from "./pages/DebtsPage";
+import { UserDebtsPage } from "./pages/UserDebtsPage";
 import { CreateDebtPage } from "./pages/CreateDebtPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { QRPage } from "./pages/QRPage";
@@ -52,6 +53,7 @@ function AppShell({ language, onToggleLanguage }: ShellProps) {
         <Routes>
           <Route path="/dashboard" element={<DashboardPage language={language} message="" key={refreshKey} />} />
           <Route path="/debts" element={<DebtsPage language={language} key={refreshKey} />} />
+          <Route path="/debts/user/:userId" element={<UserDebtsPage language={language} key={refreshKey} />} />
           <Route path="/debts/new" element={<CreateDebtPage language={language} key={refreshKey} />} />
           <Route path="/qr/scan" element={<Navigate to="/debts/new" replace />} />
           <Route path="/profile" element={<ProfilePage language={language} key={refreshKey} />} />

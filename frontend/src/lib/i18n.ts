@@ -329,7 +329,31 @@ export type TranslationKey =
   | 'debtor_confirm_score_label'
   | 'debtor_confirm_proceed'
   | 'create_debt_locked_field_hint'
-  | 'create_debt_ai_confidence_low_warning';
+  | 'create_debt_ai_confidence_low_warning'
+  | 'commitment_label_excellent'
+  | 'commitment_label_good'
+  | 'commitment_label_fair'
+  | 'commitment_label_poor'
+  | 'debts_group_total_debts'
+  | 'debts_group_total_amount'
+  | 'debts_filter_all'
+  | 'debts_filter_pending'
+  | 'debts_filter_active'
+  | 'debts_filter_overdue'
+  | 'debts_filter_paid'
+  | 'debts_filter_cancelled'
+  | 'debt_due_date_label'
+  | 'debt_due_overdue_warning'
+  | 'debt_due_soon_warning'
+  | 'stats_tab_label'
+  | 'stats_total_receivable'
+  | 'stats_total_debtors'
+  | 'stats_total_debts'
+  | 'stats_status_breakdown_title'
+  | 'stats_top_debtors_title'
+  | 'sort_by_due_date'
+  | 'sort_by_amount'
+  | 'sort_by_status';
 
 type Translations = Record<TranslationKey, string>;
 
@@ -662,6 +686,30 @@ const ar: Translations = {
   debtor_confirm_proceed: 'تأكيد ومتابعة',
   create_debt_locked_field_hint: 'حقل مقفل — تم التحقق عبر QR',
   create_debt_ai_confidence_low_warning: 'الذكاء الاصطناعي غير متأكد من هذا الحقل — يرجى المراجعة',
+  commitment_label_excellent: 'ممتاز',
+  commitment_label_good: 'جيد',
+  commitment_label_fair: 'مقبول',
+  commitment_label_poor: 'ضعيف',
+  debts_group_total_debts: 'ديون',
+  debts_group_total_amount: 'الإجمالي',
+  debts_filter_all: 'الكل',
+  debts_filter_pending: 'معلق',
+  debts_filter_active: 'نشط',
+  debts_filter_overdue: 'متأخر',
+  debts_filter_paid: 'مدفوع',
+  debts_filter_cancelled: 'ملغي',
+  debt_due_date_label: 'تاريخ الاستحقاق',
+  debt_due_overdue_warning: 'متأخر',
+  debt_due_soon_warning: 'قريباً',
+  stats_tab_label: 'إحصائيات',
+  stats_total_receivable: 'إجمالي المستحقات',
+  stats_total_debtors: 'إجمالي المدينين',
+  stats_total_debts: 'إجمالي الديون',
+  stats_status_breakdown_title: 'حسب الحالة',
+  stats_top_debtors_title: 'أعلى المدينين',
+  sort_by_due_date: 'تاريخ الاستحقاق',
+  sort_by_amount: 'المبلغ',
+  sort_by_status: 'الحالة',
 };
 
 const en: Translations = {
@@ -993,6 +1041,30 @@ const en: Translations = {
   debtor_confirm_proceed: 'Confirm and continue',
   create_debt_locked_field_hint: 'Locked — verified via QR',
   create_debt_ai_confidence_low_warning: 'AI is unsure about this field — please review',
+  commitment_label_excellent: 'Excellent',
+  commitment_label_good: 'Good',
+  commitment_label_fair: 'Fair',
+  commitment_label_poor: 'Poor',
+  debts_group_total_debts: 'debts',
+  debts_group_total_amount: 'Total',
+  debts_filter_all: 'All',
+  debts_filter_pending: 'Pending',
+  debts_filter_active: 'Active',
+  debts_filter_overdue: 'Overdue',
+  debts_filter_paid: 'Paid',
+  debts_filter_cancelled: 'Cancelled',
+  debt_due_date_label: 'Due Date',
+  debt_due_overdue_warning: 'Overdue',
+  debt_due_soon_warning: 'Due soon',
+  stats_tab_label: 'Statistics',
+  stats_total_receivable: 'Total receivable',
+  stats_total_debtors: 'Total debtors',
+  stats_total_debts: 'Total debts',
+  stats_status_breakdown_title: 'Status breakdown',
+  stats_top_debtors_title: 'Top debtors',
+  sort_by_due_date: 'Due date',
+  sort_by_amount: 'Amount',
+  sort_by_status: 'Status',
 };
 
 const translations: Record<Language, Translations> = { ar, en };
@@ -1029,4 +1101,59 @@ export function formatCurrency(amount: number | string, locale: Language, curren
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(n);
+}
+
+/** Translate a notification dynamically based on its type and raw text. */
+export function translateNotification(
+  type: string | undefined,
+  title: string,
+  body: string,
+  language: Language
+): { title: string; body: string } {
+  if (language === 'en') return { title, body };
+
+  let translatedTitle = title;
+  let translatedBody = body;
+
+  const titleDict: Record<string, string> = {
+    group_invite: "دعوة مجموعة",
+    debt_cancelled: "إلغاء الدين",
+    payment_confirmed: "تأكيد الدفع",
+    payment_requested: "طلب تأكيد الدفع",
+    debt_edit_rejected: "تم رفض التعديل",
+    debt_edit_approved: "تم قبول التعديل",
+    debt_edit_requested: "طلب تعديل",
+    debt_created: "دين جديد",
+    debt_confirmed: "تأكيد الدين",
+    due_soon: "يستحق قريباً",
+    overdue: "متأخر",
+  };
+
+  if (type && titleDict[type]) {
+    translatedTitle = titleDict[type];
+  }
+
+  if (type === 'group_invite') {
+    const match = body.match(/You were invited to (.*)/);
+    if (match) translatedBody = `لقد تمت دعوتك إلى ${match[1]}`;
+  } else if (type === 'debt_cancelled') {
+    const match = body.match(/(.*) (.*) cancelled by creditor/);
+    if (match) translatedBody = `تم إلغاء ${match[1]} ${match[2]} من قبل الدائن`;
+  } else if (type === 'payment_confirmed') {
+    const match = body.match(/(.*) (.*) was confirmed as paid/);
+    if (match) translatedBody = `تم تأكيد دفع ${match[1]} ${match[2]}`;
+  } else if (type === 'payment_requested') {
+    const match = body.match(/(.*) marked the debt as paid/);
+    if (match) translatedBody = `قام ${match[1]} بتحديد الدين كمدفوع`;
+  } else if (type === 'debt_edit_rejected') {
+    if (body.includes('original terms stand')) {
+      translatedBody = "رفض الدائن التعديل؛ الشروط الأصلية سارية";
+    }
+  } else if (type === 'debt_edit_requested') {
+    if (body.includes('requested an edit')) {
+      translatedBody = "طلب تعديل على الدين";
+    }
+  }
+
+  return { title: translatedTitle, body: translatedBody };
 }

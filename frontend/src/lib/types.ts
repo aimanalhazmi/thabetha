@@ -154,6 +154,7 @@ export type WhatsAppFailedReason =
 
 export interface NotificationItem {
   id: string;
+  notification_type?: string;
   title: string;
   body: string;
   read_at: string | null;
