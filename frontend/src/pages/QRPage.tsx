@@ -29,6 +29,7 @@ export function QRPage({ language }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both' || user?.account_type === 'business';
+  const isDebtor = user?.account_type === 'debtor' || user?.account_type === 'both';
   const [qr, setQr] = useState<QRToken | null>(null);
   const [message, setMessage] = useState("");
   const [scanToken, setScanToken] = useState("");
@@ -89,8 +90,8 @@ export function QRPage({ language }: Props) {
 
   return (
     <section className="split">
-      {/* ── My QR panel ── */}
-      <Panel title={tr("qr")}>
+      {/* ── My QR panel — debtor only ── */}
+      {isDebtor && <Panel title={tr("qr")}>
         {message && <div className="message">{message}</div>}
         {qr ? (
           <div className="qr-display-card">
@@ -111,7 +112,7 @@ export function QRPage({ language }: Props) {
         ) : (
           <div className="dash-loading"><div className="spinner" /></div>
         )}
-      </Panel>
+      </Panel>}
 
       {/* ── Scan customer QR (creditor only) ── */}
       {isCreditor && (
