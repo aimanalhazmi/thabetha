@@ -140,8 +140,11 @@ export type TranslationKey =
   | 'merchantChatSubtitle'
   | 'voiceDraftTitle'
   | 'voiceDraftRecord'
-  | 'voiceDraftUpload'
-  | 'voiceDraftUseTranscript'
+  | 'voiceDraftStop'
+  | 'voiceDraftRecording'
+  | 'voiceDraftRecordHint'
+  | 'voiceDraftRecorderUnavailable'
+  | 'voiceDraftMicDenied'
   | 'voiceDraftReview'
   | 'voiceDraftConfirmField'
   | 'voiceDraftConfirmed'
@@ -458,9 +461,12 @@ const ar: Translations = {
   merchantChatTitle: 'محادثة مرتكزة على دفترك',
   merchantChatSubtitle: 'إجابات مبنية على بيانات دفترك أنت فقط.',
   voiceDraftTitle: 'مسودة دين بالصوت',
-  voiceDraftRecord: 'تسجيل صوتي',
-  voiceDraftUpload: 'رفع ملف صوتي',
-  voiceDraftUseTranscript: 'استخدام النص',
+  voiceDraftRecord: 'بدء التسجيل',
+  voiceDraftStop: 'إيقاف ومعالجة',
+  voiceDraftRecording: 'جاري التسجيل...',
+  voiceDraftRecordHint: 'سجّل ملاحظة صوتية قصيرة تصف الدين، وسيقوم الذكاء الاصطناعي بتعبئة الحقول.',
+  voiceDraftRecorderUnavailable: 'متصفحك لا يدعم التسجيل الصوتي.',
+  voiceDraftMicDenied: 'تعذّر الوصول إلى الميكروفون.',
   voiceDraftReview: 'راجع المسودة',
   voiceDraftConfirmField: 'تأكيد الحقل',
   voiceDraftConfirmed: 'تم التأكيد',
@@ -776,9 +782,12 @@ const en: Translations = {
   merchantChatTitle: 'Grounded merchant chat',
   merchantChatSubtitle: 'Answers grounded in your own ledger only.',
   voiceDraftTitle: 'Voice debt draft',
-  voiceDraftRecord: 'Record audio',
-  voiceDraftUpload: 'Upload audio',
-  voiceDraftUseTranscript: 'Use transcript',
+  voiceDraftRecord: 'Start recording',
+  voiceDraftStop: 'Stop & process',
+  voiceDraftRecording: 'Recording...',
+  voiceDraftRecordHint: 'Record a short voice note describing the debt and the AI will fill the form.',
+  voiceDraftRecorderUnavailable: 'Your browser does not support voice recording.',
+  voiceDraftMicDenied: 'Microphone access was blocked.',
   voiceDraftReview: 'Review draft',
   voiceDraftConfirmField: 'Confirm field',
   voiceDraftConfirmed: 'Confirmed',

@@ -1,4 +1,4 @@
-import { Bot, Check, CreditCard, ExternalLink, FileText, Image as ImageIcon, Mic, Pencil, RotateCcw, Upload, WalletCards, X } from 'lucide-react';
+import { Check, CreditCard, ExternalLink, FileText, Image as ImageIcon, Mic, Pencil, RotateCcw, Square, WalletCards, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AttachmentUploader } from '../components/AttachmentUploader';
@@ -91,7 +91,9 @@ export function DebtsPage({ language }: Props) {
   const tr = (key: Parameters<typeof t>[1]) => t(language, key);
   const { user } = useAuth();
   const navigate = useNavigate();
-  const audioInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingStartRef = useRef<number>(0);
   const [searchParams] = useSearchParams();
   const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both' || user?.account_type === 'business';
   const [debts, setDebts] = useState<Debt[]>([]);
@@ -118,10 +120,11 @@ export function DebtsPage({ language }: Props) {
   const [reminderPresets, setReminderPresets] = useState<Set<number>>(new Set([3]));
   const [reminderCustom, setReminderCustom] = useState<string>('');
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-  const [voiceTranscript, setVoiceTranscript] = useState('');
   const [voiceDraft, setVoiceDraft] = useState<VoiceDraft | null>(null);
   const [voiceDraftLoading, setVoiceDraftLoading] = useState(false);
   const [voiceConfirmedFields, setVoiceConfirmedFields] = useState<Set<VoiceDraftField>>(new Set());
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
 
   // Debtor: id of the debt whose edit-request form is open, plus its draft fields.
   const [editingDebtId, setEditingDebtId] = useState<string | null>(null);
@@ -196,11 +199,10 @@ export function DebtsPage({ language }: Props) {
     }));
   }
 
-  async function requestVoiceDraftFromTranscript() {
-    if (!voiceTranscript.trim()) return;
+  async function requestVoiceDraftFromAudio(file: File, durationSeconds?: number) {
     setVoiceDraftLoading(true);
     try {
-      applyVoiceDraft(await aiVoiceDrafts.fromTranscript(voiceTranscript));
+      applyVoiceDraft(await aiVoiceDrafts.fromAudio(file, durationSeconds));
       setMessage(tr('voiceDraftReview'));
     } catch (err) {
       setMessage(humanizeError(err, language, 'aiVoiceDraft'));
@@ -209,16 +211,49 @@ export function DebtsPage({ language }: Props) {
     }
   }
 
-  async function requestVoiceDraftFromAudio(file: File) {
-    setVoiceDraftLoading(true);
-    try {
-      applyVoiceDraft(await aiVoiceDrafts.fromAudio(file));
-      setMessage(tr('voiceDraftReview'));
-    } catch (err) {
-      setMessage(humanizeError(err, language, 'aiVoiceDraft'));
-    } finally {
-      setVoiceDraftLoading(false);
+  async function startRecording() {
+    if (isRecording) return;
+    setRecordingError(null);
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setRecordingError(tr('voiceDraftRecorderUnavailable'));
+      return;
     }
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setRecordingError(tr('voiceDraftMicDenied'));
+      return;
+    }
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) =>
+      typeof MediaRecorder.isTypeSupported === 'function' ? MediaRecorder.isTypeSupported(type) : false,
+    ) ?? '';
+    const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    recordedChunksRef.current = [];
+    recorder.addEventListener('dataavailable', (event) => {
+      if (event.data && event.data.size > 0) recordedChunksRef.current.push(event.data);
+    });
+    recorder.addEventListener('stop', () => {
+      stream.getTracks().forEach((track) => track.stop());
+      const recordedType = recorder.mimeType || 'audio/webm';
+      const blob = new Blob(recordedChunksRef.current, { type: recordedType });
+      recordedChunksRef.current = [];
+      const extension = recordedType.includes('mp4') ? 'm4a' : 'webm';
+      const file = new File([blob], `voice-note-${Date.now()}.${extension}`, { type: recordedType });
+      const durationSeconds = (Date.now() - recordingStartRef.current) / 1000;
+      setIsRecording(false);
+      void requestVoiceDraftFromAudio(file, durationSeconds);
+    });
+    mediaRecorderRef.current = recorder;
+    recordingStartRef.current = Date.now();
+    recorder.start();
+    setIsRecording(true);
+  }
+
+  function stopRecording() {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    mediaRecorderRef.current = null;
   }
 
   function confirmVoiceField(field: VoiceDraftField) {
@@ -690,52 +725,31 @@ export function DebtsPage({ language }: Props) {
               <h3>{tr('voiceDraftTitle')}</h3>
               {profile?.ai_enabled ? (
                 <>
-                  <textarea
-                    value={voiceTranscript}
-                    onChange={(event) => setVoiceTranscript(event.target.value)}
-                    placeholder={tr('voiceTranscript')}
-                  />
+                  <p className="muted">{tr('voiceDraftRecordHint')}</p>
                   <div className="voice-draft-actions">
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => void requestVoiceDraftFromTranscript()}
-                      disabled={voiceDraftLoading || !voiceTranscript.trim()}
-                    >
-                      <Bot size={16} />
-                      <span>{tr('voiceDraftUseTranscript')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => audioInputRef.current?.click()}
-                      disabled={voiceDraftLoading}
-                    >
-                      <Upload size={16} />
-                      <span>{tr('voiceDraftUpload')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => audioInputRef.current?.click()}
-                      disabled={voiceDraftLoading}
-                    >
-                      <Mic size={16} />
-                      <span>{tr('voiceDraftRecord')}</span>
-                    </button>
+                    {!isRecording ? (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => void startRecording()}
+                        disabled={voiceDraftLoading}
+                      >
+                        <Mic size={16} />
+                        <span>{tr('voiceDraftRecord')}</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={stopRecording}
+                      >
+                        <Square size={16} />
+                        <span>{tr('voiceDraftStop')}</span>
+                      </button>
+                    )}
                   </div>
-                  <input
-                    ref={audioInputRef}
-                    type="file"
-                    accept="audio/webm,audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/mp4,audio/m4a,audio/x-m4a"
-                    capture
-                    hidden
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      event.target.value = '';
-                      if (file) void requestVoiceDraftFromAudio(file);
-                    }}
-                  />
+                  {recordingError && <p className="error-text">{recordingError}</p>}
+                  {isRecording && <p className="muted">{tr('voiceDraftRecording')}</p>}
                   {voiceDraftLoading && <p className="muted">{tr('voiceDraftProcessing')}</p>}
                   {voiceDraft && (
                     <div className="voice-draft-review">

@@ -27,6 +27,10 @@ HISTORY_TURN_CAP = 10
 
 
 def _select_provider(name: str) -> MerchantChatProvider:
+    if name == "chat_ai":
+        from app.services.ai.merchant_chat.chat_ai_provider import ChatAIMerchantChatProvider
+
+        return ChatAIMerchantChatProvider()
     if name == "anthropic":
         # Lazy import so the anthropic SDK isn't a hard dep for tests.
         from app.services.ai.merchant_chat.anthropic_provider import AnthropicMerchantChatProvider
