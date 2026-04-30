@@ -75,7 +75,7 @@ export function GroupsPage({ language }: Props) {
     }
   }
 
-  const accepted = groups.filter((g) => g.member_status !== "pending");
+  const accepted = groups.filter((g) => g.member_status === "accepted" || g.member_status == null);
   const pending = groups.filter((g) => g.member_status === "pending");
 
   return (

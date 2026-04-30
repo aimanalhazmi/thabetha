@@ -97,6 +97,12 @@ class ProfileUpdate(BaseModel):
     ai_enabled: bool | None = None
     groups_enabled: bool | None = None
     preferred_language: str | None = Field(default=None, pattern=r"^(ar|en)$")
+    default_currency: str | None = Field(default=None, min_length=3, max_length=3)
+
+    @field_validator("default_currency")
+    @classmethod
+    def normalize_default_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
 
 
 class ProfileOut(BaseModel):
@@ -116,6 +122,7 @@ class ProfileOut(BaseModel):
     groups_enabled: bool = True
     commitment_score: int = Field(default=50, ge=0, le=100)
     preferred_language: str = "ar"
+    default_currency: str = "SAR"
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

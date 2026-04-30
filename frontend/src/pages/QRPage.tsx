@@ -1,5 +1,5 @@
 import { Clock, QrCode, RotateCcw, Search, UserRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import QRCode from "react-qr-code";
 import { useNavigate } from "react-router-dom";
 import { Input, Panel } from "../components/Layout";
@@ -10,6 +10,8 @@ import { t } from "../lib/i18n";
 import type { Language, Profile, QRToken } from "../lib/types";
 
 interface Props { language: Language }
+
+const QR_TTL = 59;
 
 function getInitials(name: string) {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
@@ -32,22 +34,47 @@ export function QRPage({ language }: Props) {
   const isDebtor = user?.account_type === 'debtor' || user?.account_type === 'both';
   const [qr, setQr] = useState<QRToken | null>(null);
   const [message, setMessage] = useState("");
+  const [countdown, setCountdown] = useState(QR_TTL);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [scanToken, setScanToken] = useState("");
   const [scanned, setScanned] = useState<Profile | null>(null);
   const [scanError, setScanError] = useState("");
   const [resolvedToken, setResolvedToken] = useState<string | null>(null);
 
-  // ── Data fetching — untouched ─────────────────────────────────
+  // ── Auto-renew countdown (debtor only) ───────────────────────
   useEffect(() => {
+    if (!isDebtor) {
+      void apiRequest<QRToken>("/qr/current").then(setQr).catch(() => {});
+      return;
+    }
     void apiRequest<QRToken>("/qr/current").then(setQr).catch(() => {});
-  }, []);
 
-  // ── Handlers — untouched ──────────────────────────────────────
+    intervalRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          // auto-rotate
+          void apiRequest<QRToken>("/qr/rotate", { method: "POST" })
+            .then(updated => setQr(updated))
+            .catch(() => {});
+          return QR_TTL;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDebtor]);
+
+  // ── Handlers ─────────────────────────────────────────────────
   async function rotate() {
     try {
       const updated = await apiRequest<QRToken>("/qr/rotate", { method: "POST" });
       setQr(updated);
-      setMessage("QR rotated");
+      setCountdown(QR_TTL);
+      setMessage("");
     } catch (err) {
       setMessage(humanizeError(err, language, 'generic'));
     }
@@ -104,6 +131,11 @@ export function QRPage({ language }: Props) {
             <div className="qr-expiry">
               <Clock size={13} />
               <span>{formatExpiry(qr.expires_at)}</span>
+            </div>
+            <div className="qr-countdown">
+              {language === 'ar'
+                ? `يتم تحديث الرمز خلال ${countdown} ثانية`
+                : `QR renews in ${countdown}s`}
             </div>
             <button className="primary-button" style={{ width: '100%', justifyContent: 'center' }} onClick={() => void rotate()}>
               <RotateCcw size={16} /><span>{tr("rotate")}</span>

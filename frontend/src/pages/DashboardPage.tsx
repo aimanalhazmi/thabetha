@@ -1,10 +1,10 @@
-import { Activity, AlertTriangle, ArrowRight, Award, Bell, CircleDollarSign, Clock, TrendingUp } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, Award, Bell, CircleDollarSign, Clock, TrendingUp, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../lib/api';
 import { humanizeError } from '../lib/errors';
-import { t } from '../lib/i18n';
+import { formatCurrency, t, translateNotification } from '../lib/i18n';
 import type { Debt, Language, NotificationItem, Profile } from '../lib/types';
 
 interface Props {
@@ -18,14 +18,22 @@ function StatCard({
   value,
   icon: Icon,
   accent,
+  onClick,
 }: {
   label: string;
   value: string;
   icon: React.ElementType;
   accent: 'primary' | 'warning' | 'danger' | 'info' | 'success' | 'purple';
+  onClick?: () => void;
 }) {
   return (
-    <section className={`dash-stat-card dash-stat-card--${accent}`}>
+    <section
+      className={`dash-stat-card dash-stat-card--${accent}${onClick ? ' dash-stat-card--clickable' : ''}`}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); } : undefined}
+    >
       <div className="dash-stat-card__icon">
         <Icon size={20} />
       </div>
@@ -134,31 +142,27 @@ export function DashboardPage({ language, message }: Props) {
       {/* Statistics tab */}
       {activeTab === 'statistics' && (
         <section className="wide-panel" style={{ gridColumn: '1 / -1' }}>
-          <h2>{tr('stats_tab_label')}</h2>
-          <div className="content-grid">
-            <div className="stat" onClick={() => navigate('/debts?status=active')} style={{ cursor: 'pointer' }} role="button" tabIndex={0}>
-              <span>{tr('debts_filter_active')}</span>
-              <strong>{activeDebts.length}</strong>
+          <h2 style={{ marginBottom: 16 }}>{tr('stats_tab_label')}</h2>
+          <div className="stats-breakdown-grid">
+            <StatCard label={tr('debts_filter_active')} value={String(activeDebts.length)} icon={Activity} accent="info" onClick={() => navigate('/debts?status=active')} />
+            <StatCard label={tr('debts_filter_pending')} value={String(waitingDebts.length)} icon={Clock} accent="warning" onClick={() => navigate('/debts?status=pending_confirmation')} />
+            <StatCard label={tr('debts_filter_overdue')} value={String(overdueDebts.length)} icon={AlertTriangle} accent="danger" onClick={() => navigate('/debts?status=overdue')} />
+            <StatCard label={tr('paymentPendingConfirmation')} value={String(paymentPendingDebts.length)} icon={TrendingUp} accent="purple" onClick={() => navigate('/debts?status=payment_pending_confirmation')} />
+            <StatCard label={tr('debts_filter_paid')} value={String(paidDebts.length)} icon={CircleDollarSign} accent="success" onClick={() => navigate('/debts?status=paid')} />
+            <StatCard label={tr('debts_filter_cancelled')} value={String(debts.filter(d => d.status === 'cancelled').length)} icon={X} accent="primary" onClick={() => navigate('/debts?status=cancelled')} />
+          </div>
+          <div className="stats-totals-row">
+            <div className="stats-total-card">
+              <span>{tr('stats_total_receivable')}</span>
+              <strong>{formatCurrency(totalAmount, language, profile?.default_currency ?? 'SAR')}</strong>
             </div>
-            <div className="stat" onClick={() => navigate('/debts?status=pending_confirmation')} style={{ cursor: 'pointer' }} role="button" tabIndex={0}>
-              <span>{tr('debts_filter_pending')}</span>
-              <strong>{waitingDebts.length}</strong>
+            <div className="stats-total-card">
+              <span>{tr('stats_total_debtors')}</span>
+              <strong>{new Set(debts.map(d => d.debtor_id).filter(Boolean)).size}</strong>
             </div>
-            <div className="stat" onClick={() => navigate('/debts?status=overdue')} style={{ cursor: 'pointer' }} role="button" tabIndex={0}>
-              <span>{tr('debts_filter_overdue')}</span>
-              <strong>{overdueDebts.length}</strong>
-            </div>
-            <div className="stat" onClick={() => navigate('/debts?status=payment_pending_confirmation')} style={{ cursor: 'pointer' }} role="button" tabIndex={0}>
-              <span>{tr('paymentPendingConfirmation')}</span>
-              <strong>{paymentPendingDebts.length}</strong>
-            </div>
-            <div className="stat" onClick={() => navigate('/debts?status=paid')} style={{ cursor: 'pointer' }} role="button" tabIndex={0}>
-              <span>{tr('debts_filter_paid')}</span>
-              <strong>{paidDebts.length}</strong>
-            </div>
-            <div className="stat" onClick={() => navigate('/debts?status=cancelled')} style={{ cursor: 'pointer' }} role="button" tabIndex={0}>
-              <span>{tr('debts_filter_cancelled')}</span>
-              <strong>{debts.filter(d => d.status === 'cancelled').length}</strong>
+            <div className="stats-total-card">
+              <span>{tr('stats_total_debts')}</span>
+              <strong>{debts.length}</strong>
             </div>
           </div>
         </section>
@@ -167,25 +171,26 @@ export function DashboardPage({ language, message }: Props) {
       {/* Overview tab content */}
       {(activeTab === 'overview' || !isCreditor) && <>
 
-      {/* AI upgrade banner */}
+      {/* AI upgrade banner — compact strip */}
       {isCreditor && (
-        <section className="wide-panel ai-upgrade-card">
-          <div>
-            <h2>{profile?.ai_enabled ? `✨ ${tr('aiActive')}` : `🤖 ${tr('upgradeToAi')}`}</h2>
-            <p style={{ color: '#64748b', margin: '0.25rem 0 0' }}>{tr('upgradeToAiDesc')}</p>
-          </div>
-          {!profile?.ai_enabled && (
-            <a href="/ai" className="primary-button" style={{ textDecoration: 'none' }}>
-              {tr('upgradeNow')}
-            </a>
+        <div className="ai-banner-strip" style={{ gridColumn: '1 / -1' }}>
+          {profile?.ai_enabled ? (
+            <span className="ai-banner-strip__active">✨ {tr('aiActive')}</span>
+          ) : (
+            <>
+              <span className="ai-banner-strip__text">🤖 {tr('upgradeToAi')} — {tr('upgradeToAiDesc')}</span>
+              <a href="/ai" className="primary-button ai-banner-strip__cta" style={{ textDecoration: 'none' }}>
+                {tr('upgradeNow')}
+              </a>
+            </>
           )}
-        </section>
+        </div>
       )}
 
       {/* ── Stat cards ─────────────────────────────────────────── */}
       <StatCard
         label={isCreditor ? tr('receivable') : tr('totalDebt')}
-        value={`${totalAmount.toFixed(2)} SAR`}
+        value={formatCurrency(totalAmount, language, profile?.default_currency ?? 'SAR')}
         icon={CircleDollarSign}
         accent="primary"
       />
@@ -321,15 +326,18 @@ export function DashboardPage({ language, message }: Props) {
         )}
 
         <ul className="dash-notif-list">
-          {notifications.slice(0, 5).map((n) => (
-            <li key={n.id} className={`dash-notif-item${!n.read_at ? ' dash-notif-item--unread' : ''}`}>
-              {!n.read_at && <span className="dash-notif-dot" />}
-              <div>
-                <strong>{n.title}</strong>
-                <span>{n.body}</span>
-              </div>
-            </li>
-          ))}
+          {notifications.slice(0, 5).map((n) => {
+            const { title, body } = translateNotification(n.notification_type, n.title, n.body, language);
+            return (
+              <li key={n.id} className={`dash-notif-item${!n.read_at ? ' dash-notif-item--unread' : ''}`}>
+                {!n.read_at && <span className="dash-notif-dot" />}
+                <div>
+                  <strong>{title}</strong>
+                  <span>{body}</span>
+                </div>
+              </li>
+            );
+          })}
           {notifications.length === 0 && <p className="empty">{tr('noData')}</p>}
         </ul>
         <p className="trust-disclaimer">{tr('commitmentDisclaimer')}</p>

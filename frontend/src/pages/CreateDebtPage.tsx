@@ -63,6 +63,16 @@ export function CreateDebtPage({ language }: Props) {
     due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
     notes: '',
   });
+
+  // Load profile early to get default_currency
+  useEffect(() => {
+    void apiRequest<Profile>('/profiles/me').then(me => {
+      setProfile(me);
+      if (me.default_currency) {
+        setDebtForm(f => ({ ...f, currency: me.default_currency! }));
+      }
+    }).catch(() => {});
+  }, []);
   const [reminderPresets, setReminderPresets] = useState<Set<number>>(new Set([3]));
   const [reminderCustom, setReminderCustom] = useState('');
   const [receiptItems, setReceiptItems] = useState<ReceiptUploadItem[]>([]);

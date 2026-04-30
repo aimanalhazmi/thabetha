@@ -78,8 +78,10 @@ def _profile_from_row(row: dict) -> ProfileOut:
         shop_description=row.get("shop_description"),
         whatsapp_enabled=row["whatsapp_enabled"],
         ai_enabled=row["ai_enabled"],
+        groups_enabled=row.get("groups_enabled", True),
         commitment_score=row["commitment_score"],
         preferred_language=row.get("preferred_language", "ar"),
+        default_currency=str(row.get("default_currency") or "SAR").strip().upper(),
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
     )

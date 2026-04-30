@@ -376,7 +376,8 @@ export type TranslationKey =
   | 'landingF6Title'
   | 'landingF6Desc'
   | 'landingCtaTitle'
-  | 'landingCtaDesc';
+  | 'landingCtaDesc'
+  | 'defaultCurrency';
 
 type Translations = Record<TranslationKey, string>;
 
@@ -756,6 +757,7 @@ const ar: Translations = {
   landingF6Desc: 'تسوية تلقائية للديون داخل المجموعة بدون نقص أو فائض.',
   landingCtaTitle: 'ابدأ تنظيم ديونك اليوم',
   landingCtaDesc: 'اختر دورك وتابع إلى لوحة التحكم التجريبية.',
+  defaultCurrency: 'العملة الافتراضية',
 };
 
 const en: Translations = {
@@ -1134,6 +1136,7 @@ const en: Translations = {
   landingF6Desc: 'Share debts with a group and auto-net balances without manual calculation.',
   landingCtaTitle: 'Start organizing your debts today',
   landingCtaDesc: 'Choose your role to continue to the demo dashboard.',
+  defaultCurrency: 'Default Currency',
 };
 
 const translations: Record<Language, Translations> = { ar, en };
@@ -1186,9 +1189,12 @@ export function translateNotification(
 
   const titleDict: Record<string, string> = {
     group_invite: "دعوة مجموعة",
+    group_invite_accepted: "قبول دعوة المجموعة",
+    group_ownership_transferred: "نقل ملكية المجموعة",
     debt_cancelled: "إلغاء الدين",
     payment_confirmed: "تأكيد الدفع",
     payment_requested: "طلب تأكيد الدفع",
+    payment_failed: "فشل الدفع",
     debt_edit_rejected: "تم رفض التعديل",
     debt_edit_approved: "تم قبول التعديل",
     debt_edit_requested: "طلب تعديل",
@@ -1196,6 +1202,13 @@ export function translateNotification(
     debt_confirmed: "تأكيد الدين",
     due_soon: "يستحق قريباً",
     overdue: "متأخر",
+    settlement_proposed: "اقتراح تسوية",
+    settlement_reminder: "تذكير بالتسوية",
+    settlement_confirmed: "تأكيد التسوية",
+    settlement_rejected: "رفض التسوية",
+    settlement_settled: "تمت التسوية",
+    settlement_failed: "فشلت التسوية",
+    settlement_expired: "انتهت صلاحية التسوية",
   };
 
   if (type && titleDict[type]) {

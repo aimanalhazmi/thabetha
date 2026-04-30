@@ -36,6 +36,8 @@ export interface Profile {
   groups_enabled: boolean;
   /** User's preferred locale — persisted across devices for signed-in users. Default 'ar'. */
   preferred_language: Language;
+  /** ISO 4217 currency code used as default when creating debts. Default 'SAR'. */
+  default_currency?: string;
 }
 
 export interface ProfilePreview {

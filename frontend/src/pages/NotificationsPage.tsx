@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { WhatsAppDeliveryBadge } from "../components/WhatsAppDeliveryBadge";
 import { apiRequest } from "../lib/api";
 import { humanizeError } from "../lib/errors";
-import { t } from "../lib/i18n";
+import { t, translateNotification } from "../lib/i18n";
 import type { Language, NotificationItem } from "../lib/types";
 
 interface Props { language: Language }
@@ -104,10 +104,14 @@ export function NotificationsPage({ language }: Props) {
 
             <div className="notif-card__content">
               <div className="notif-card__header">
-                <strong className="notif-card__title">{item.title}</strong>
+                <strong className="notif-card__title">
+                  {translateNotification(item.notification_type, item.title, item.body, language).title}
+                </strong>
                 <span className="notif-card__date">{formatDate(item.created_at)}</span>
               </div>
-              <p className="notif-card__body">{item.body}</p>
+              <p className="notif-card__body">
+                {translateNotification(item.notification_type, item.title, item.body, language).body}
+              </p>
               {item.whatsapp_status && item.whatsapp_status !== 'not_attempted' && (
                 <WhatsAppDeliveryBadge
                   status={item.whatsapp_status}

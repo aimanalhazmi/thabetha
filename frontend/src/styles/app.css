@@ -1289,6 +1289,104 @@ pre, .answer {
 .ai-upgrade-card h2 { margin: 0; font-size: 1.05rem; }
 .ai-upgrade-card .primary-button { white-space: nowrap; }
 
+/* ── AI banner strip (compact alternative to the full card) ── */
+.ai-banner-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: linear-gradient(90deg, #eff6ff 0%, #faf5ff 100%);
+  border: 1px solid #c7d2fe;
+  border-radius: var(--radius);
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+}
+
+.ai-banner-strip__active {
+  color: var(--success);
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.ai-banner-strip__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-banner-strip__cta {
+  padding: 6px 14px !important;
+  font-size: 0.82rem !important;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Statistics breakdown grid ──────────────────────────────── */
+.stats-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stats-totals-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.stats-total-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+}
+
+.stats-total-card span {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.stats-total-card strong {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── Clickable stat card ────────────────────────────────────── */
+.dash-stat-card--clickable {
+  cursor: pointer;
+}
+
+.dash-stat-card--clickable:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ── QR countdown ────────────────────────────────────────────── */
+.qr-countdown {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 4px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 600px) {
+  .stats-breakdown-grid { grid-template-columns: repeat(2, 1fr); }
+  .stats-totals-row { grid-template-columns: 1fr; }
+  .ai-banner-strip__text { display: none; }
+}
+
 /* ── Customer profile (QR scan result) ──────────────────────── */
 .customer-profile-card {
   background: #f8fafc;
@@ -3066,8 +3164,8 @@ pre, .answer {
 
 .toggle-switch {
   position: relative;
-  width: 42px;
-  height: 24px;
+  width: 48px;
+  height: 28px;
   flex-shrink: 0;
 }
 
@@ -3081,9 +3179,9 @@ pre, .answer {
 .toggle-switch__track {
   position: absolute;
   inset: 0;
-  background: var(--border);
+  background: #cbd5e1;
   border-radius: var(--radius-full);
-  transition: background var(--transition);
+  transition: background var(--transition), box-shadow var(--transition);
   cursor: pointer;
 }
 
@@ -3092,24 +3190,30 @@ pre, .answer {
   position: absolute;
   top: 3px;
   left: 3px;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
   transition: transform var(--transition);
 }
 
 .toggle-switch input:checked + .toggle-switch__track {
-  background: var(--primary);
+  background: var(--success);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.toggle-switch input:focus-visible + .toggle-switch__track {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .toggle-switch input:checked + .toggle-switch__track::after {
-  transform: translateX(18px);
+  transform: translateX(20px);
 }
 
 [dir="rtl"] .toggle-switch input:checked + .toggle-switch__track::after {
-  transform: translateX(-18px);
+  transform: translateX(-20px);
 }
 
 /* Responsive profile hero */

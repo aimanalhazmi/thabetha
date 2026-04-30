@@ -6,6 +6,8 @@ import { apiRequest } from '../lib/api';
 import { t } from '../lib/i18n';
 import type { Language, Profile } from '../lib/types';
 
+const COMMON_CURRENCIES = ['SAR', 'USD', 'EUR', 'GBP', 'AED', 'KWD', 'QAR', 'BHD', 'OMR', 'JOD', 'EGP'];
+
 interface Props { language: Language }
 
 function getInitials(name: string) {
@@ -92,6 +94,18 @@ export function ProfilePage({ language }: Props) {
         <Panel title={tr('profile')}>
           <Input label={tr('name')} value={profile.name} onChange={(v) => setProfile({ ...profile, name: v })} />
           <Input label={tr('phone')} value={profile.phone} onChange={(v) => setProfile({ ...profile, phone: v })} />
+
+          <div className="field">
+            <span>{tr('defaultCurrency')}</span>
+            <select
+              value={profile.default_currency ?? 'SAR'}
+              onChange={(e) => setProfile({ ...profile, default_currency: e.target.value })}
+            >
+              {COMMON_CURRENCIES.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
 
           <div className="profile-toggles">
             <label className="toggle-row">
