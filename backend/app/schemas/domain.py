@@ -120,6 +120,13 @@ class ProfileOut(BaseModel):
     updated_at: datetime | None = None
 
 
+class ProfilePreviewOut(BaseModel):
+    id: str
+    name: str
+    phone: str
+    commitment_score: int = Field(default=50, ge=0, le=100)
+
+
 class BusinessProfileIn(BaseModel):
     shop_name: str = Field(min_length=1)
     activity_type: str = Field(min_length=1)

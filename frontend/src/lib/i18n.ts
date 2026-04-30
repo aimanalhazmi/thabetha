@@ -319,7 +319,17 @@ export type TranslationKey =
   | 'errorAlreadyResponded'
   | 'errorProposalNotOpen'
   | 'errorStaleSnapshot'
-  | 'errorLeaveBlockedByOpenProposal';
+  | 'errorLeaveBlockedByOpenProposal'
+  | 'fab_create_debt'
+  | 'scan_qr_camera_label'
+  | 'scan_qr_manual_token_label'
+  | 'scan_qr_manual_userid_label'
+  | 'scan_qr_error_expired'
+  | 'scan_qr_error_notfound'
+  | 'debtor_confirm_score_label'
+  | 'debtor_confirm_proceed'
+  | 'create_debt_locked_field_hint'
+  | 'create_debt_ai_confidence_low_warning';
 
 type Translations = Record<TranslationKey, string>;
 
@@ -642,6 +652,16 @@ const ar: Translations = {
   errorProposalNotOpen: 'الاقتراح لم يعد مفتوحًا.',
   errorStaleSnapshot: 'تغيرت حالة أحد الديون، يرجى إعادة المحاولة.',
   errorLeaveBlockedByOpenProposal: 'لا يمكنك مغادرة المجموعة وأنت طرف في اقتراح تسوية مفتوح.',
+  fab_create_debt: 'تسجيل دين جديد',
+  scan_qr_camera_label: 'مسح رمز QR بالكاميرا',
+  scan_qr_manual_token_label: 'إدخال رمز QR يدويًا',
+  scan_qr_manual_userid_label: 'إدخال معرّف المستخدم',
+  scan_qr_error_expired: 'انتهت صلاحية الرمز، اطلب من المدين تحديثه',
+  scan_qr_error_notfound: 'لم يتم العثور على المستخدم',
+  debtor_confirm_score_label: 'مؤشر الالتزام',
+  debtor_confirm_proceed: 'تأكيد ومتابعة',
+  create_debt_locked_field_hint: 'حقل مقفل — تم التحقق عبر QR',
+  create_debt_ai_confidence_low_warning: 'الذكاء الاصطناعي غير متأكد من هذا الحقل — يرجى المراجعة',
 };
 
 const en: Translations = {
@@ -963,6 +983,16 @@ const en: Translations = {
   errorProposalNotOpen: 'The proposal is no longer open.',
   errorStaleSnapshot: 'A debt in the snapshot changed state — please retry.',
   errorLeaveBlockedByOpenProposal: 'You cannot leave while you are part of an open settlement proposal.',
+  fab_create_debt: 'New debt',
+  scan_qr_camera_label: 'Scan QR with camera',
+  scan_qr_manual_token_label: 'Enter QR token manually',
+  scan_qr_manual_userid_label: 'Enter user ID',
+  scan_qr_error_expired: 'QR code expired — ask the debtor to refresh',
+  scan_qr_error_notfound: 'User not found',
+  debtor_confirm_score_label: 'Commitment indicator',
+  debtor_confirm_proceed: 'Confirm and continue',
+  create_debt_locked_field_hint: 'Locked — verified via QR',
+  create_debt_ai_confidence_low_warning: 'AI is unsure about this field — please review',
 };
 
 const translations: Record<Language, Translations> = { ar, en };

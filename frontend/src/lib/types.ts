@@ -38,6 +38,13 @@ export interface Profile {
   preferred_language: Language;
 }
 
+export interface ProfilePreview {
+  id: string;
+  name: string;
+  phone: string;
+  commitment_score: number;
+}
+
 export interface QRToken {
   token: string;
   expires_at: string;

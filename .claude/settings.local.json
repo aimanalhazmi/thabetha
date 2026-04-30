@@ -37,7 +37,10 @@
       "Bash(perl -pi -e \"s/^- \\\\\\\\[ \\\\\\\\] T014 /- [X] T014 /\" specs/008-groups-mvp-surface/tasks.md)",
       "Bash(perl -pi -e 's/^- \\\\[ \\\\] \\(T026|T027|T028|T029|T041|T043|T045|T046|T047|T048|T049|T050|T052\\) /- [X] $1 /g' specs/008-groups-mvp-surface/tasks.md)",
       "Bash(supabase status *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(grep -n \"F2: Create form moved\\\\|^      \\)}$\" src/pages/DebtsPage.tsx)",
+      "Bash(sed -i.bak '647,824d' src/pages/DebtsPage.tsx)",
+      "Bash(sed -n '645,650p' src/pages/DebtsPage.tsx)"
     ]
   }
 }

@@ -56,7 +56,7 @@ export function QRPage({ language }: Props) {
   // T008: navigate to create-debt with QR token on confirm
   function confirmCreateDebt() {
     if (!resolvedToken) return;
-    navigate(`/debts?qr_token=${encodeURIComponent(resolvedToken)}`);
+    navigate(`/debts/new?qr_token=${encodeURIComponent(resolvedToken)}`);
   }
 
   function dismissScanned() {

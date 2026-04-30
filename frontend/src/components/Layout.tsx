@@ -1,4 +1,5 @@
 import { Bell, Bot, CreditCard, Languages, LayoutDashboard, LogOut, QrCode, RefreshCw, Settings, Store, UserRound, Users } from 'lucide-react';
+import { FAB } from './FAB';
 import type { ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -127,6 +128,7 @@ export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel
         </header>
         {children}
       </section>
+      <FAB language={language} />
     </main>
   );
 }

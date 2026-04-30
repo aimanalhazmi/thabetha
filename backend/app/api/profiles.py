@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from app.core.security import AuthenticatedUser, get_current_user
 from app.repositories import Repository, get_repository
-from app.schemas.domain import BusinessProfileIn, BusinessProfileOut, CommitmentScoreEventOut, ProfileOut, ProfileUpdate
+from app.schemas.domain import BusinessProfileIn, BusinessProfileOut, CommitmentScoreEventOut, ProfileOut, ProfilePreviewOut, ProfileUpdate
 
 router = APIRouter()
 
@@ -43,6 +43,22 @@ def get_business_profile(
 ) -> BusinessProfileOut | None:
     repo.ensure_profile(user)
     return repo.current_business_profile(user.id)
+
+
+@router.get("/preview/{user_id}", response_model=ProfilePreviewOut)
+def get_profile_preview(
+    user_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> ProfilePreviewOut:
+    repo.ensure_profile(user)
+    profile = repo.get_profile(user_id)
+    return ProfilePreviewOut(
+        id=profile.id,
+        name=profile.name,
+        phone=profile.phone,
+        commitment_score=profile.commitment_score,
+    )
 
 
 @router.get("/me/commitment-score-events", response_model=list[CommitmentScoreEventOut])
