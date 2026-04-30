@@ -208,24 +208,26 @@ export function DashboardPage({ language, message }: Props) {
         accent="purple"
       />
 
-      {/* Commitment indicator — full-width with progress bar */}
-      <section
-        className="dash-stat-card dash-stat-card--success"
-        style={{ gridColumn: '1 / -1' }}
-      >
-        <div className="dash-stat-card__icon">
-          <Award size={20} />
-        </div>
-        <div className="dash-stat-card__body" style={{ flex: 1 }}>
-          <span className="dash-stat-card__label">{tr('commitmentIndicator')}</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '6px' }}>
-            <strong className="dash-stat-card__value" style={{ minWidth: '70px' }}>
-              {commitmentScore} / 100
-            </strong>
-            <ScoreBar score={commitmentScore} />
+      {/* Commitment indicator — debtors only */}
+      {!isCreditor && (
+        <section
+          className="dash-stat-card dash-stat-card--success"
+          style={{ gridColumn: '1 / -1' }}
+        >
+          <div className="dash-stat-card__icon">
+            <Award size={20} />
           </div>
-        </div>
-      </section>
+          <div className="dash-stat-card__body" style={{ flex: 1 }}>
+            <span className="dash-stat-card__label">{tr('commitmentIndicator')}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '6px' }}>
+              <strong className="dash-stat-card__value" style={{ minWidth: '70px' }}>
+                {commitmentScore} / 100
+              </strong>
+              <ScoreBar score={commitmentScore} />
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ── Overdue alerts ──────────────────────────────────────── */}
       {overdueDebts.length > 0 && (

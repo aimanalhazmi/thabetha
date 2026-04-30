@@ -71,18 +71,20 @@ export function ProfilePage({ language }: Props) {
           <span className="profile-hero__name">{profile.name}</span>
           <span className="profile-hero__badge">{roleLabel}</span>
         </div>
-        <div className="profile-hero__score">
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-              {tr('commitmentIndicator')}
-            </span>
-            <strong style={{ fontSize: '0.88rem', color: 'var(--primary-dark)' }}>
-              {profile.commitment_score} / 100
-            </strong>
+        {!isCreditor && (
+          <div className="profile-hero__score">
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                {tr('commitmentIndicator')}
+              </span>
+              <strong style={{ fontSize: '0.88rem', color: 'var(--primary-dark)' }}>
+                {profile.commitment_score} / 100
+              </strong>
+            </div>
+            <ScoreBar score={profile.commitment_score} />
+            <p className="trust-disclaimer" style={{ marginTop: 6 }}>{tr('commitmentDisclaimer')}</p>
           </div>
-          <ScoreBar score={profile.commitment_score} />
-          <p className="trust-disclaimer" style={{ marginTop: 6 }}>{tr('commitmentDisclaimer')}</p>
-        </div>
+        )}
       </div>
 
       <div className="split" style={{ marginTop: 20 }}>
