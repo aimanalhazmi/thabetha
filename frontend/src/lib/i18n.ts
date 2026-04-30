@@ -353,7 +353,30 @@ export type TranslationKey =
   | 'stats_top_debtors_title'
   | 'sort_by_due_date'
   | 'sort_by_amount'
-  | 'sort_by_status';
+  | 'sort_by_status'
+  // Landing page v2
+  | 'landingFeaturesTitle'
+  | 'landingHowItWorks'
+  | 'landingStep1Title'
+  | 'landingStep1Desc'
+  | 'landingStep2Title'
+  | 'landingStep2Desc'
+  | 'landingStep3Title'
+  | 'landingStep3Desc'
+  | 'landingF1Title'
+  | 'landingF1Desc'
+  | 'landingF2Title'
+  | 'landingF2Desc'
+  | 'landingF3Title'
+  | 'landingF3Desc'
+  | 'landingF4Title'
+  | 'landingF4Desc'
+  | 'landingF5Title'
+  | 'landingF5Desc'
+  | 'landingF6Title'
+  | 'landingF6Desc'
+  | 'landingCtaTitle'
+  | 'landingCtaDesc';
 
 type Translations = Record<TranslationKey, string>;
 
@@ -577,11 +600,11 @@ const ar: Translations = {
   unpaidDebts: 'الديون غير المدفوعة',
   myDebtStatus: 'حالة ديوني',
   landingHeadline: 'دفتر ديون رقمي يؤكده الطرفان',
-  landingPitch: 'استبدل دفتر الديون الورقي بسجل بسيط، عربي أولاً، يؤكده كلٌ من الدائن والمدين، مع مؤشر التزام داخلي وتذكيرات تلقائية.',
+  landingPitch: 'منصة ذكية لإدارة الديون الرقمية بين أصحاب المحلات والعملاء، والأصدقاء والعائلة. لا دفاتر، لا خلافات.',
   getStarted: 'ابدأ الآن',
   learnMore: 'تعرف على المزيد',
-  forCreditors: 'للدائنين',
-  forDebtors: 'للمدينين',
+  forCreditors: 'أنا دائن / صاحب محل',
+  forDebtors: 'أنا مدين / عميل',
   creditorPitch: 'أنشئ ديونًا، امسح QR العميل، استلم تأكيد الدفع، وراقب المستحقات والمتأخر.',
   debtorPitch: 'تابع ديونك في مكان واحد، أكد القبول، اطلب تعديلًا، وأخطر دائنك عند السداد.',
   receiptUpload: 'إيصالات الدين',
@@ -710,6 +733,29 @@ const ar: Translations = {
   sort_by_due_date: 'تاريخ الاستحقاق',
   sort_by_amount: 'المبلغ',
   sort_by_status: 'الحالة',
+  // Landing page v2
+  landingFeaturesTitle: 'لماذا ثبتها؟',
+  landingHowItWorks: 'كيف تعمل؟',
+  landingStep1Title: 'سجّل الدين',
+  landingStep1Desc: 'ينشئ الدائن الدين بالمبلغ والتاريخ ووصف اختياري في ثوانٍ.',
+  landingStep2Title: 'أكّد من الطرفين',
+  landingStep2Desc: 'يستلم المدين طلب القبول ويؤكّد، فيصبح الدين ملزمًا لكلا الطرفين.',
+  landingStep3Title: 'تابع وسدّد',
+  landingStep3Desc: 'تذكيرات تلقائية، مؤشر التزام حي، وتأكيد استلام الدفع من الدائن.',
+  landingF1Title: 'تأكيد ثنائي',
+  landingF1Desc: 'لا يصبح الدين رسميًا إلا بعد موافقة الطرفين، يمنع الإنكار والخلافات.',
+  landingF2Title: 'مسح رمز QR',
+  landingF2Desc: 'امسح رمز العميل لربط ملفه وإنشاء الدين دون كتابة بيانات يدوية.',
+  landingF3Title: 'مؤشر الالتزام',
+  landingF3Desc: 'كل دائن لديه مؤشر الالتزام (50–100) داخل المنصة كتقييم عام لمدى إلتزامه.',
+  landingF4Title: 'مساعد ذكي',
+  landingF4Desc: 'أدخل الديون بصوتك، واحصل على ملخصات ذكية وتوصيات تلقائية.',
+  landingF5Title: 'تذكيرات تلقائية',
+  landingF5Desc: 'تنبيهات مجدولة قبل الاستحقاق وعند التأخر، مع تأثير على مؤشر الالتزام.',
+  landingF6Title: 'ديون جماعية',
+  landingF6Desc: 'تسوية تلقائية للديون داخل المجموعة بدون نقص أو فائض.',
+  landingCtaTitle: 'ابدأ تنظيم ديونك اليوم',
+  landingCtaDesc: 'اختر دورك وتابع إلى لوحة التحكم التجريبية.',
 };
 
 const en: Translations = {
@@ -1065,6 +1111,29 @@ const en: Translations = {
   sort_by_due_date: 'Due date',
   sort_by_amount: 'Amount',
   sort_by_status: 'Status',
+  // Landing page v2
+  landingFeaturesTitle: 'Features',
+  landingHowItWorks: 'How it works',
+  landingStep1Title: 'Record the debt',
+  landingStep1Desc: 'The creditor creates a debt with amount, due date, and an optional description in seconds.',
+  landingStep2Title: 'Both sides confirm',
+  landingStep2Desc: 'The debtor receives an acceptance request and confirms — making the debt binding for both parties.',
+  landingStep3Title: 'Track & settle',
+  landingStep3Desc: 'Automatic reminders, a live commitment indicator, and creditor-confirmed payment receipt.',
+  landingF1Title: 'Bilateral confirmation',
+  landingF1Desc: 'A debt is only binding after the debtor accepts — full transparency from day one.',
+  landingF2Title: 'QR scanning',
+  landingF2Desc: "Scan the customer's QR code to link their profile and create a debt without manual entry.",
+  landingF3Title: 'Commitment indicator',
+  landingF3Desc: 'An internal 0–100 score reflecting payment history, visible only in bilateral context.',
+  landingF4Title: 'AI assistant',
+  landingF4Desc: 'Enter debts by voice, get smart summaries, and receive automated recommendations.',
+  landingF5Title: 'Auto reminders',
+  landingF5Desc: 'Scheduled alerts before and after due dates, with automatic impact on the commitment score.',
+  landingF6Title: 'Group debts',
+  landingF6Desc: 'Share debts with a group and auto-net balances without manual calculation.',
+  landingCtaTitle: 'Start organizing your debts today',
+  landingCtaDesc: 'Choose your role to continue to the demo dashboard.',
 };
 
 const translations: Record<Language, Translations> = { ar, en };
