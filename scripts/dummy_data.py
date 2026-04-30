@@ -32,8 +32,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_ENV = REPO_ROOT / "backend" / ".env"
 ROOT_ENV = REPO_ROOT / ".env"
 
-DUMMY_TAG = "thabetha-seed"  # marker stored in debts.notes / profile name suffix
-DUMMY_EMAIL_DOMAIN = "seed.thabetha.local"
+DUMMY_TAG = "thabetha"  # marker stored in debts.notes / profile name suffix
+DUMMY_EMAIL_DOMAIN = "dummy.thabetha.dev"
 
 
 def load_env() -> None:
@@ -67,6 +67,8 @@ DEBTORS: list[dict[str, str]] = [
     {"name": "نورة القحطاني", "phone": "+966500000006"},
     {"name": "يوسف الدوسري", "phone": "+966500000007"},
     {"name": "ريم المطيري", "phone": "+966500000008"},
+    {"name": "عبدالله الحكيمي", "phone": "+966599999991"},
+    {"name": "محمد الصالح", "phone": "+966599999993"},
 ]
 
 PURCHASE_DATA = [
@@ -106,7 +108,7 @@ def create_auth_user(supabase_url: str, service_key: str, email: str, name: str)
         headers=admin_headers(service_key),
         json={
             "email": email,
-            "password": "DemoSeed123!",
+            "password": "123456",
             "email_confirm": True,
             "user_metadata": {"name": name, DUMMY_TAG: True},
         },
@@ -145,8 +147,8 @@ def cleanup_previous(conn: psycopg.Connection, supabase_url: str, service_key: s
         print(f"  cleaned {deleted} previous dummy users + their debts")
 
 
-DEFAULT_CREDITOR_EMAIL = "demo.creditor@seed.thabetha.local"
-DEFAULT_CREDITOR_PASSWORD = "DemoSeed123!"
+DEFAULT_CREDITOR_EMAIL = "demo@thabetha.dev"
+DEFAULT_CREDITOR_PASSWORD = "123456"
 DEFAULT_CREDITOR_NAME = "Demo Creditor"
 
 
@@ -228,6 +230,25 @@ def make_debt_rows(creditor_id: uuid.UUID, debtors: list[dict]) -> list[dict]:
             "paid_at": None,
             "status": "pending_confirmation",
         }
+
+    # Find our specific test users from the created list
+    user_single = next((d for d in debtors if d["name"] == "عبدالله الحكيمي"), None)
+    user_triple = next((d for d in debtors if d["name"] == "محمد الصالح"), None)
+
+    # 1. Create exactly 1 overdue debt for "User Single Overdue"
+    if user_single:
+        r = base(user_single, days_due=-10, amount=150.0, desc="بناء منصة ثبتها")
+        r["status"] = "overdue"
+        r["confirmed_at"] = now - timedelta(days=15)
+        rows.append(r)
+
+    # 2. Create exactly 3 overdue debts for "User Triple Overdue"
+    if user_triple:
+        for i in range(3):
+            r = base(user_triple, days_due=-(7 + i * 5), amount=200.0 + (i * 50), desc="تأجير سرفر لمنصة ثبتها")
+            r["status"] = "overdue"
+            r["confirmed_at"] = now - timedelta(days=20)
+            rows.append(r)
 
     # 5 pending_confirmation (newly created, not yet accepted)
     for i in range(5):
