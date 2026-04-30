@@ -16,6 +16,7 @@ export function QRPage({ language }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both' || user?.account_type === 'business';
+  const isDebtor = user?.account_type === 'debtor' || user?.account_type === 'both';
   const [qr, setQr] = useState<QRToken | null>(null);
   const [message, setMessage] = useState("");
   const [scanToken, setScanToken] = useState("");
@@ -67,25 +68,27 @@ export function QRPage({ language }: Props) {
 
   return (
     <section className="split">
-      <Panel title={tr("qr")}>
-        {message && <div className="message">{message}</div>}
-        {qr ? (
-          <div className="qr-layout">
-            <div className="qr-box">
-              <QRCode value={qr.token} size={180} />
+      {isDebtor && (
+        <Panel title={tr("qr")}>
+          {message && <div className="message">{message}</div>}
+          {qr ? (
+            <div className="qr-layout">
+              <div className="qr-box">
+                <QRCode value={qr.token} size={180} />
+              </div>
+              <div>
+                <p className="token">{qr.token}</p>
+                <p>{new Date(qr.expires_at).toLocaleString()}</p>
+                <button className="primary-button" onClick={() => void rotate()}>
+                  <QrCode size={18} /><span>{tr("rotate")}</span>
+                </button>
+              </div>
             </div>
-            <div>
-              <p className="token">{qr.token}</p>
-              <p>{new Date(qr.expires_at).toLocaleString()}</p>
-              <button className="primary-button" onClick={() => void rotate()}>
-                <QrCode size={18} /><span>{tr("rotate")}</span>
-              </button>
-            </div>
-          </div>
-        ) : (
-          <p className="empty">{tr("loading")}</p>
-        )}
-      </Panel>
+          ) : (
+            <p className="empty">{tr("loading")}</p>
+          )}
+        </Panel>
+      )}
 
       {isCreditor && (
         <Panel title={tr("scanCustomerQr")}>

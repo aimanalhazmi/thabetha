@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Panel, Stat } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../lib/api';
@@ -14,11 +15,13 @@ interface Props {
 export function DashboardPage({ language, message }: Props) {
   const tr = (key: Parameters<typeof t>[1]) => t(language, key);
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'statistics'>('overview');
 
   useEffect(() => {
     const loadAll = (initial: boolean) => {
@@ -64,6 +67,55 @@ export function DashboardPage({ language, message }: Props) {
       {message && <div className="message" style={{ gridColumn: '1 / -1' }}>{message}</div>}
 
       {isCreditor && (
+        <div className="filter-tabs-container" style={{ gridColumn: '1 / -1', marginBottom: '8px' }}>
+          <button 
+            className={`filter-tab ${activeTab === 'overview' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('overview')}
+          >
+            {tr('dashboard')}
+          </button>
+          <button 
+            className={`filter-tab ${activeTab === 'statistics' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('statistics')}
+          >
+            {tr('stats_tab_label')}
+          </button>
+        </div>
+      )}
+
+      {activeTab === 'statistics' ? (
+        <section className="wide-panel" style={{ gridColumn: '1 / -1' }}>
+          <h2>{tr('stats_tab_label')}</h2>
+          <div className="content-grid">
+            <div className="stat" onClick={() => navigate('/debts?status=active')} style={{ cursor: 'pointer' }} role="button" tabIndex={0}>
+               <span>{tr('debts_filter_active')}</span>
+               <strong>{activeDebts.length}</strong>
+            </div>
+            <div className="stat" onClick={() => navigate('/debts?status=pending_confirmation')} style={{ cursor: 'pointer' }} role="button" tabIndex={0}>
+               <span>{tr('debts_filter_pending')}</span>
+               <strong>{waitingDebts.length}</strong>
+            </div>
+            <div className="stat" onClick={() => navigate('/debts?status=overdue')} style={{ cursor: 'pointer' }} role="button" tabIndex={0}>
+               <span>{tr('debts_filter_overdue')}</span>
+               <strong>{overdueDebts.length}</strong>
+            </div>
+            <div className="stat" onClick={() => navigate('/debts?status=payment_pending_confirmation')} style={{ cursor: 'pointer' }} role="button" tabIndex={0}>
+               <span>{tr('paymentPendingConfirmation')}</span>
+               <strong>{paymentPendingDebts.length}</strong>
+            </div>
+            <div className="stat" onClick={() => navigate('/debts?status=paid')} style={{ cursor: 'pointer' }} role="button" tabIndex={0}>
+               <span>{tr('debts_filter_paid')}</span>
+               <strong>{paidDebts.length}</strong>
+            </div>
+            <div className="stat" onClick={() => navigate('/debts?status=cancelled')} style={{ cursor: 'pointer' }} role="button" tabIndex={0}>
+               <span>{tr('debts_filter_cancelled')}</span>
+               <strong>{debts.filter(d => d.status === 'cancelled').length}</strong>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <>
+          {isCreditor && (
         <section className="wide-panel ai-upgrade-card">
           <div>
             <h2>{profile?.ai_enabled ? `✨ ${tr('aiActive')}` : `🤖 ${tr('upgradeToAi')}`}</h2>
@@ -147,6 +199,8 @@ export function DashboardPage({ language, message }: Props) {
         </ul>
         <p className="trust-disclaimer">{tr('commitmentDisclaimer')}</p>
       </Panel>
+        </>
+      )}
     </section>
   );
 }

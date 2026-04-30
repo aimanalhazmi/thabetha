@@ -1,6 +1,6 @@
-import { Check, ChevronRight, ChevronLeft, CreditCard, ExternalLink, FileText, Image as ImageIcon, Mic, Pencil, RotateCcw, Square, WalletCards, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, CreditCard, ExternalLink, FileText, Image as ImageIcon, Mic, Pencil, RotateCcw, Square, WalletCards, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AttachmentUploader } from '../components/AttachmentUploader';
 import { CancelDebtDialog } from '../components/CancelDebtDialog';
 import { GroupSelector } from '../components/GroupSelector';
@@ -87,25 +87,20 @@ function addDays(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function DebtsPage({ language }: Props) {
+export function UserDebtsPage({ language }: Props) {
   const tr = (key: Parameters<typeof t>[1]) => t(language, key);
   const { user } = useAuth();
   const navigate = useNavigate();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingStartRef = useRef<number>(0);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const { userId } = useParams<{ userId: string }>();
+  const [searchParams] = useSearchParams();
   const isCreditor = user?.account_type === 'creditor' || user?.account_type === 'both' || user?.account_type === 'business';
   const [debts, setDebts] = useState<Debt[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [message, setMessage] = useState('');
-  const filter = (searchParams.get('status') as DebtStatus | 'all') || 'all';
-  function setFilter(newFilter: DebtStatus | 'all') {
-    const next = new URLSearchParams(searchParams);
-    if (newFilter === 'all') next.delete('status');
-    else next.set('status', newFilter);
-    setSearchParams(next, { replace: true });
-  }
+  const [filter, setFilter] = useState<DebtStatus | 'all'>('all');
 
   // QR prefill state
   const [debtorSource, setDebtorSource] = useState<DebtorSource>('manual');
@@ -625,56 +620,60 @@ export function DebtsPage({ language }: Props) {
     }
   }
 
+  const userDebts = useMemo(() => {
+    return debts.filter(d => (isCreditor ? d.debtor_id : d.creditor_id) === userId);
+  }, [debts, isCreditor, userId]);
+
   const filtered = useMemo(() =>
-    filter === 'all' ? debts : debts.filter(d => d.status === filter),
-    [debts, filter]
+    filter === 'all' ? userDebts : userDebts.filter(d => d.status === filter),
+    [userDebts, filter]
   );
 
   const statusCounts = useMemo(() =>
-    debts.reduce<Record<string, number>>((acc, d) => { acc[d.status] = (acc[d.status] ?? 0) + 1; return acc; }, {}),
-    [debts]
+    userDebts.reduce<Record<string, number>>((acc, d) => { acc[d.status] = (acc[d.status] ?? 0) + 1; return acc; }, {}),
+    [userDebts]
   );
+
+  const totalAmount = useMemo(() => userDebts.reduce((sum, d) => {
+    if (['active', 'overdue', 'payment_pending_confirmation'].includes(d.status)) {
+      return sum + (parseFloat(d.amount) || 0);
+    }
+    return sum;
+  }, 0), [userDebts]);
+  const userName = userDebts.length > 0 ? (isCreditor ? userDebts[0].debtor_name : tr('creditor')) : tr('loading');
 
   function statusLabel(s: string): string {
     switch (s) {
-      case 'pending_confirmation': return tr('debts_filter_pending');
-      case 'active': return tr('debts_filter_active');
+      case 'pending_confirmation': return tr('pendingConfirmation');
+      case 'active': return tr('active');
       case 'edit_requested': return tr('editRequested');
-      case 'overdue': return tr('debts_filter_overdue');
+      case 'overdue': return tr('overdue');
       case 'payment_pending_confirmation': return tr('paymentPendingConfirmation');
-      case 'paid': return tr('debts_filter_paid');
-      case 'cancelled': return tr('debts_filter_cancelled');
+      case 'paid': return tr('paid');
+      case 'cancelled': return tr('cancelled');
       default: return s;
     }
   }
-
-  const groupedDebts = useMemo(() => {
-    const groups: Record<string, { userId: string; userName: string; totalAmount: number; debtCount: number; commitmentScore?: number }> = {};
-    filtered.forEach(d => {
-      const uId = isCreditor ? d.debtor_id : d.creditor_id;
-      const key = uId || 'unknown';
-      if (!groups[key]) {
-        groups[key] = {
-          userId: key,
-          userName: isCreditor ? d.debtor_name : tr('creditor'),
-          totalAmount: 0,
-          debtCount: 0,
-        };
-      }
-      if (['active', 'overdue', 'payment_pending_confirmation'].includes(d.status)) {
-        groups[key].totalAmount += parseFloat(d.amount) || 0;
-      }
-      groups[key].debtCount += 1;
-    });
-    return Object.values(groups).sort((a, b) => b.totalAmount - a.totalAmount);
-  }, [filtered, isCreditor, language]);
 
   return (
     <section>
 
       {!isCreditor && message && <div className="message">{message}</div>}
 
-      <Panel title={isCreditor ? `${tr('debts')} (${debts.length})` : `${tr('myDebtStatus')} (${debts.length})`}>
+      <div className="user-debts-header">
+        <div className="user-debts-header-left">
+          <div className="user-summary-avatar" style={{ width: 64, height: 64, fontSize: '1.5rem' }}>
+            {userName.substring(0, 2).toUpperCase()}
+          </div>
+          <div className="user-debts-header-info">
+            <h2>{userName}</h2>
+            <p>{userDebts.length} {tr('debts_group_total_debts')}</p>
+            <div className="user-debts-total">{totalAmount.toFixed(2)} SAR</div>
+          </div>
+        </div>
+      </div>
+
+      <Panel title={tr('debts')}>
         {/* Filter tabs */}
         <div className="filter-tabs">
           {statusKeys.map(s => (
@@ -689,36 +688,311 @@ export function DebtsPage({ language }: Props) {
           ))}
         </div>
 
-        <div className="compact-list">
-          {groupedDebts.map((group) => {
-            const initials = group.userName.substring(0, 2).toUpperCase();
+        <div className="debt-stack">
+          {filtered.map((debt) => {
+            const pending = isCreditor && debt.status === 'edit_requested' ? pendingEdits[debt.id] : undefined;
+            const isEditing = !isCreditor && editingDebtId === debt.id;
+            const thread = !isCreditor ? debtorThreads[debt.id] : undefined;
             return (
-              <div 
-                key={group.userId} 
-                className="user-summary-row" 
-                onClick={() => navigate(`/debts/user/${group.userId}`)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/debts/user/${group.userId}`); }}
-              >
-                <div className="user-summary-avatar">{initials}</div>
-                <div className="user-summary-info">
-                  <span className="user-summary-name">{group.userName}</span>
-                  <span className="user-summary-count">{group.debtCount} {tr('debts_group_total_debts')}</span>
-                </div>
-                {group.commitmentScore !== undefined && (
-                  <div className="user-summary-score">
-                    {/* CommitmentRing omitted when score is unknown based on prompt */}
+            <article key={debt.id} className="debt-item">
+              <div>
+                <strong>{debt.debtor_name}</strong>
+                <span>{debt.description}</span>
+              </div>
+              <b>{debt.amount} {debt.currency}</b>
+              <span className={`status-badge ${debt.status}`}>
+                {statusLabel(debt.status)}
+              </span>
+              <div className="actions">
+                {!isCreditor && (debt.status === 'pending_confirmation' || debt.status === 'edit_requested') && (
+                  <button disabled={actionInFlight} onClick={() => void debtorAcceptDebt(debt.id)}>
+                    <Check size={16} /><span>{actionInFlight ? '…' : tr('accept')}</span>
+                  </button>
+                )}
+                {!isCreditor && debt.status === 'pending_confirmation' && !isEditing && (
+                  <button onClick={() => openEditForm(debt.id)}>
+                    <Pencil size={16} /><span>{tr('requestEdit')}</span>
+                  </button>
+                )}
+                {!isCreditor && (debt.status === 'active' || debt.status === 'overdue') && (
+                  <button disabled={actionInFlight} onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/mark-paid`, { method: 'POST', body: JSON.stringify({ note: 'Paid' }) }), tr('toastPaymentRequested'))}>
+                    <WalletCards size={16} /><span>{actionInFlight ? '…' : tr('markPaid')}</span>
+                  </button>
+                )}
+                {!isCreditor && (debt.status === 'active' || debt.status === 'overdue') && (
+                  <button
+                    disabled={actionInFlight}
+                    onClick={() => {
+                      setActionInFlight(true);
+                      payOnline(debt.id)
+                        .then((result) => { setPayOnlineResult(result); setPayOnlineDebtId(debt.id); })
+                        .catch((err: unknown) => { setMessage(humanizeError(err, language, 'transition')); })
+                        .finally(() => { setActionInFlight(false); });
+                    }}
+                  >
+                    <CreditCard size={16} /><span>{actionInFlight ? '…' : tr('payOnline')}</span>
+                  </button>
+                )}
+                {payOnlineResult && payOnlineDebtId === debt.id && (
+                  <div className="pay-online-callout">
+                    <div className="pay-online-amounts">
+                      <div><span>{tr('grossAmount')}</span><span>{payOnlineResult.amount} {payOnlineResult.currency}</span></div>
+                      <div><span>{tr('feeLabel')}</span><span>{payOnlineResult.fee} {payOnlineResult.currency}</span></div>
+                      <div className="pay-online-net"><span>{tr('creditorReceives')}</span><span>{payOnlineResult.net_amount} {payOnlineResult.currency}</span></div>
+                    </div>
+                    <button
+                      className="pay-online-proceed"
+                      onClick={() => { window.location.href = payOnlineResult.checkout_url; }}
+                    >
+                      <ExternalLink size={14} /><span>{tr('payOnline')}</span>
+                    </button>
+                    <button
+                      className="pay-online-cancel"
+                      onClick={() => { setPayOnlineResult(null); setPayOnlineDebtId(null); }}
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
                 )}
-                <div className="user-summary-amount">
-                  {group.totalAmount.toFixed(2)} SAR
-                </div>
-                {language === 'ar' ? <ChevronLeft className="user-summary-chevron" /> : <ChevronRight className="user-summary-chevron" />}
+                {isCreditor && debt.status === 'payment_pending_confirmation' && (
+                  <button disabled={actionInFlight} onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/confirm-payment`, { method: 'POST' }), tr('toastPaymentConfirmed'))}>
+                    <Check size={16} /><span>{actionInFlight ? '…' : tr('confirmPayment')}</span>
+                  </button>
+                )}
+                {isCreditor && (debt.status === 'pending_confirmation' || debt.status === 'edit_requested') && (
+                  <>
+                    <button onClick={() => setCancelDialogDebtId(debt.id)}>
+                      <X size={16} /><span>{tr('cancel_debt')}</span>
+                    </button>
+                    {debt.debtor_id && (
+                      <GroupSelector
+                        debtorId={debt.debtor_id}
+                        value={debt.group_id ?? null}
+                        onChange={(gid) => {
+                          void apiRequest(`/debts/${debt.id}`, { method: 'PATCH', body: JSON.stringify({ group_id: gid }) })
+                            .then(() => load());
+                        }}
+                        language={language}
+                      />
+                    )}
+                  </>
+                )}
               </div>
-            );
+
+              <div className="receipt-section">
+                <div className="receipt-section-header">
+                  <strong>{tr('receiptList')}</strong>
+                  {attachmentsByDebt[debt.id]?.loading && <span>{tr('receiptLoading')}</span>}
+                  {attachmentsByDebt[debt.id]?.error && (
+                    <button type="button" onClick={() => void loadAttachmentsForDebt(debt.id)}>
+                      <RotateCcw size={14} />
+                      <span>{tr('receiptRetry')}</span>
+                    </button>
+                  )}
+                </div>
+                {(attachmentsByDebt[debt.id]?.items.length ?? 0) === 0 && !attachmentsByDebt[debt.id]?.loading && !attachmentsByDebt[debt.id]?.error && (
+                  <span className="receipt-empty">{tr('receiptNone')}</span>
+                )}
+                {(attachmentsByDebt[debt.id]?.items ?? []).map((attachment) => (
+                  <div key={attachment.id} className="receipt-row">
+                    <div className="receipt-thumb" aria-hidden="true">
+                      {attachment.content_type?.startsWith('image/') ? <ImageIcon size={18} /> : <FileText size={18} />}
+                    </div>
+                    <div className="receipt-meta">
+                      <strong>{attachment.file_name}</strong>
+                      <span>{attachment.retention_state === 'archived' ? tr('receiptArchived') : tr('receiptAvailable')}</span>
+                    </div>
+                    <a className="receipt-open" href={attachment.url} target="_blank" rel="noreferrer">
+                      <ExternalLink size={14} />
+                      <span>{tr('receiptOpen')}</span>
+                    </a>
+                  </div>
+                ))}
+                {(failedReceiptItemsByDebt[debt.id] ?? []).length > 0 && (
+                  <div className="receipt-retry-panel">
+                    <strong>{tr('receiptUploadRetry')}</strong>
+                    {(failedReceiptItemsByDebt[debt.id] ?? []).map((item) => (
+                      <div key={item.id} className={`receipt-row failed ${item.status}`}>
+                        <div className="receipt-thumb" aria-hidden="true">
+                          {item.previewUrl ? <img src={item.previewUrl} alt="" /> : <FileText size={18} />}
+                        </div>
+                        <div className="receipt-meta">
+                          <strong>{item.name}</strong>
+                          {item.error && <span className="receipt-error">{item.error}</span>}
+                        </div>
+                        <button type="button" className="ghost-button" disabled={item.status === 'uploading'} onClick={() => void retryFailedReceipt(debt.id, item)}>
+                          <RotateCcw size={14} />
+                          <span>{item.status === 'uploading' ? tr('receiptUploading') : tr('receiptRetry')}</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {isEditing && (
+                <div className="edit-request-form" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingTop: '0.75rem', marginTop: '0.5rem', borderTop: '1px dashed var(--border, #e3e6ee)' }}>
+                  <label style={{ fontWeight: 600 }}>{tr('editReason')}</label>
+                  <textarea
+                    rows={3}
+                    placeholder={tr('editReasonPlaceholder')}
+                    value={editForm.message}
+                    onChange={(e) => setEditForm({ ...editForm, message: e.target.value })}
+                  />
+                  <Input
+                    label={`${tr('proposedDescription')} (${tr('optional')})`}
+                    value={editForm.requested_description}
+                    onChange={(v) => setEditForm({ ...editForm, requested_description: v })}
+                    placeholder={debt.description}
+                  />
+                  <Input
+                    label={`${tr('proposedAmount')} (${tr('optional')})`}
+                    value={editForm.requested_amount}
+                    onChange={(v) => setEditForm({ ...editForm, requested_amount: v })}
+                    placeholder={`${debt.amount} ${debt.currency}`}
+                  />
+                  <Input
+                    label={`${tr('proposedDueDate')} (${tr('optional')})`}
+                    type="date"
+                    value={editForm.requested_due_date}
+                    onChange={(v) => setEditForm({ ...editForm, requested_due_date: v })}
+                  />
+                  <div className="actions">
+                    <button className="primary-button" disabled={!editForm.message.trim()} onClick={() => void submitEditRequest(debt.id)}>
+                      <Pencil size={16} /><span>{tr('sendEditRequest')}</span>
+                    </button>
+                    <button onClick={() => setEditingDebtId(null)}>
+                      <X size={16} /><span>{tr('cancel')}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {isCreditor && debt.status === 'edit_requested' && (() => {
+                const draft = creditorDrafts[debt.id];
+                return (
+                <div className="edit-request-details" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingTop: '0.75rem', marginTop: '0.5rem', borderTop: '1px dashed var(--border, #e3e6ee)' }}>
+                  <strong>{tr('editRequestFromDebtor')}</strong>
+                  {pending ? (
+                    <div style={{ padding: '0.5rem 0.75rem', background: 'var(--surface, #fff)', borderRadius: 6, border: '1px solid var(--border, #e3e6ee)' }}>
+                      <div style={{ fontSize: '0.85em', opacity: 0.7, marginBottom: '0.25rem' }}>{tr('debtorProposed')}</div>
+                      <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{pending.message}</p>
+                      {(pending.requested_amount || pending.requested_due_date || pending.requested_description) && (
+                        <ul style={{ margin: '0.5rem 0 0', paddingInlineStart: '1.25rem' }}>
+                          {pending.requested_description && (
+                            <li>{tr('description')}: <i>{debt.description}</i> → <b>{pending.requested_description}</b></li>
+                          )}
+                          {pending.requested_amount && (
+                            <li>{tr('amount')}: <i>{debt.amount} {debt.currency}</i> → <b>{pending.requested_amount} {debt.currency}</b></li>
+                          )}
+                          {pending.requested_due_date && (
+                            <li>{tr('dueDate')}: <i>{debt.due_date}</i> → <b>{pending.requested_due_date}</b></li>
+                          )}
+                        </ul>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="empty" style={{ margin: 0 }}>{tr('loading')}</p>
+                  )}
+
+                  {pending && draft && (
+                    <>
+                      <Input
+                        label={tr('finalDescription')}
+                        value={draft.description}
+                        onChange={(v) => patchCreditorDraft(debt.id, { description: v })}
+                      />
+                      <Input
+                        label={tr('finalAmount')}
+                        value={draft.amount}
+                        onChange={(v) => patchCreditorDraft(debt.id, { amount: v })}
+                      />
+                      <Input
+                        label={tr('finalDueDate')}
+                        type="date"
+                        value={draft.due_date}
+                        onChange={(v) => patchCreditorDraft(debt.id, { due_date: v })}
+                      />
+                      <label style={{ fontWeight: 600, marginTop: '0.25rem' }}>{tr('creditorReply')}</label>
+                      <textarea
+                        rows={2}
+                        placeholder={tr('creditorReplyPlaceholder')}
+                        value={draft.message}
+                        onChange={(e) => patchCreditorDraft(debt.id, { message: e.target.value })}
+                      />
+                      <div className="actions">
+                        <button
+                          className="primary-button"
+                          disabled={!draft.message.trim()}
+                          onClick={() => void approveEditRequest(debt.id, debt)}
+                        >
+                          <Check size={16} /><span>{tr('approveAndSave')}</span>
+                        </button>
+                        <button onClick={() => void rejectEditRequest(debt.id)}>
+                          <X size={16} /><span>{tr('rejectEdit')}</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+                );
+              })()}
+
+              {!isCreditor && !isEditing && thread && (
+                <div className="edit-thread" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingTop: '0.75rem', marginTop: '0.5rem', borderTop: '1px dashed var(--border, #e3e6ee)' }}>
+                  {thread.kind === 'pending' && (
+                    <>
+                      <strong>{tr('awaitingCreditor')}</strong>
+                      {thread.yourMessage && (
+                        <div style={{ padding: '0.5rem 0.75rem', background: 'var(--surface-2, #f6f7fb)', borderRadius: 6 }}>
+                          <div style={{ fontSize: '0.8em', opacity: 0.7, marginBottom: '0.2rem' }}>{tr('yourEditRequest')}</div>
+                          <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{thread.yourMessage}</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {thread.kind === 'approved' && (
+                    <>
+                      <strong style={{ color: 'var(--success, #1a7f3c)' }}>✓ {tr('creditorApprovedEdit')}</strong>
+                      {thread.creditorReply && (
+                        <div style={{ padding: '0.5rem 0.75rem', background: 'var(--surface-2, #f6f7fb)', borderRadius: 6 }}>
+                          <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{thread.creditorReply}</p>
+                        </div>
+                      )}
+                      {(thread.appliedAmount || thread.appliedDueDate || thread.appliedDescription) && (
+                        <div>
+                          <div style={{ fontSize: '0.8em', opacity: 0.7, marginBottom: '0.2rem' }}>{tr('newTerms')}</div>
+                          <ul style={{ margin: 0, paddingInlineStart: '1.25rem' }}>
+                            {thread.appliedDescription && <li>{tr('description')}: <b>{thread.appliedDescription}</b></li>}
+                            {thread.appliedAmount && <li>{tr('amount')}: <b>{thread.appliedAmount} {debt.currency}</b></li>}
+                            {thread.appliedDueDate && <li>{tr('dueDate')}: <b>{thread.appliedDueDate}</b></li>}
+                          </ul>
+                        </div>
+                      )}
+                      {debt.status === 'pending_confirmation' && (
+                        <p style={{ margin: 0, fontSize: '0.9em', opacity: 0.85 }}>{tr('reviewAndAccept')}</p>
+                      )}
+                    </>
+                  )}
+                  {thread.kind === 'rejected' && (
+                    <>
+                      <strong style={{ color: 'var(--danger, #b42318)' }}>✕ {tr('creditorRejectedEdit')}</strong>
+                      {thread.creditorReply && (
+                        <div style={{ padding: '0.5rem 0.75rem', background: 'var(--surface-2, #f6f7fb)', borderRadius: 6 }}>
+                          <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{thread.creditorReply}</p>
+                        </div>
+                      )}
+                      {debt.status === 'pending_confirmation' && (
+                        <p style={{ margin: 0, fontSize: '0.9em', opacity: 0.85 }}>{tr('reviewAndAccept')}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </article>
+          );
           })}
-          {groupedDebts.length === 0 && <p className="empty">{tr('noDebtsYet')}</p>}
+          {filtered.length === 0 && <p className="empty">{tr('noDebtsYet')}</p>}
         </div>
       </Panel>
 
