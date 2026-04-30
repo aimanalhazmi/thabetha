@@ -1,4 +1,4 @@
-import { Languages, LogOut } from 'lucide-react';
+import { Languages, LogOut, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Panel } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,12 +16,14 @@ export function SettingsPage({ language, onToggleLanguage }: Props) {
   const { user, signOut } = useAuth();
   const [groupsEnabled, setGroupsEnabled] = useState<boolean>(true);
 
+  // ── Data fetching — untouched ─────────────────────────────────
   useEffect(() => {
     apiRequest<{ groups_enabled: boolean }>('/profiles/me')
       .then((p) => setGroupsEnabled(p.groups_enabled))
       .catch(() => {});
   }, []);
 
+  // ── Handler — untouched ───────────────────────────────────────
   async function toggleGroups() {
     const next = !groupsEnabled;
     setGroupsEnabled(next);
@@ -34,39 +36,59 @@ export function SettingsPage({ language, onToggleLanguage }: Props) {
 
   return (
     <section className="split">
+      {/* General settings */}
       <Panel title={tr('settings')}>
-        <div className="settings-row">
-          <span>{tr('languageLabel')}</span>
-          <button className="ghost-button" onClick={onToggleLanguage}>
-            <Languages size={16} />
-            <span>{tr('switchLanguage')}</span>
-          </button>
+        <div className="settings-section">
+          <div className="settings-row">
+            <span>{tr('languageLabel')}</span>
+            <button className="ghost-button" onClick={onToggleLanguage}>
+              <Languages size={16} />
+              <span>{tr('switchLanguage')}</span>
+            </button>
+          </div>
+          <div className="settings-row">
+            <span>{tr('email')}</span>
+            <strong style={{ fontSize: '0.88rem', color: 'var(--text-secondary)' }}>{user?.email}</strong>
+          </div>
+          <div className="settings-row" style={{ borderBottom: 'none' }}>
+            <span>{tr('accountType')}</span>
+            <span className="dash-count-badge" style={{ textTransform: 'capitalize' }}>{user?.account_type}</span>
+          </div>
         </div>
-        <div className="settings-row">
-          <span>{tr('email')}</span>
-          <strong>{user?.email}</strong>
-        </div>
-        <div className="settings-row">
-          <span>{tr('accountType')}</span>
-          <strong>{user?.account_type}</strong>
-        </div>
-        <button className="primary-button" onClick={() => void signOut()}>
+
+        <button className="settings-signout" onClick={() => void signOut()}>
           <LogOut size={16} />
           <span>{tr('signOut')}</span>
         </button>
       </Panel>
 
+      {/* Commitment indicator info */}
       <Panel title={tr('commitmentIndicator')}>
-        <p>{tr('commitmentDisclaimer')}</p>
+        <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
+          {tr('commitmentDisclaimer')}
+        </p>
       </Panel>
 
+      {/* Groups feature toggle */}
       <Panel title={tr('settingsGroupsFeature')}>
-        <p className="muted">{tr('settingsGroupsFeatureHint')}</p>
-        <div className="settings-row">
-          <span>{tr('settingsGroupsFeature')}</span>
-          <button className="ghost-button" onClick={() => void toggleGroups()}>
-            {groupsEnabled ? tr('groupsDecline') : tr('groupsAccept')}
-          </button>
+        <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: '0 0 12px', lineHeight: 1.6 }}>
+          {tr('settingsGroupsFeatureHint')}
+        </p>
+        <div className="settings-section">
+          <label className="toggle-row" style={{ borderBottom: 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Users size={16} color="var(--text-secondary)" />
+              <span className="toggle-row__label">{tr('settingsGroupsFeature')}</span>
+            </div>
+            <div className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={groupsEnabled}
+                onChange={() => void toggleGroups()}
+              />
+              <span className="toggle-switch__track" />
+            </div>
+          </label>
         </div>
       </Panel>
     </section>

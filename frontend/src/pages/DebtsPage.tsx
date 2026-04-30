@@ -11,6 +11,10 @@ import { humanizeError } from '../lib/errors';
 import { t } from '../lib/i18n';
 import type { Attachment, Debt, DebtEvent, DebtStatus, Language, PayOnlineResult, Profile, ReceiptUploadItem, VoiceDraft } from '../lib/types';
 
+function getInitials(name: string) {
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+}
+
 type DebtorSource = 'manual' | 'qr-resolving' | 'qr-resolved' | 'qr-expired' | 'qr-self' | 'qr-error';
 
 interface Prefilled {
@@ -643,41 +647,60 @@ export function DebtsPage({ language }: Props) {
   }
 
   return (
-    <section>
+    <section className="debts-page">
 
       {!isCreditor && message && <div className="message">{message}</div>}
 
-      <Panel title={isCreditor ? `${tr('debts')} (${debts.length})` : `${tr('myDebtStatus')} (${debts.length})`}>
-        {/* Filter tabs */}
-        <div className="filter-tabs">
-          {statusKeys.map(s => (
-            <button
-              key={s}
-              className={`filter-tab${filter === s ? ' active' : ''}`}
-              onClick={() => setFilter(s)}
-            >
-              {s === 'all' ? tr('allStatuses') : statusLabel(s)}
-              {s !== 'all' && ` (${statusCounts[s] ?? 0})`}
-            </button>
-          ))}
-        </div>
+      {/* Page header */}
+      <div className="debts-page__header">
+        <h2 className="debts-page__title">
+          {isCreditor ? tr('debts') : tr('myDebtStatus')}
+          <span className="dash-count-badge">{debts.length}</span>
+        </h2>
+      </div>
 
-        <div className="debt-stack">
-          {filtered.map((debt) => {
-            const pending = isCreditor && debt.status === 'edit_requested' ? pendingEdits[debt.id] : undefined;
-            const isEditing = !isCreditor && editingDebtId === debt.id;
-            const thread = !isCreditor ? debtorThreads[debt.id] : undefined;
-            return (
-            <article key={debt.id} className="debt-item">
-              <div>
-                <strong>{debt.debtor_name}</strong>
-                <span>{debt.description}</span>
+      {/* Filter tabs */}
+      <div className="filter-tabs">
+        {statusKeys.map(s => (
+          <button
+            key={s}
+            className={`filter-tab${filter === s ? ' active' : ''}`}
+            onClick={() => setFilter(s)}
+          >
+            {s === 'all' ? tr('allStatuses') : statusLabel(s)}
+            {s !== 'all' && (statusCounts[s] ?? 0) > 0 && (
+              <span className="filter-tab-count">{statusCounts[s]}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Debt cards */}
+      <div className="debt-stack">
+        {filtered.map((debt) => {
+          const pending = isCreditor && debt.status === 'edit_requested' ? pendingEdits[debt.id] : undefined;
+          const isEditing = !isCreditor && editingDebtId === debt.id;
+          const thread = !isCreditor ? debtorThreads[debt.id] : undefined;
+
+          return (
+            <article key={debt.id} className={`debt-card debt-card--${debt.status}`}>
+
+              {/* Card header: avatar + info + amount/badge */}
+              <div className="debt-card__header">
+                <div className="debt-card__avatar">{getInitials(debt.debtor_name)}</div>
+                <div className="debt-card__info">
+                  <strong className="debt-card__name">{debt.debtor_name}</strong>
+                  <span className="debt-card__desc">{debt.description}</span>
+                  <span className="debt-card__due">{debt.due_date}</span>
+                </div>
+                <div className="debt-card__right">
+                  <span className="debt-card__amount">{debt.amount} {debt.currency}</span>
+                  <span className={`status-badge ${debt.status}`}>{statusLabel(debt.status)}</span>
+                </div>
               </div>
-              <b>{debt.amount} {debt.currency}</b>
-              <span className={`status-badge ${debt.status}`}>
-                {statusLabel(debt.status)}
-              </span>
-              <div className="actions">
+
+              {/* Actions */}
+              <div className="debt-card__actions">
                 {!isCreditor && (debt.status === 'pending_confirmation' || debt.status === 'edit_requested') && (
                   <button disabled={actionInFlight} onClick={() => void debtorAcceptDebt(debt.id)}>
                     <Check size={16} /><span>{actionInFlight ? '…' : tr('accept')}</span>
@@ -707,27 +730,6 @@ export function DebtsPage({ language }: Props) {
                     <CreditCard size={16} /><span>{actionInFlight ? '…' : tr('payOnline')}</span>
                   </button>
                 )}
-                {payOnlineResult && payOnlineDebtId === debt.id && (
-                  <div className="pay-online-callout">
-                    <div className="pay-online-amounts">
-                      <div><span>{tr('grossAmount')}</span><span>{payOnlineResult.amount} {payOnlineResult.currency}</span></div>
-                      <div><span>{tr('feeLabel')}</span><span>{payOnlineResult.fee} {payOnlineResult.currency}</span></div>
-                      <div className="pay-online-net"><span>{tr('creditorReceives')}</span><span>{payOnlineResult.net_amount} {payOnlineResult.currency}</span></div>
-                    </div>
-                    <button
-                      className="pay-online-proceed"
-                      onClick={() => { window.location.href = payOnlineResult.checkout_url; }}
-                    >
-                      <ExternalLink size={14} /><span>{tr('payOnline')}</span>
-                    </button>
-                    <button
-                      className="pay-online-cancel"
-                      onClick={() => { setPayOnlineResult(null); setPayOnlineDebtId(null); }}
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                )}
                 {isCreditor && debt.status === 'payment_pending_confirmation' && (
                   <button disabled={actionInFlight} onClick={() => void runAction(() => apiRequest(`/debts/${debt.id}/confirm-payment`, { method: 'POST' }), tr('toastPaymentConfirmed'))}>
                     <Check size={16} /><span>{actionInFlight ? '…' : tr('confirmPayment')}</span>
@@ -753,14 +755,31 @@ export function DebtsPage({ language }: Props) {
                 )}
               </div>
 
+              {/* Pay online callout */}
+              {payOnlineResult && payOnlineDebtId === debt.id && (
+                <div className="pay-online-callout">
+                  <div className="pay-online-amounts">
+                    <div><span>{tr('grossAmount')}</span><span>{payOnlineResult.amount} {payOnlineResult.currency}</span></div>
+                    <div><span>{tr('feeLabel')}</span><span>{payOnlineResult.fee} {payOnlineResult.currency}</span></div>
+                    <div className="pay-online-net"><span>{tr('creditorReceives')}</span><span>{payOnlineResult.net_amount} {payOnlineResult.currency}</span></div>
+                  </div>
+                  <button className="pay-online-proceed" onClick={() => { window.location.href = payOnlineResult.checkout_url; }}>
+                    <ExternalLink size={14} /><span>{tr('payOnline')}</span>
+                  </button>
+                  <button className="pay-online-cancel" onClick={() => { setPayOnlineResult(null); setPayOnlineDebtId(null); }}>
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
+              {/* Receipt section — untouched */}
               <div className="receipt-section">
                 <div className="receipt-section-header">
                   <strong>{tr('receiptList')}</strong>
                   {attachmentsByDebt[debt.id]?.loading && <span>{tr('receiptLoading')}</span>}
                   {attachmentsByDebt[debt.id]?.error && (
                     <button type="button" onClick={() => void loadAttachmentsForDebt(debt.id)}>
-                      <RotateCcw size={14} />
-                      <span>{tr('receiptRetry')}</span>
+                      <RotateCcw size={14} /><span>{tr('receiptRetry')}</span>
                     </button>
                   )}
                 </div>
@@ -777,8 +796,7 @@ export function DebtsPage({ language }: Props) {
                       <span>{attachment.retention_state === 'archived' ? tr('receiptArchived') : tr('receiptAvailable')}</span>
                     </div>
                     <a className="receipt-open" href={attachment.url} target="_blank" rel="noreferrer">
-                      <ExternalLink size={14} />
-                      <span>{tr('receiptOpen')}</span>
+                      <ExternalLink size={14} /><span>{tr('receiptOpen')}</span>
                     </a>
                   </div>
                 ))}
@@ -795,8 +813,7 @@ export function DebtsPage({ language }: Props) {
                           {item.error && <span className="receipt-error">{item.error}</span>}
                         </div>
                         <button type="button" className="ghost-button" disabled={item.status === 'uploading'} onClick={() => void retryFailedReceipt(debt.id, item)}>
-                          <RotateCcw size={14} />
-                          <span>{item.status === 'uploading' ? tr('receiptUploading') : tr('receiptRetry')}</span>
+                          <RotateCcw size={14} /><span>{item.status === 'uploading' ? tr('receiptUploading') : tr('receiptRetry')}</span>
                         </button>
                       </div>
                     ))}
@@ -804,8 +821,9 @@ export function DebtsPage({ language }: Props) {
                 )}
               </div>
 
+              {/* Debtor: edit request form */}
               {isEditing && (
-                <div className="edit-request-form" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingTop: '0.75rem', marginTop: '0.5rem', borderTop: '1px dashed var(--border, #e3e6ee)' }}>
+                <div className="edit-request-card">
                   <label style={{ fontWeight: 600 }}>{tr('editReason')}</label>
                   <textarea
                     rows={3}
@@ -831,7 +849,7 @@ export function DebtsPage({ language }: Props) {
                     value={editForm.requested_due_date}
                     onChange={(v) => setEditForm({ ...editForm, requested_due_date: v })}
                   />
-                  <div className="actions">
+                  <div className="debt-card__actions">
                     <button className="primary-button" disabled={!editForm.message.trim()} onClick={() => void submitEditRequest(debt.id)}>
                       <Pencil size={16} /><span>{tr('sendEditRequest')}</span>
                     </button>
@@ -842,84 +860,62 @@ export function DebtsPage({ language }: Props) {
                 </div>
               )}
 
+              {/* Creditor: edit decision */}
               {isCreditor && debt.status === 'edit_requested' && (() => {
                 const draft = creditorDrafts[debt.id];
                 return (
-                <div className="edit-request-details" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingTop: '0.75rem', marginTop: '0.5rem', borderTop: '1px dashed var(--border, #e3e6ee)' }}>
-                  <strong>{tr('editRequestFromDebtor')}</strong>
-                  {pending ? (
-                    <div style={{ padding: '0.5rem 0.75rem', background: 'var(--surface, #fff)', borderRadius: 6, border: '1px solid var(--border, #e3e6ee)' }}>
-                      <div style={{ fontSize: '0.85em', opacity: 0.7, marginBottom: '0.25rem' }}>{tr('debtorProposed')}</div>
-                      <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{pending.message}</p>
-                      {(pending.requested_amount || pending.requested_due_date || pending.requested_description) && (
-                        <ul style={{ margin: '0.5rem 0 0', paddingInlineStart: '1.25rem' }}>
-                          {pending.requested_description && (
-                            <li>{tr('description')}: <i>{debt.description}</i> → <b>{pending.requested_description}</b></li>
-                          )}
-                          {pending.requested_amount && (
-                            <li>{tr('amount')}: <i>{debt.amount} {debt.currency}</i> → <b>{pending.requested_amount} {debt.currency}</b></li>
-                          )}
-                          {pending.requested_due_date && (
-                            <li>{tr('dueDate')}: <i>{debt.due_date}</i> → <b>{pending.requested_due_date}</b></li>
-                          )}
-                        </ul>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="empty" style={{ margin: 0 }}>{tr('loading')}</p>
-                  )}
-
-                  {pending && draft && (
-                    <>
-                      <Input
-                        label={tr('finalDescription')}
-                        value={draft.description}
-                        onChange={(v) => patchCreditorDraft(debt.id, { description: v })}
-                      />
-                      <Input
-                        label={tr('finalAmount')}
-                        value={draft.amount}
-                        onChange={(v) => patchCreditorDraft(debt.id, { amount: v })}
-                      />
-                      <Input
-                        label={tr('finalDueDate')}
-                        type="date"
-                        value={draft.due_date}
-                        onChange={(v) => patchCreditorDraft(debt.id, { due_date: v })}
-                      />
-                      <label style={{ fontWeight: 600, marginTop: '0.25rem' }}>{tr('creditorReply')}</label>
-                      <textarea
-                        rows={2}
-                        placeholder={tr('creditorReplyPlaceholder')}
-                        value={draft.message}
-                        onChange={(e) => patchCreditorDraft(debt.id, { message: e.target.value })}
-                      />
-                      <div className="actions">
-                        <button
-                          className="primary-button"
-                          disabled={!draft.message.trim()}
-                          onClick={() => void approveEditRequest(debt.id, debt)}
-                        >
-                          <Check size={16} /><span>{tr('approveAndSave')}</span>
-                        </button>
-                        <button onClick={() => void rejectEditRequest(debt.id)}>
-                          <X size={16} /><span>{tr('rejectEdit')}</span>
-                        </button>
+                  <div className="creditor-decision-card">
+                    <strong>{tr('editRequestFromDebtor')}</strong>
+                    {pending ? (
+                      <div className="edit-proposal-box">
+                        <div className="edit-proposal-box__label">{tr('debtorProposed')}</div>
+                        <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{pending.message}</p>
+                        {(pending.requested_amount || pending.requested_due_date || pending.requested_description) && (
+                          <ul style={{ margin: '0.5rem 0 0', paddingInlineStart: '1.25rem' }}>
+                            {pending.requested_description && <li>{tr('description')}: <i>{debt.description}</i> → <b>{pending.requested_description}</b></li>}
+                            {pending.requested_amount && <li>{tr('amount')}: <i>{debt.amount} {debt.currency}</i> → <b>{pending.requested_amount} {debt.currency}</b></li>}
+                            {pending.requested_due_date && <li>{tr('dueDate')}: <i>{debt.due_date}</i> → <b>{pending.requested_due_date}</b></li>}
+                          </ul>
+                        )}
                       </div>
-                    </>
-                  )}
-                </div>
+                    ) : (
+                      <p className="empty" style={{ margin: 0 }}>{tr('loading')}</p>
+                    )}
+                    {pending && draft && (
+                      <>
+                        <Input label={tr('finalDescription')} value={draft.description} onChange={(v) => patchCreditorDraft(debt.id, { description: v })} />
+                        <Input label={tr('finalAmount')} value={draft.amount} onChange={(v) => patchCreditorDraft(debt.id, { amount: v })} />
+                        <Input label={tr('finalDueDate')} type="date" value={draft.due_date} onChange={(v) => patchCreditorDraft(debt.id, { due_date: v })} />
+                        <label style={{ fontWeight: 600 }}>{tr('creditorReply')}</label>
+                        <textarea
+                          rows={2}
+                          placeholder={tr('creditorReplyPlaceholder')}
+                          value={draft.message}
+                          onChange={(e) => patchCreditorDraft(debt.id, { message: e.target.value })}
+                        />
+                        <div className="debt-card__actions">
+                          <button className="primary-button" disabled={!draft.message.trim()} onClick={() => void approveEditRequest(debt.id, debt)}>
+                            <Check size={16} /><span>{tr('approveAndSave')}</span>
+                          </button>
+                          <button onClick={() => void rejectEditRequest(debt.id)}>
+                            <X size={16} /><span>{tr('rejectEdit')}</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 );
               })()}
 
+              {/* Debtor: edit thread */}
               {!isCreditor && !isEditing && thread && (
-                <div className="edit-thread" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingTop: '0.75rem', marginTop: '0.5rem', borderTop: '1px dashed var(--border, #e3e6ee)' }}>
+                <div className={`edit-thread-card edit-thread-card--${thread.kind}`}>
                   {thread.kind === 'pending' && (
                     <>
                       <strong>{tr('awaitingCreditor')}</strong>
                       {thread.yourMessage && (
-                        <div style={{ padding: '0.5rem 0.75rem', background: 'var(--surface-2, #f6f7fb)', borderRadius: 6 }}>
-                          <div style={{ fontSize: '0.8em', opacity: 0.7, marginBottom: '0.2rem' }}>{tr('yourEditRequest')}</div>
+                        <div className="edit-proposal-box">
+                          <div className="edit-proposal-box__label">{tr('yourEditRequest')}</div>
                           <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{thread.yourMessage}</p>
                         </div>
                       )}
@@ -927,15 +923,15 @@ export function DebtsPage({ language }: Props) {
                   )}
                   {thread.kind === 'approved' && (
                     <>
-                      <strong style={{ color: 'var(--success, #1a7f3c)' }}>✓ {tr('creditorApprovedEdit')}</strong>
+                      <strong style={{ color: 'var(--success)' }}>✓ {tr('creditorApprovedEdit')}</strong>
                       {thread.creditorReply && (
-                        <div style={{ padding: '0.5rem 0.75rem', background: 'var(--surface-2, #f6f7fb)', borderRadius: 6 }}>
+                        <div className="edit-proposal-box">
                           <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{thread.creditorReply}</p>
                         </div>
                       )}
                       {(thread.appliedAmount || thread.appliedDueDate || thread.appliedDescription) && (
                         <div>
-                          <div style={{ fontSize: '0.8em', opacity: 0.7, marginBottom: '0.2rem' }}>{tr('newTerms')}</div>
+                          <div className="edit-proposal-box__label">{tr('newTerms')}</div>
                           <ul style={{ margin: 0, paddingInlineStart: '1.25rem' }}>
                             {thread.appliedDescription && <li>{tr('description')}: <b>{thread.appliedDescription}</b></li>}
                             {thread.appliedAmount && <li>{tr('amount')}: <b>{thread.appliedAmount} {debt.currency}</b></li>}
@@ -944,31 +940,31 @@ export function DebtsPage({ language }: Props) {
                         </div>
                       )}
                       {debt.status === 'pending_confirmation' && (
-                        <p style={{ margin: 0, fontSize: '0.9em', opacity: 0.85 }}>{tr('reviewAndAccept')}</p>
+                        <p style={{ margin: 0, fontSize: '0.9em' }}>{tr('reviewAndAccept')}</p>
                       )}
                     </>
                   )}
                   {thread.kind === 'rejected' && (
                     <>
-                      <strong style={{ color: 'var(--danger, #b42318)' }}>✕ {tr('creditorRejectedEdit')}</strong>
+                      <strong style={{ color: 'var(--danger)' }}>✕ {tr('creditorRejectedEdit')}</strong>
                       {thread.creditorReply && (
-                        <div style={{ padding: '0.5rem 0.75rem', background: 'var(--surface-2, #f6f7fb)', borderRadius: 6 }}>
+                        <div className="edit-proposal-box">
                           <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{thread.creditorReply}</p>
                         </div>
                       )}
                       {debt.status === 'pending_confirmation' && (
-                        <p style={{ margin: 0, fontSize: '0.9em', opacity: 0.85 }}>{tr('reviewAndAccept')}</p>
+                        <p style={{ margin: 0, fontSize: '0.9em' }}>{tr('reviewAndAccept')}</p>
                       )}
                     </>
                   )}
                 </div>
               )}
+
             </article>
           );
-          })}
-          {filtered.length === 0 && <p className="empty">{tr('noDebtsYet')}</p>}
-        </div>
-      </Panel>
+        })}
+        {filtered.length === 0 && <p className="empty">{tr('noDebtsYet')}</p>}
+      </div>
 
       {cancelDialogDebtId !== null && (() => {
         const cancelDebt = debts.find(d => d.id === cancelDialogDebtId);

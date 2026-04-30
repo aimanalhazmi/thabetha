@@ -1,7 +1,7 @@
-import { Check, Users, X } from "lucide-react";
+import { Check, ChevronRight, Plus, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Input, Panel } from "../components/Layout";
+import { Input } from "../components/Layout";
 import { errorCode, groups as groupsApi } from "../lib/api";
 import { t, type TranslationKey } from "../lib/i18n";
 import type { Group, Language } from "../lib/types";
@@ -37,6 +37,7 @@ export function GroupsPage({ language }: Props) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
+  // ── Data fetching — untouched ─────────────────────────────────
   async function load() {
     try {
       setGroups(await groupsApi.list());
@@ -45,10 +46,9 @@ export function GroupsPage({ language }: Props) {
     }
   }
 
-  useEffect(() => {
-    void load();
-  }, []);
+  useEffect(() => { void load(); }, []);
 
+  // ── Handlers — untouched ──────────────────────────────────────
   async function handleCreate() {
     if (!groupName.trim()) return;
     try {
@@ -79,55 +79,88 @@ export function GroupsPage({ language }: Props) {
   const pending = groups.filter((g) => g.member_status === "pending");
 
   return (
-    <section className="split">
-      <Panel title={tr("groupsMyGroups")}>
-        {message && <div className="message">{message}</div>}
-        <ul className="simple-list">
+    <section className="groups-page">
+      {message && <div className="message" style={{ gridColumn: '1 / -1' }}>{message}</div>}
+
+      {/* My groups — main column */}
+      <div className="groups-main">
+        <div className="debts-page__header">
+          <h2 className="debts-page__title">
+            {tr("groupsMyGroups")}
+            <span className="dash-count-badge">{accepted.length}</span>
+          </h2>
+        </div>
+
+        <div className="groups-list">
           {accepted.map((g) => (
-            <li key={g.id}>
-              <Link to={`/groups/${g.id}`}>
-                <Users size={16} /> {g.name}
-                <span className="muted"> · {g.member_count ?? 1} {tr("groupsMembers")}</span>
-              </Link>
-            </li>
+            <Link key={g.id} to={`/groups/${g.id}`} className="group-card">
+              <div className="group-card__icon">
+                <Users size={18} />
+              </div>
+              <div className="group-card__info">
+                <strong className="group-card__name">{g.name}</strong>
+                <span className="group-card__meta">{g.member_count ?? 1} {tr("groupsMembers")}</span>
+              </div>
+              <ChevronRight size={16} color="var(--text-muted)" className="group-card__arrow" />
+            </Link>
           ))}
           {accepted.length === 0 && <p className="empty">{tr("groupsNoGroupsYet")}</p>}
-        </ul>
-      </Panel>
+        </div>
+      </div>
 
-      <Panel title={tr("groupsCreateGroup")}>
-        <Input label={tr("groupName")} value={groupName} onChange={setGroupName} />
-        <button className="primary-button" onClick={() => void handleCreate()}>
-          <Users size={18} /><span>{tr("groupsCreate")}</span>
-        </button>
-      </Panel>
+      {/* Sidebar — create + pending */}
+      <div className="groups-sidebar">
+        {/* Create group */}
+        <div className="create-debt-section">
+          <div className="create-debt-section__label">{tr("groupsCreateGroup")}</div>
+          <Input label={tr("groupName")} value={groupName} onChange={setGroupName} />
+          <button
+            className="primary-button"
+            style={{ width: '100%', justifyContent: 'center' }}
+            onClick={() => void handleCreate()}
+          >
+            <Plus size={16} /><span>{tr("groupsCreate")}</span>
+          </button>
+        </div>
 
-      <Panel title={tr("groupsPendingInvitations")}>
-        {pending.length === 0 && <p className="empty">{tr("groupsNoPendingInvitations")}</p>}
-        <ul className="simple-list">
-          {pending.map((g) => (
-            <li key={g.id} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-              <span>{g.name}</span>
-              <span style={{ display: "flex", gap: 6 }}>
-                <button
-                  className="ghost-button"
-                  disabled={busy === g.id}
-                  onClick={() => void handleInvite("accept", g.id)}
-                >
-                  <Check size={14} /> <span>{tr("groupsAccept")}</span>
-                </button>
-                <button
-                  className="ghost-button"
-                  disabled={busy === g.id}
-                  onClick={() => void handleInvite("decline", g.id)}
-                >
-                  <X size={14} /> <span>{tr("groupsDecline")}</span>
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </Panel>
+        {/* Pending invitations */}
+        {pending.length > 0 && (
+          <div className="create-debt-section">
+            <div className="create-debt-section__label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {tr("groupsPendingInvitations")}
+              <span className="dash-unread-badge">{pending.length}</span>
+            </div>
+            <div className="groups-invites">
+              {pending.map((g) => (
+                <div key={g.id} className="group-invite-card">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div className="group-invite-card__icon"><Users size={14} /></div>
+                    <span className="group-invite-card__name">{g.name}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      className="primary-button"
+                      style={{ padding: '5px 10px', fontSize: '0.78rem' }}
+                      disabled={busy === g.id}
+                      onClick={() => void handleInvite("accept", g.id)}
+                    >
+                      <Check size={13} /><span>{tr("groupsAccept")}</span>
+                    </button>
+                    <button
+                      className="ghost-button"
+                      style={{ padding: '5px 10px', fontSize: '0.78rem' }}
+                      disabled={busy === g.id}
+                      onClick={() => void handleInvite("decline", g.id)}
+                    >
+                      <X size={13} /><span>{tr("groupsDecline")}</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

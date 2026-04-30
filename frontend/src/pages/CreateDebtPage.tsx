@@ -1,4 +1,4 @@
-import { Camera, CreditCard, Keyboard, Lock, Mic, Square } from 'lucide-react';
+import { Camera, Check, CreditCard, Keyboard, Lock, Mic, Square } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AttachmentUploader } from '../components/AttachmentUploader';
@@ -326,16 +326,28 @@ export function CreateDebtPage({ language }: Props) {
   return (
     <section>
       <Panel title={tr('createDebt')}>
-        <div style={{ display: 'flex', gap: 8, marginBottom: '1rem', fontSize: '0.85rem', color: '#64748b' }}>
-          <span style={{ fontWeight: step === 1 ? 700 : 400, color: step === 1 ? '#2563eb' : undefined }}>1. {tr('debtorName')}</span>
-          <span>›</span>
-          <span style={{ fontWeight: step === 2 ? 700 : 400, color: step === 2 ? '#2563eb' : undefined }}>2. {tr('debtor_confirm_proceed')}</span>
-          <span>›</span>
-          <span style={{ fontWeight: step === 3 ? 700 : 400, color: step === 3 ? '#2563eb' : undefined }}>3. {tr('createDebt')}</span>
+
+        {/* Visual step indicator */}
+        <div className="create-debt-steps">
+          <div className={`create-debt-steps__item${step === 1 ? ' create-debt-steps__item--active' : step > 1 ? ' create-debt-steps__item--done' : ''}`}>
+            <div className="create-debt-steps__dot">{step > 1 ? <Check size={14} /> : '1'}</div>
+            <span>{tr('debtorName')}</span>
+          </div>
+          <div className="create-debt-steps__line" />
+          <div className={`create-debt-steps__item${step === 2 ? ' create-debt-steps__item--active' : step > 2 ? ' create-debt-steps__item--done' : ''}`}>
+            <div className="create-debt-steps__dot">{step > 2 ? <Check size={14} /> : '2'}</div>
+            <span>{tr('debtor_confirm_proceed')}</span>
+          </div>
+          <div className="create-debt-steps__line" />
+          <div className={`create-debt-steps__item${step === 3 ? ' create-debt-steps__item--active' : ''}`}>
+            <div className="create-debt-steps__dot">3</div>
+            <span>{tr('createDebt')}</span>
+          </div>
         </div>
 
+        {/* Step 1 — Identify debtor */}
         {step === 1 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="create-debt-section">
             <div role="tablist" style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button"
@@ -406,6 +418,7 @@ export function CreateDebtPage({ language }: Props) {
           </div>
         )}
 
+        {/* Step 2 — Confirm debtor */}
         {step === 2 && resolved && (
           <DebtorConfirmCard
             profile={resolved}
@@ -415,26 +428,34 @@ export function CreateDebtPage({ language }: Props) {
           />
         )}
 
+        {/* Step 3 — Debt form */}
         {step === 3 && resolved && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <LockedField label={tr('debtorName')} value={resolved.name} hint={tr('create_debt_locked_field_hint')} />
-              <LockedField label={tr('debtorId')} value={resolved.id} hint={tr('create_debt_locked_field_hint')} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            {/* Locked debtor fields */}
+            <div className="create-debt-section">
+              <div className="create-debt-section__label">{tr('debtorName')}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <LockedField label={tr('debtorName')} value={resolved.name} hint={tr('create_debt_locked_field_hint')} />
+                <LockedField label={tr('debtorId')} value={resolved.id} hint={tr('create_debt_locked_field_hint')} />
+              </div>
             </div>
 
-            <Input label={tr('amount')} value={debtForm.amount} onChange={(v) => setDebtForm((f) => ({ ...f, amount: v }))} />
-            {isFieldLowConfidence('amount') && <small style={{ color: '#b45309' }}>{tr('create_debt_ai_confidence_low_warning')}</small>}
+            {/* Amount, currency, description, due date */}
+            <div className="create-debt-section">
+              <div className="create-debt-section__label">{tr('amount')} / {tr('dueDate')}</div>
+              <Input label={tr('amount')} value={debtForm.amount} onChange={(v) => setDebtForm((f) => ({ ...f, amount: v }))} />
+              {isFieldLowConfidence('amount') && <small style={{ color: '#b45309' }}>{tr('create_debt_ai_confidence_low_warning')}</small>}
+              <Input label={tr('currency')} value={debtForm.currency} onChange={(v) => setDebtForm((f) => ({ ...f, currency: v }))} />
+              <Input label={tr('description')} value={debtForm.description} onChange={(v) => setDebtForm((f) => ({ ...f, description: v }))} />
+              {isFieldLowConfidence('description') && <small style={{ color: '#b45309' }}>{tr('create_debt_ai_confidence_low_warning')}</small>}
+              <Input label={tr('dueDate')} type="date" value={debtForm.due_date} onChange={(v) => setDebtForm((f) => ({ ...f, due_date: v }))} />
+              {isFieldLowConfidence('due_date') && <small style={{ color: '#b45309' }}>{tr('create_debt_ai_confidence_low_warning')}</small>}
+            </div>
 
-            <Input label={tr('currency')} value={debtForm.currency} onChange={(v) => setDebtForm((f) => ({ ...f, currency: v }))} />
-
-            <Input label={tr('description')} value={debtForm.description} onChange={(v) => setDebtForm((f) => ({ ...f, description: v }))} />
-            {isFieldLowConfidence('description') && <small style={{ color: '#b45309' }}>{tr('create_debt_ai_confidence_low_warning')}</small>}
-
-            <Input label={tr('dueDate')} type="date" value={debtForm.due_date} onChange={(v) => setDebtForm((f) => ({ ...f, due_date: v }))} />
-            {isFieldLowConfidence('due_date') && <small style={{ color: '#b45309' }}>{tr('create_debt_ai_confidence_low_warning')}</small>}
-
-            <div className="reminder-picker">
-              <label>{tr('reminderDates')}</label>
+            {/* Reminder picker */}
+            <div className="create-debt-section">
+              <div className="create-debt-section__label">{tr('reminderDates')}</div>
               <div className="reminder-presets">
                 {REMINDER_PRESETS.map(({ key, offsetDays }) => (
                   <button
@@ -453,21 +474,27 @@ export function CreateDebtPage({ language }: Props) {
                 onChange={setReminderCustom}
                 placeholder={tr('reminderDatePlaceholder')}
               />
-              {reminderDates.length > 0 && <div className="reminder-list">{reminderDates.join(', ')}</div>}
+              {reminderDates.length > 0 && (
+                <div className="reminder-list">{reminderDates.join(', ')}</div>
+              )}
             </div>
 
-            <AttachmentUploader language={language} items={receiptItems} onItemsChange={setReceiptItems} />
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontWeight: 600 }}>{tr('voiceDraftTitle')}</label>
-              <input
-                type="file"
-                accept="audio/*"
-                onChange={(e) => setVoiceNoteFile(e.target.files?.[0] ?? null)}
-              />
-              {voiceNoteFile && <small>{voiceNoteFile.name}</small>}
+            {/* Attachments & voice note */}
+            <div className="create-debt-section">
+              <div className="create-debt-section__label">{tr('receiptList')}</div>
+              <AttachmentUploader language={language} items={receiptItems} onItemsChange={setReceiptItems} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontWeight: 600, fontSize: '0.84rem', color: 'var(--text-secondary)' }}>{tr('voiceDraftTitle')}</label>
+                <input
+                  type="file"
+                  accept="audio/*"
+                  onChange={(e) => setVoiceNoteFile(e.target.files?.[0] ?? null)}
+                />
+                {voiceNoteFile && <small style={{ color: 'var(--text-secondary)' }}>{voiceNoteFile.name}</small>}
+              </div>
             </div>
 
+            {/* AI voice draft (gated on ai_enabled) */}
             {profile?.ai_enabled && (
               <div className="voice-draft-panel">
                 <h3>{tr('voiceDraftTitle')}</h3>
@@ -495,8 +522,9 @@ export function CreateDebtPage({ language }: Props) {
 
             {submitError && <div className="message error">{submitError}</div>}
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" onClick={() => setStep(2)} style={{ flex: 1 }}>
+            {/* Submit / back */}
+            <div className="create-debt-submit-row">
+              <button type="button" className="ghost-button" onClick={() => setStep(2)}>
                 {tr('cancel')}
               </button>
               <button
@@ -504,7 +532,6 @@ export function CreateDebtPage({ language }: Props) {
                 className="primary-button"
                 disabled={submitting || !debtForm.description.trim() || !debtForm.amount.trim()}
                 onClick={() => void submit()}
-                style={{ flex: 1 }}
               >
                 <CreditCard size={18} /> <span>{submitting ? '…' : tr('create')}</span>
               </button>
@@ -518,12 +545,12 @@ export function CreateDebtPage({ language }: Props) {
 
 function LockedField({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
-    <label className="field" style={{ opacity: 0.85 }}>
+    <label className="field locked-field">
       <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <Lock size={12} /> {label}
       </span>
-      <input type="text" value={value} readOnly disabled style={{ background: '#f1f5f9', cursor: 'not-allowed' }} />
-      <small style={{ color: '#64748b' }}>{hint}</small>
+      <input type="text" value={value} readOnly disabled />
+      <small>{hint}</small>
     </label>
   );
 }

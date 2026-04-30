@@ -32,6 +32,10 @@ function translateError(language: Language, err: unknown): string {
   return err instanceof Error ? err.message : "Action failed";
 }
 
+function getInitials(name: string) {
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+}
+
 export function GroupDetailPage({ language }: Props) {
   const tr = (key: TranslationKey) => t(language, key);
   const { id } = useParams<{ id: string }>();
@@ -48,6 +52,7 @@ export function GroupDetailPage({ language }: Props) {
   const [transferTarget, setTransferTarget] = useState("");
   const [showTransfer, setShowTransfer] = useState(false);
 
+  // ── Data fetching — untouched ─────────────────────────────────
   async function load() {
     if (!id) return;
     try {
@@ -59,17 +64,22 @@ export function GroupDetailPage({ language }: Props) {
     }
   }
 
-  useEffect(() => {
-    void load();
-  }, [id]);
+  useEffect(() => { void load(); }, [id]);
 
   if (!id) return null;
   if (!detail) {
-    return <section className="split"><Panel title={tr("groups")}>{message || tr("noData")}</Panel></section>;
+    return (
+      <section className="split">
+        <Panel title={tr("groups")}>
+          {message ? <div className="message error">{message}</div> : <div className="dash-loading"><div className="spinner" /></div>}
+        </Panel>
+      </section>
+    );
   }
 
   const isOwner = user?.id === detail.owner_id;
 
+  // ── Handlers — untouched ──────────────────────────────────────
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
     setMessage("");
@@ -130,41 +140,71 @@ export function GroupDetailPage({ language }: Props) {
 
   return (
     <section className="split">
-      <Panel title={`${detail.name}`}>
+      {/* Group info + owner actions */}
+      <Panel title={detail.name}>
         {message && <div className="message">{message}</div>}
-        <p className="muted">
-          <Crown size={14} /> {tr("groupsOwner")}: {isOwner ? "—" : detail.owner_id}
-          {" · "}
-          {detail.member_count} {tr("groupsMembers")}
-        </p>
+
+        {/* Meta row */}
+        <div className="group-detail-meta">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Crown size={14} color="var(--warning)" />
+            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+              {isOwner ? tr("groupsOwner") : detail.owner_id}
+            </span>
+          </div>
+          <span className="dash-count-badge">
+            <Users size={11} style={{ marginInlineEnd: 3 }} />
+            {detail.member_count} {tr("groupsMembers")}
+          </span>
+        </div>
+
+        {/* Member actions */}
         {!isOwner && (
           <button className="ghost-button" disabled={busy} onClick={() => void handleLeave()}>
-            <X size={14} /> <span>{tr("groupsLeave")}</span>
+            <X size={14} /><span>{tr("groupsLeave")}</span>
           </button>
         )}
+
         {isOwner && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <button className="ghost-button" disabled={busy} onClick={() => { setShowRename((v) => !v); setShowTransfer(false); }}>
-              <Edit2 size={14} /> <span>{tr("groupsRename")}</span>
+          <div className="group-action-row">
+            <button
+              className="ghost-button"
+              disabled={busy}
+              onClick={() => { setShowRename((v) => !v); setShowTransfer(false); }}
+            >
+              <Edit2 size={13} /><span>{tr("groupsRename")}</span>
             </button>
-            <button className="ghost-button" disabled={busy} onClick={() => { setShowTransfer((v) => !v); setShowRename(false); }}>
-              <Crown size={14} /> <span>{tr("groupsTransferOwnership")}</span>
+            <button
+              className="ghost-button"
+              disabled={busy}
+              onClick={() => { setShowTransfer((v) => !v); setShowRename(false); }}
+            >
+              <Crown size={13} /><span>{tr("groupsTransferOwnership")}</span>
             </button>
-            <button className="ghost-button" disabled={busy} onClick={() => void handleDelete()}>
-              <Trash2 size={14} /> <span>{tr("groupsDelete")}</span>
+            <button
+              className="ghost-button"
+              style={{ color: 'var(--danger)' }}
+              disabled={busy}
+              onClick={() => void handleDelete()}
+            >
+              <Trash2 size={13} /><span>{tr("groupsDelete")}</span>
             </button>
           </div>
         )}
+
         {isOwner && showRename && (
-          <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
-            <Input label={tr("groupsRename")} value={renameValue} onChange={setRenameValue} />
+          <div className="create-debt-section" style={{ marginTop: 4 }}>
+            <div className="create-debt-section__label">{tr("groupsRename")}</div>
+            <Input label={tr("groupName")} value={renameValue} onChange={setRenameValue} />
             <button className="primary-button" disabled={busy} onClick={() => void handleRename()}>
               <span>{tr("groupsRename")}</span>
             </button>
           </div>
         )}
+
         {isOwner && showTransfer && (
-          <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
+          <div className="create-debt-section" style={{ marginTop: 4 }}>
+            <div className="create-debt-section__label">{tr("groupsTransferOwnership")}</div>
             <Input label={tr("groupsTransferOwnership")} value={transferTarget} onChange={setTransferTarget} />
             <button className="primary-button" disabled={busy} onClick={() => void handleTransfer()}>
               <span>{tr("groupsTransferOwnership")}</span>
@@ -173,74 +213,111 @@ export function GroupDetailPage({ language }: Props) {
         )}
       </Panel>
 
+      {/* Members */}
       <Panel title={tr("groupsMembers")}>
-        <ul className="simple-list">
+        <div className="groups-members-list">
           {detail.members.map((m) => (
-            <li key={m.id} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-              <span>
-                <Users size={14} /> {m.name ?? m.user_id}
-                {m.user_id === detail.owner_id && <span className="muted"> · {tr("groupsOwner")}</span>}
-              </span>
+            <div key={m.id} className="group-member-card">
+              <div className="group-member-card__avatar">
+                {getInitials(m.name ?? m.user_id)}
+              </div>
+              <div className="group-member-card__info">
+                <strong>{m.name ?? m.user_id}</strong>
+                {m.user_id === detail.owner_id && (
+                  <span className="group-member-card__owner">
+                    <Crown size={11} /> {tr("groupsOwner")}
+                  </span>
+                )}
+              </div>
               {typeof m.commitment_score === "number" && (
-                <span className="muted">
-                  {tr("commitmentIndicator")}: {m.commitment_score}
-                </span>
+                <span className="dash-count-badge">{m.commitment_score}</span>
               )}
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
       </Panel>
 
+      {/* Invite panel (owner only) */}
       {isOwner && (
         <Panel title={tr("groupsInvite")}>
-          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+          <div className="filter-tabs" style={{ marginBottom: 8 }}>
             <button
-              className={inviteMode === "email" ? "primary-button" : "ghost-button"}
+              className={`filter-tab${inviteMode === "email" ? " active" : ""}`}
               onClick={() => setInviteMode("email")}
               type="button"
             >
-              <Mail size={14} /> <span>{tr("email")}</span>
+              <Mail size={13} /><span>{tr("email")}</span>
             </button>
             <button
-              className={inviteMode === "phone" ? "primary-button" : "ghost-button"}
+              className={`filter-tab${inviteMode === "phone" ? " active" : ""}`}
               onClick={() => setInviteMode("phone")}
               type="button"
             >
-              <Phone size={14} /> <span>{tr("phone")}</span>
+              <Phone size={13} /><span>{tr("phone")}</span>
             </button>
           </div>
           <Input label={tr("groupsInviteByEmailOrPhone")} value={inviteValue} onChange={setInviteValue} />
-          <button className="primary-button" disabled={busy} onClick={() => void handleInvite()}>
-            <UserPlus size={18} /> <span>{tr("groupsInvite")}</span>
+          <button
+            className="primary-button"
+            style={{ width: '100%', justifyContent: 'center' }}
+            disabled={busy}
+            onClick={() => void handleInvite()}
+          >
+            <UserPlus size={16} /><span>{tr("groupsInvite")}</span>
           </button>
 
           {detail.pending_invites && detail.pending_invites.length > 0 && (
-            <>
-              <h3 style={{ marginTop: 16 }}>{tr("groupsPendingInvites")}</h3>
-              <ul className="simple-list">
+            <div style={{ marginTop: 12 }}>
+              <div className="create-debt-section__label" style={{ marginBottom: 8 }}>
+                {tr("groupsPendingInvites")}
+              </div>
+              <div className="groups-invites">
                 {detail.pending_invites.map((p) => (
-                  <li key={p.id} style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span>{p.name ?? p.user_id}</span>
-                    <button className="ghost-button" disabled={busy} onClick={() => void handleRevoke(p.user_id)}>
-                      <X size={12} /> <span>{tr("groupsRevokeInvite")}</span>
+                  <div key={p.id} className="group-invite-card">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div className="group-invite-card__icon">{getInitials(p.name ?? p.user_id)}</div>
+                      <span className="group-invite-card__name">{p.name ?? p.user_id}</span>
+                    </div>
+                    <button
+                      className="ghost-button"
+                      style={{ padding: '5px 10px', fontSize: '0.78rem', color: 'var(--danger)' }}
+                      disabled={busy}
+                      onClick={() => void handleRevoke(p.user_id)}
+                    >
+                      <X size={13} /><span>{tr("groupsRevokeInvite")}</span>
                     </button>
-                  </li>
+                  </div>
                 ))}
-              </ul>
-            </>
+              </div>
+            </div>
           )}
         </Panel>
       )}
 
+      {/* Group debts */}
       <Panel title={tr("groupsDebts")}>
-        {debts.length === 0 && <p className="empty">{tr("noData")}</p>}
-        <ul className="simple-list">
-          {debts.map((d) => (
-            <li key={d.id}>
-              {d.debtor_name} · {d.amount} {d.currency} · {d.status}
-            </li>
-          ))}
-        </ul>
+        {debts.length === 0
+          ? <p className="empty">{tr("noData")}</p>
+          : (
+            <div className="debt-stack">
+              {debts.map((d) => (
+                <div key={d.id} className={`debt-card debt-card--${d.status}`} style={{ padding: '12px 14px' }}>
+                  <div className="debt-card__header">
+                    <div className="debt-card__avatar">{getInitials(d.debtor_name)}</div>
+                    <div className="debt-card__info">
+                      <strong className="debt-card__name">{d.debtor_name}</strong>
+                      <span className="debt-card__desc">{d.description}</span>
+                    </div>
+                    <div className="debt-card__right">
+                      <span className="debt-card__amount">{d.amount} {d.currency}</span>
+                      <span className={`status-badge ${d.status}`}>{d.status}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        }
       </Panel>
 
       <SettlementProposalPanel
