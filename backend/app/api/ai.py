@@ -1,17 +1,32 @@
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from starlette.datastructures import UploadFile
 
+from app.core.config import get_settings
 from app.core.security import AuthenticatedUser, get_current_user
 from app.repositories import Repository, get_repository
-from app.schemas.domain import MerchantChatOut, MerchantChatRequest, VoiceDebtDraftOut, VoiceDebtDraftRequest
+from app.schemas.domain import MerchantChatOut, MerchantChatRequest, ProfileOut, VoiceDebtDraftOut, VoiceDebtDraftRequest
 from app.services.ai.draft_extract import extract_voice_debt_draft
 from app.services.ai.limits import MERCHANT_CHAT_FEATURE, ensure_ai_quota_available, record_ai_usage
+from app.services.ai.llm_extract import LLMExtractionError, extract_voice_debt_draft_via_llm
 from app.services.ai.merchant_chat import MerchantChatProviderError, run_merchant_chat
 from app.services.ai.transcribe import get_transcription_provider, validate_audio_input
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+def _extract_draft(transcript: str, profile: ProfileOut) -> VoiceDebtDraftOut:
+    settings = get_settings()
+    if settings.ai_extraction_provider == "llm":
+        try:
+            return extract_voice_debt_draft_via_llm(transcript=transcript, profile=profile)
+        except LLMExtractionError as exc:
+            logger.warning("Falling back to regex extractor: %s", exc)
+    return extract_voice_debt_draft(transcript=transcript, profile=profile)
 
 
 def _require_ai_enabled(user: AuthenticatedUser, repo: Repository) -> None:
@@ -38,7 +53,7 @@ def _parse_duration(value: object) -> float | None:
 async def _draft_from_json(request: Request, user: AuthenticatedUser, repo: Repository) -> VoiceDebtDraftOut:
     payload = VoiceDebtDraftRequest.model_validate(await request.json())
     profile = repo.ensure_profile(user)
-    draft = extract_voice_debt_draft(transcript=payload.transcript, profile=profile)
+    draft = _extract_draft(payload.transcript, profile)
     record_ai_usage(repo, user.id)
     return draft
 
@@ -62,7 +77,7 @@ async def _draft_from_multipart(request: Request, user: AuthenticatedUser, repo:
     try:
         result = await get_transcription_provider().transcribe(content=content, file_name=file_name, content_type=content_type)
         profile = repo.ensure_profile(user)
-        draft = extract_voice_debt_draft(transcript=result.raw_transcript, profile=profile)
+        draft = _extract_draft(result.raw_transcript, profile)
         await repo.delete_temp_voice_note(user.id, storage_path)
         record_ai_usage(repo, user.id)
         return draft

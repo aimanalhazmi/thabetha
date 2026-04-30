@@ -21,14 +21,22 @@ class Settings(BaseSettings):
     receipt_archive_retention_months: int = 6
 
     openai_api_key: str | None = None
+    openai_base_url: str = "https://saia.gwdg.de/v1"
+    openai_transcription_model: str = "whisper-large-v2"
     ai_transcription_provider: str = "openai"
+
+    chat_ai_base_url: str = "https://chat-ai.academiccloud.de/v1"
+    chat_ai_api_key: str | None = None
+    chat_ai_extraction_model: str = "qwen3-30b-a3b-instruct-2507"
+    ai_extraction_provider: Literal["llm", "regex"] = "llm"
     ai_voice_draft_daily_limit: int = 50
     ai_voice_max_duration_seconds: int = 60
     ai_voice_notes_bucket: str = "voice-notes"
 
     anthropic_api_key: str | None = None
-    merchant_chat_provider: Literal["anthropic", "mock", "stub"] = "mock"
+    merchant_chat_provider: Literal["chat_ai", "anthropic", "mock", "stub"] = "chat_ai"
     merchant_chat_model: str = "claude-sonnet-4-6"
+    chat_ai_merchant_chat_model: str = "qwen3-30b-a3b-instruct-2507"
     ai_merchant_chat_daily_limit: int = 50
     merchant_chat_log_salt: str = "dev-salt"
     whatsapp_provider: str = "mock"

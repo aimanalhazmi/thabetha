@@ -24,5 +24,18 @@ services:
       SUPABASE_URL: http://host.docker.internal:55321
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
       SEED_DEMO_DATA: "false"
+      # AI: Whisper transcription (saia.gwdg.de) + chat extraction (chat-ai.academiccloud.de).
+      # Both default to GWDG academic-cloud endpoints; the same API key works for both.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://saia.gwdg.de/v1}
+      OPENAI_TRANSCRIPTION_MODEL: ${OPENAI_TRANSCRIPTION_MODEL:-whisper-large-v2}
+      AI_TRANSCRIPTION_PROVIDER: ${AI_TRANSCRIPTION_PROVIDER:-openai}
+      CHAT_AI_API_KEY: ${CHAT_AI_API_KEY:-}
+      CHAT_AI_BASE_URL: ${CHAT_AI_BASE_URL:-https://chat-ai.academiccloud.de/v1}
+      CHAT_AI_EXTRACTION_MODEL: ${CHAT_AI_EXTRACTION_MODEL:-qwen3-30b-a3b-instruct-2507}
+      CHAT_AI_MERCHANT_CHAT_MODEL: ${CHAT_AI_MERCHANT_CHAT_MODEL:-qwen3-30b-a3b-instruct-2507}
+      AI_EXTRACTION_PROVIDER: ${AI_EXTRACTION_PROVIDER:-llm}
+      MERCHANT_CHAT_PROVIDER: ${MERCHANT_CHAT_PROVIDER:-chat_ai}
+      MERCHANT_CHAT_LOG_SALT: ${MERCHANT_CHAT_LOG_SALT:-dev-salt}
     extra_hosts:
       - "host.docker.internal:host-gateway"
