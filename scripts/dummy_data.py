@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#   "httpx>=0.28.1",
+#   "psycopg[binary]>=3.2.0",
+# ]
+# ///
 """Seed dummy data for local Thabetha development.
 
 Creates a set of fake debtor users plus debts in every lifecycle state so

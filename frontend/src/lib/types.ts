@@ -191,16 +191,34 @@ export interface GroupMember {
   created_at: string;
   accepted_at?: string | null;
   name?: string | null;
+  email?: string | null;
+  phone?: string | null;
   commitment_score?: number | null;
+}
+
+export interface GroupMemberDebtSummary {
+  user_id: string;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  total_owed: string;
+  status_totals: Partial<Record<DebtStatus, string>>;
+  debts: Debt[];
+}
+
+export interface GroupDebtOverview {
+  total_current_owed: string;
+  status_totals: Partial<Record<DebtStatus, string>>;
+  member_debts: GroupMemberDebtSummary[];
 }
 
 export interface GroupDetail extends Group {
   members: GroupMember[];
   pending_invites?: GroupMember[] | null;
+  debt_overview?: GroupDebtOverview | null;
 }
 
 export interface GroupInviteIn {
-  user_id?: string;
   email?: string;
   phone?: string;
 }

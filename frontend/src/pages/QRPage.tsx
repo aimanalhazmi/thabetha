@@ -11,10 +11,15 @@ import type { Language, Profile, QRToken } from "../lib/types";
 
 interface Props { language: Language }
 
-const QR_TTL = 59;
+const QR_TTL = 60;
 
 function getInitials(name: string) {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+}
+
+function secondsUntilExpiry(expiresAt: string) {
+  const seconds = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000);
+  return Number.isFinite(seconds) ? Math.max(0, Math.min(QR_TTL, seconds)) : QR_TTL;
 }
 
 function ScoreBar({ score }: { score: number }) {
@@ -60,6 +65,15 @@ export function QRPage({ language }: Props) {
         }
         return prev - 1;
       });
+      void apiRequest<QRToken>("/qr/current")
+        .then(current => {
+          setQr(previous => {
+            if (previous?.token === current.token) return previous;
+            setCountdown(secondsUntilExpiry(current.expires_at));
+            return current;
+          });
+        })
+        .catch(() => {});
     }, 1000);
 
     return () => {

@@ -51,8 +51,8 @@ def seed_demo_data(repo: InMemoryRepository) -> None:
     repo.mark_paid(customer.id, paid_debt.id, PaymentRequest(note="Paid cash"))
     repo.confirm_payment(merchant.id, paid_debt.id)
 
-    group = repo.create_group(customer.id, GroupCreate(name="Family", description="Family and friend settlements"))
-    repo.invite_group_member(customer.id, group.id, GroupInviteIn(user_id=friend.id))
+    group = repo.create_group(merchant.id, GroupCreate(name="Family", description="Family and friend settlements"))
+    repo.invite_group_member(merchant.id, group.id, GroupInviteIn(user_id=friend.id))
     repo.accept_group_invite(friend.id, group.id)
 
     # Phase 13 — extra ledger so the merchant-chat demo prompts have grounded answers.
@@ -72,4 +72,3 @@ def seed_demo_data(repo: InMemoryRepository) -> None:
             # Auto-accept by treating debtor_name as a synthetic acceptance — only meaningful
             # when debtor_id is known; here debtors are unlinked so debt stays pending_confirmation.
             _ = debt
-

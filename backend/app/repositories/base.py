@@ -30,6 +30,7 @@ from app.schemas.domain import (
     DebtStatus,
     GroupCreate,
     GroupDetailOut,
+    GroupInviteByContactIn,
     GroupInviteIn,
     GroupMemberOut,
     GroupOut,
@@ -72,7 +73,7 @@ class Repository(ABC):
     # ── QR tokens ─────────────────────────────────────────────────────
 
     @abstractmethod
-    def rotate_qr_token(self, user_id: str, ttl_minutes: int = 10) -> dict[str, object]: ...
+    def rotate_qr_token(self, user_id: str, ttl_minutes: int = 1) -> dict[str, object]: ...
 
     @abstractmethod
     def current_qr_token(self, user_id: str) -> dict[str, object]: ...
@@ -176,7 +177,7 @@ class Repository(ABC):
     def list_groups(self, user_id: str) -> list[GroupOut]: ...
 
     @abstractmethod
-    def invite_group_member(self, actor_id: str, group_id: str, payload: GroupInviteIn) -> GroupMemberOut: ...
+    def invite_group_member(self, actor_id: str, group_id: str, payload: GroupInviteByContactIn | GroupInviteIn) -> GroupMemberOut: ...
 
     @abstractmethod
     def accept_group_invite(self, user_id: str, group_id: str) -> GroupMemberOut: ...

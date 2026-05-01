@@ -104,6 +104,16 @@ export type TranslationKey =
   | 'groupsMembers'
   | 'groupsPendingInvites'
   | 'groupsDebts'
+  | 'groupsMembersDebts'
+  | 'groupsTotalDebt'
+  | 'groupsDebtStatusOverview'
+  | 'groupsTotalAmountOwed'
+  | 'groupsTotalActiveDebt'
+  | 'groupsTotalPendingDebt'
+  | 'groupsTotalPaidDebt'
+  | 'groupsTotalOverdueDebt'
+  | 'groupsTotalCancelledDebt'
+  | 'groupsNoMembersYet'
   | 'groupsOwner'
   | 'groupsMemberCount'
   | 'groupsNoGroupOption'
@@ -111,6 +121,7 @@ export type TranslationKey =
   | 'settingsGroupsFeature'
   | 'settingsGroupsFeatureHint'
   | 'errorNotPlatformUser'
+  | 'errorCreditorRoleRequired'
   | 'errorAlreadyMember'
   | 'errorInviteToSelf'
   | 'errorGroupFull'
@@ -189,6 +200,7 @@ export type TranslationKey =
   | 'allStatuses'
   | 'noDebtsYet'
   | 'noNotificationsYet'
+  | 'markAllRead'
   | 'loading'
   | 'errorGeneric'
   | 'errorLoadDebts'
@@ -473,10 +485,10 @@ const ar: Translations = {
   groupName: 'اسم المجموعة',
   inviteUser: 'دعوة مستخدم',
   acceptInvite: 'قبول الدعوة',
-  groupsCreate: 'إنشاء مجموعة',
+  groupsCreate: 'إنشاء مجموعة جديدة',
   groupsCreateGroup: 'إنشاء مجموعة جديدة',
   groupsInvite: 'دعوة',
-  groupsInviteByEmailOrPhone: 'البريد الإلكتروني أو رقم الهاتف',
+  groupsInviteByEmailOrPhone: 'إضافة عضو بالبريد الإلكتروني أو رقم الهاتف',
   groupsAccept: 'قبول',
   groupsDecline: 'رفض',
   groupsLeave: 'مغادرة المجموعة',
@@ -491,13 +503,24 @@ const ar: Translations = {
   groupsMembers: 'الأعضاء',
   groupsPendingInvites: 'الدعوات المعلقة',
   groupsDebts: 'ديون المجموعة',
+  groupsMembersDebts: 'ديون أعضاء المجموعة',
+  groupsTotalDebt: 'إجمالي ديون المجموعة',
+  groupsDebtStatusOverview: 'نظرة عامة حسب حالة الدين',
+  groupsTotalAmountOwed: 'إجمالي المبلغ المستحق من المجموعة',
+  groupsTotalActiveDebt: 'إجمالي الديون النشطة',
+  groupsTotalPendingDebt: 'إجمالي الديون المعلقة',
+  groupsTotalPaidDebt: 'إجمالي الديون المدفوعة',
+  groupsTotalOverdueDebt: 'إجمالي الديون المتأخرة',
+  groupsTotalCancelledDebt: 'إجمالي الديون الملغاة',
+  groupsNoMembersYet: 'لا يوجد أعضاء بعد — ادعُ الأعضاء من خلال البريد أو رقم الهاتف',
   groupsOwner: 'المالك',
   groupsMemberCount: 'عدد الأعضاء',
   groupsNoGroupOption: 'بدون مجموعة (خاص)',
   groupsSelectorLabel: 'مجموعة (اختياري)',
   settingsGroupsFeature: 'ميزة المجموعات',
   settingsGroupsFeatureHint: 'إظهار المجموعات في القائمة الرئيسية. تعطيلها لا يحذف عضوياتك.',
-  errorNotPlatformUser: 'لا يوجد مستخدم بهذا البريد أو الهاتف. اطلب منه التسجيل أولاً.',
+  errorNotPlatformUser: 'لم يتم العثور على مستخدم بهذا البريد الإلكتروني أو رقم الهاتف',
+  errorCreditorRoleRequired: 'يمكن للدائنين فقط إنشاء المجموعات.',
   errorAlreadyMember: 'هذا المستخدم عضو بالفعل أو لديه دعوة معلقة.',
   errorInviteToSelf: 'لا يمكنك دعوة نفسك.',
   errorGroupFull: 'المجموعة ممتلئة (الحد الأقصى ٢٠ عضوًا).',
@@ -576,6 +599,7 @@ const ar: Translations = {
   allStatuses: 'جميع الحالات',
   noDebtsYet: 'لا توجد ديون حتى الآن',
   noNotificationsYet: 'لا توجد إشعارات حتى الآن',
+  markAllRead: 'تحديد الكل كمقروء',
   errorGeneric: 'حدث خطأ، حاول مرة أخرى.',
   errorLoadDebts: 'تعذّر تحميل الديون. حاول مرة أخرى.',
   errorLoadDashboard: 'تعذّر تحميل لوحة التحكم. حاول مرة أخرى.',
@@ -859,10 +883,10 @@ const en: Translations = {
   groupName: 'Group Name',
   inviteUser: 'Invite User',
   acceptInvite: 'Accept Invite',
-  groupsCreate: 'Create group',
-  groupsCreateGroup: 'Create a new group',
+  groupsCreate: 'Create New Group',
+  groupsCreateGroup: 'Create New Group',
   groupsInvite: 'Invite',
-  groupsInviteByEmailOrPhone: 'Email or phone',
+  groupsInviteByEmailOrPhone: 'Add member by email or phone number',
   groupsAccept: 'Accept',
   groupsDecline: 'Decline',
   groupsLeave: 'Leave group',
@@ -877,13 +901,24 @@ const en: Translations = {
   groupsMembers: 'Members',
   groupsPendingInvites: 'Pending invites',
   groupsDebts: 'Group debts',
+  groupsMembersDebts: "Group Members’ Debts",
+  groupsTotalDebt: 'Total Group Debt',
+  groupsDebtStatusOverview: 'Overview by Debt Status',
+  groupsTotalAmountOwed: 'Total Amount Owed by Group',
+  groupsTotalActiveDebt: 'Total Active Debt',
+  groupsTotalPendingDebt: 'Total Pending Debt',
+  groupsTotalPaidDebt: 'Total Paid Debt',
+  groupsTotalOverdueDebt: 'Total Overdue Debt',
+  groupsTotalCancelledDebt: 'Total Cancelled Debt',
+  groupsNoMembersYet: 'No members yet — invite people by email or phone',
   groupsOwner: 'Owner',
   groupsMemberCount: 'Members',
   groupsNoGroupOption: 'No group (private)',
   groupsSelectorLabel: 'Group (optional)',
   settingsGroupsFeature: 'Groups feature',
   settingsGroupsFeatureHint: 'Show Groups in the main navigation. Disabling does not delete your memberships.',
-  errorNotPlatformUser: 'No platform user matches that email or phone. Ask them to sign up first.',
+  errorNotPlatformUser: 'No user found with this email or phone number',
+  errorCreditorRoleRequired: 'Only creditors can create groups.',
   errorAlreadyMember: 'This user is already a member or has a pending invitation.',
   errorInviteToSelf: 'You cannot invite yourself.',
   errorGroupFull: 'Group is full (max 20 members).',
@@ -962,6 +997,7 @@ const en: Translations = {
   allStatuses: 'All Statuses',
   noDebtsYet: 'No debts yet',
   noNotificationsYet: 'No notifications yet',
+  markAllRead: 'Mark all read',
   errorGeneric: 'Something went wrong, please try again.',
   errorLoadDebts: "Couldn't load your debts. Please retry.",
   errorLoadDashboard: "Couldn't load your dashboard. Please retry.",
@@ -1203,59 +1239,61 @@ export function translateNotification(
   body: string,
   language: Language
 ): { title: string; body: string } {
-  if (language === 'en') return { title, body };
-
-  let translatedTitle = title;
-  let translatedBody = body;
-
-  const titleDict: Record<string, string> = {
-    group_invite: "دعوة مجموعة",
-    group_invite_accepted: "قبول دعوة المجموعة",
-    group_ownership_transferred: "نقل ملكية المجموعة",
-    debt_cancelled: "إلغاء الدين",
-    payment_confirmed: "تأكيد الدفع",
-    payment_requested: "طلب تأكيد الدفع",
-    payment_failed: "فشل الدفع",
-    debt_edit_rejected: "تم رفض التعديل",
-    debt_edit_approved: "تم قبول التعديل",
-    debt_edit_requested: "طلب تعديل",
-    debt_created: "دين جديد",
-    debt_confirmed: "تأكيد الدين",
-    due_soon: "يستحق قريباً",
-    overdue: "متأخر",
-    settlement_proposed: "اقتراح تسوية",
-    settlement_reminder: "تذكير بالتسوية",
-    settlement_confirmed: "تأكيد التسوية",
-    settlement_rejected: "رفض التسوية",
-    settlement_settled: "تمت التسوية",
-    settlement_failed: "فشلت التسوية",
-    settlement_expired: "انتهت صلاحية التسوية",
+  const titleDict: Record<string, Record<Language, string>> = {
+    debt_created: { ar: "دين جديد", en: "New debt created" },
+    debt_confirmed: { ar: "تم تأكيد الدين", en: "Debt confirmed" },
+    debt_edit_requested: { ar: "طلب تعديل الدين", en: "Debt edit requested" },
+    debt_edit_approved: { ar: "تم قبول تعديل الدين", en: "Debt edit approved" },
+    debt_edit_rejected: { ar: "تم رفض تعديل الدين", en: "Debt edit rejected" },
+    debt_cancelled: { ar: "تم إلغاء الدين", en: "Debt cancelled" },
+    due_soon: { ar: "الدين يستحق قريباً", en: "Debt due soon" },
+    overdue: { ar: "دين متأخر", en: "Debt overdue" },
+    payment_requested: { ar: "طلب تأكيد الدفع", en: "Payment confirmation requested" },
+    payment_confirmed: { ar: "تم تأكيد الدفع", en: "Payment confirmed" },
+    payment_failed: { ar: "فشل الدفع", en: "Payment failed" },
+    group_invite: { ar: "دعوة مجموعة", en: "Group invitation" },
+    group_invite_accepted: { ar: "تم قبول دعوة المجموعة", en: "Group invitation accepted" },
+    group_ownership_transferred: { ar: "تم نقل ملكية المجموعة", en: "Group ownership transferred" },
+    settlement_proposed: { ar: "اقتراح تسوية", en: "Settlement proposal" },
+    settlement_reminder: { ar: "تذكير بالتسوية", en: "Settlement reminder" },
+    settlement_confirmed: { ar: "تأكيد التسوية", en: "Settlement confirmed" },
+    settlement_rejected: { ar: "رفض التسوية", en: "Settlement rejected" },
+    settlement_settled: { ar: "تمت التسوية", en: "Settlement complete" },
+    settlement_failed: { ar: "فشلت التسوية", en: "Settlement failed" },
+    settlement_expired: { ar: "انتهت صلاحية التسوية", en: "Settlement expired" },
   };
 
-  if (type && titleDict[type]) {
-    translatedTitle = titleDict[type];
-  }
+  const bodyDict: Record<string, Record<Language, string>> = {
+    debt_created: { ar: "تم إنشاء دين جديد", en: "New debt created" },
+    debt_confirmed: { ar: "تم تأكيد الدين", en: "Debt confirmed" },
+    debt_edit_requested: { ar: "تم طلب تعديل على الدين", en: "A debt edit was requested" },
+    debt_edit_approved: { ar: "تمت الموافقة على تعديل الدين", en: "Debt edit approved" },
+    debt_edit_rejected: { ar: "تم رفض تعديل الدين", en: "Debt edit rejected" },
+    debt_cancelled: { ar: "تم إلغاء الدين", en: "Debt cancelled" },
+    due_soon: { ar: "يوجد دين يستحق قريباً", en: "A debt is due soon" },
+    overdue: { ar: "يوجد دين متأخر", en: "A debt is overdue" },
+    payment_requested: { ar: "تم طلب تأكيد الدفع", en: "Payment confirmation requested" },
+    payment_confirmed: { ar: "تم تأكيد الدفع", en: "Payment confirmed" },
+    payment_failed: { ar: "فشلت عملية الدفع", en: "Payment failed" },
+    group_invite: { ar: "تمت دعوتك إلى مجموعة", en: "You were invited to a group" },
+    group_invite_accepted: { ar: "قبل عضو دعوة المجموعة", en: "A member accepted the group invitation" },
+    group_ownership_transferred: { ar: "تم نقل ملكية المجموعة", en: "Group ownership was transferred" },
+    settlement_proposed: { ar: "تم اقتراح تسوية في المجموعة", en: "A settlement was proposed in your group" },
+    settlement_reminder: { ar: "يوجد اقتراح تسوية بانتظار الرد", en: "A settlement proposal is awaiting your response" },
+    settlement_confirmed: { ar: "تم تأكيد التسوية", en: "Settlement confirmed" },
+    settlement_rejected: { ar: "تم رفض التسوية", en: "Settlement rejected" },
+    settlement_settled: { ar: "اكتملت تسوية المجموعة", en: "Group settlement completed" },
+    settlement_failed: { ar: "تعذر تطبيق التسوية", en: "Settlement could not be applied" },
+    settlement_expired: { ar: "انتهت صلاحية اقتراح التسوية", en: "Settlement proposal expired" },
+  };
 
-  if (type === 'group_invite') {
-    const match = body.match(/You were invited to (.*)/);
-    if (match) translatedBody = `لقد تمت دعوتك إلى ${match[1]}`;
-  } else if (type === 'debt_cancelled') {
-    const match = body.match(/(.*) (.*) cancelled by creditor/);
-    if (match) translatedBody = `تم إلغاء ${match[1]} ${match[2]} من قبل الدائن`;
-  } else if (type === 'payment_confirmed') {
-    const match = body.match(/(.*) (.*) was confirmed as paid/);
-    if (match) translatedBody = `تم تأكيد دفع ${match[1]} ${match[2]}`;
-  } else if (type === 'payment_requested') {
-    const match = body.match(/(.*) marked the debt as paid/);
-    if (match) translatedBody = `قام ${match[1]} بتحديد الدين كمدفوع`;
-  } else if (type === 'debt_edit_rejected') {
-    if (body.includes('original terms stand')) {
-      translatedBody = "رفض الدائن التعديل؛ الشروط الأصلية سارية";
-    }
-  } else if (type === 'debt_edit_requested') {
-    if (body.includes('requested an edit')) {
-      translatedBody = "طلب تعديل على الدين";
-    }
+  if (!type) return { title, body };
+  const translatedTitle = titleDict[type]?.[language] ?? title;
+  let translatedBody = bodyDict[type]?.[language] ?? body;
+
+  const groupInviteMatch = body.match(/You were invited to (.*)/);
+  if (type === "group_invite" && groupInviteMatch) {
+    translatedBody = language === "ar" ? `لقد تمت دعوتك إلى ${groupInviteMatch[1]}` : `You were invited to ${groupInviteMatch[1]}`;
   }
 
   return { title: translatedTitle, body: translatedBody };
