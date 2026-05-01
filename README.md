@@ -33,8 +33,6 @@ Thabetha is a bilingual fintech web application for managing informal debts and 
 backend/          FastAPI app, repositories, schemas, tests
 frontend/         React/Vite SPA, pages, components, i18n
 supabase/         SQL migrations, seed data, CLI config
-specs/            Feature specs and implementation plans
-claude-handoff/   Context handoff documents
 docs/             Product and developer documentation
 docker-compose.yml  Full-stack container configuration
 ```
