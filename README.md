@@ -1,6 +1,6 @@
 # Thabetha
 
-Thabetha is a bilingual Arabic-first fintech web application for managing informal debts and settlement workflows between local merchants, freelancers, service providers, individuals, and customers. It supports bilateral debt confirmation, QR-based identification, reminders, commitment indicators, group settlement flows, and AI-assisted merchant workflows.
+Thabetha is a bilingual fintech web application for managing informal debts and settlement workflows between local merchants, freelancers, service providers, individuals, and customers. It supports bilateral debt confirmation, QR-based identification, reminders, commitment indicators, group settlement flows, and AI-assisted merchant workflows.
 
 ## Core Features
 
