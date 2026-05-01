@@ -675,9 +675,7 @@ export function DebtsPage({ language }: Props) {
           debtCount: 0,
         };
       }
-      if (['active', 'overdue', 'payment_pending_confirmation'].includes(d.status)) {
-        groups[key].totalAmount += parseFloat(d.amount) || 0;
-      }
+      groups[key].totalAmount += parseFloat(d.amount) || 0;
       groups[key].debtCount += 1;
     });
     return Object.values(groups).sort((a, b) => b.totalAmount - a.totalAmount);
