@@ -639,6 +639,16 @@ export function DebtsPage({ language }: Props) {
     [debts]
   );
 
+  const statusTotals = useMemo(() =>
+    debts.reduce<Record<string, number>>((acc, d) => {
+      const amt = parseFloat(d.amount) || 0;
+      acc[d.status] = (acc[d.status] ?? 0) + amt;
+      acc['all'] = (acc['all'] ?? 0) + amt;
+      return acc;
+    }, {}),
+    [debts]
+  );
+
   function statusLabel(s: string): string {
     switch (s) {
       case 'pending_confirmation': return tr('debts_filter_pending');
@@ -688,18 +698,29 @@ export function DebtsPage({ language }: Props) {
 
       {/* Filter tabs */}
       <div className="filter-tabs">
-        {statusKeys.map(s => (
-          <button
-            key={s}
-            className={`filter-tab${filter === s ? ' active' : ''}`}
-            onClick={() => setFilter(s)}
-          >
-            {s === 'all' ? tr('allStatuses') : statusLabel(s)}
-            {s !== 'all' && (statusCounts[s] ?? 0) > 0 && (
-              <span className="filter-tab-count">{statusCounts[s]}</span>
-            )}
-          </button>
-        ))}
+        {statusKeys.map(s => {
+          const count = statusCounts[s] ?? 0;
+          const total = statusTotals[s] ?? 0;
+          return (
+            <button
+              key={s}
+              className={`filter-tab${filter === s ? ' active' : ''}`}
+              onClick={() => setFilter(s)}
+            >
+              <span className="filter-tab__label">
+                {s === 'all' ? tr('allStatuses') : statusLabel(s)}
+                {s !== 'all' && count > 0 && (
+                  <span className="filter-tab-count">{count}</span>
+                )}
+              </span>
+              {total > 0 && (
+                <span className="filter-tab__amount">
+                  {total.toLocaleString(language === 'ar' ? 'ar-SA' : 'en-SA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ر.س
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Grouped user list */}

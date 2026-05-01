@@ -2565,6 +2565,35 @@ pre, .answer {
   background: var(--primary-dark);
 }
 
+.filter-tab__label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.filter-tab__amount {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--primary);
+  opacity: 0.85;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.filter-tab.active .filter-tab__amount {
+  color: var(--primary-dark);
+  opacity: 1;
+}
+
+/* make filter-tab a column so the amount sits below the label */
+.filter-tabs .filter-tab {
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
 /* ── Debt card ───────────────────────────────────────────────── */
 .debt-card {
   background: var(--surface);
@@ -3210,6 +3239,11 @@ pre, .answer {
 
 .toggle-switch input:checked + .toggle-switch__track::after {
   transform: translateX(20px);
+}
+/* RTL: knob starts right-side via physical positioning, moves left on check */
+[dir="rtl"] .toggle-switch__track::after {
+  left: auto;
+  right: 3px;
 }
 
 [dir="rtl"] .toggle-switch input:checked + .toggle-switch__track::after {

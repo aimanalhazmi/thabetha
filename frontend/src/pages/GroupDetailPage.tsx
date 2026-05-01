@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { Input, Panel } from "../components/Layout";
-import { SettlementProposalPanel } from "../components/SettlementProposalPanel";
 import { errorCode, groups as groupsApi } from "../lib/api";
 import { t, type TranslationKey } from "../lib/i18n";
 import type { Debt, GroupDetail, Language } from "../lib/types";
@@ -216,24 +215,26 @@ export function GroupDetailPage({ language }: Props) {
       {/* Members */}
       <Panel title={tr("groupsMembers")}>
         <div className="groups-members-list">
-          {detail.members.map((m) => (
-            <div key={m.id} className="group-member-card">
-              <div className="group-member-card__avatar">
-                {getInitials(m.name ?? m.user_id)}
-              </div>
-              <div className="group-member-card__info">
-                <strong>{m.name ?? m.user_id}</strong>
-                {m.user_id === detail.owner_id && (
-                  <span className="group-member-card__owner">
-                    <Crown size={11} /> {tr("groupsOwner")}
-                  </span>
+          {detail.members.filter(m => m.user_id !== detail.owner_id).length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '20px 0', color: 'var(--text-muted)', fontSize: '0.88rem', textAlign: 'center' }}>
+              <Users size={28} strokeWidth={1.4} />
+              <span>{language === 'ar' ? 'لا يوجد أعضاء بعد — ادعُ الأعضاء من خلال البريد أو رقم الهاتف' : 'No members yet — invite people by email or phone'}</span>
+            </div>
+          ) : (
+            detail.members.filter(m => m.user_id !== detail.owner_id).map((m) => (
+              <div key={m.id} className="group-member-card">
+                <div className="group-member-card__avatar">
+                  {getInitials(m.name ?? m.user_id)}
+                </div>
+                <div className="group-member-card__info">
+                  <strong>{m.name ?? m.user_id}</strong>
+                </div>
+                {typeof m.commitment_score === "number" && (
+                  <span className="dash-count-badge">{m.commitment_score}</span>
                 )}
               </div>
-              {typeof m.commitment_score === "number" && (
-                <span className="dash-count-badge">{m.commitment_score}</span>
-              )}
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </Panel>
 
@@ -320,11 +321,6 @@ export function GroupDetailPage({ language }: Props) {
         }
       </Panel>
 
-      <SettlementProposalPanel
-        groupId={id}
-        language={language}
-        hasSettleableDebts={debts.some((d) => d.status === "active" || d.status === "overdue")}
-      />
     </section>
   );
 }
