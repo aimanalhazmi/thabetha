@@ -485,3 +485,211 @@ def test_retag_to_non_shared_group_409(client: TestClient) -> None:
     r = client.patch(f"/api/v1/debts/{debt_id}", headers=auth_headers("own-r4"), json={"group_id": gid2})
     assert r.status_code == 409
     assert r.json()["detail"]["code"] == "NotInSharedGroup"
+
+
+# ── Pending-invitee visibility regression (matches "hidden until accepted" rule) ──
+
+
+def test_pending_invitee_visibility_lifecycle(client: TestClient) -> None:
+    """A pending invitee can see they were invited (so they can accept), but
+    cannot see the group detail, members list, or debts. Once they accept,
+    everything becomes visible."""
+    _ensure_profiles(client, "owner-v", "guest-v")
+    gid = _create_group(client, "owner-v", name="Family")
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-v"), json={"user_id": "guest-v"})
+
+    # Pending invitee sees the group in list_groups with member_status='pending'.
+    listed = client.get("/api/v1/groups", headers=auth_headers("guest-v"))
+    assert listed.status_code == 200
+    rows = [g for g in listed.json() if g["id"] == gid]
+    assert len(rows) == 1
+    assert rows[0]["member_status"] == "pending"
+    # Pending member is NOT counted in member_count.
+    assert rows[0]["member_count"] == 1
+
+    # Detail, members, and debts are forbidden until accepted.
+    assert client.get(f"/api/v1/groups/{gid}", headers=auth_headers("guest-v")).status_code == 403
+    assert client.get(f"/api/v1/groups/{gid}/members", headers=auth_headers("guest-v")).status_code == 403
+    assert client.get(f"/api/v1/groups/{gid}/debts", headers=auth_headers("guest-v")).status_code == 403
+
+    # Accept → all of the above become accessible.
+    accept = client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers("guest-v"))
+    assert accept.status_code == 200
+    assert client.get(f"/api/v1/groups/{gid}", headers=auth_headers("guest-v")).status_code == 200
+    assert client.get(f"/api/v1/groups/{gid}/members", headers=auth_headers("guest-v")).status_code == 200
+    assert client.get(f"/api/v1/groups/{gid}/debts", headers=auth_headers("guest-v")).status_code == 200
+
+
+def _create_group_debt(client: TestClient, creditor: str, debtor: str, group_id: str, amount: str = "20.00") -> str:
+    r = client.post(
+        "/api/v1/debts",
+        headers=auth_headers(creditor),
+        json={
+            "debtor_name": debtor,
+            "debtor_id": debtor,
+            "amount": amount,
+            "currency": "SAR",
+            "description": "Test debt",
+            "due_date": str(date.today() + timedelta(days=7)),
+            "group_id": group_id,
+        },
+    )
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def test_bulk_confirm_group_payments_only_eligible(client: TestClient) -> None:
+    """Bulk-confirm flips every payment_pending_confirmation debt the caller is
+    creditor of; skips debts in other states and debts where caller isn't creditor."""
+    _ensure_profiles(client, "creditor-b", "debtor-b1", "debtor-b2", "outsider-c")
+    gid = _create_group(client, "creditor-b", name="Shop")
+    for uid in ("debtor-b1", "debtor-b2", "outsider-c"):
+        client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("creditor-b"), json={"user_id": uid})
+        client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers(uid))
+
+    # Two debts owed to creditor-b. We will mark one as paid (→ payment_pending_confirmation),
+    # leave the other active. Plus a debt where outsider-c is creditor — must NOT flip.
+    d1 = _create_group_debt(client, "creditor-b", "debtor-b1", gid, amount="10.00")
+    d2 = _create_group_debt(client, "creditor-b", "debtor-b2", gid, amount="20.00")
+    d3 = _create_group_debt(client, "outsider-c", "debtor-b1", gid, amount="5.00")
+
+    # Debtors accept their debts so they can be marked paid.
+    for did, who in ((d1, "debtor-b1"), (d2, "debtor-b2"), (d3, "debtor-b1")):
+        client.post(f"/api/v1/debts/{did}/accept", headers=auth_headers(who))
+
+    # Only d1 transitions to payment_pending_confirmation.
+    pay = client.post(
+        f"/api/v1/debts/{d1}/mark-paid",
+        headers=auth_headers("debtor-b1"),
+        json={},
+    )
+    assert pay.status_code in (200, 201), pay.text
+
+    # Bulk-confirm as creditor-b — should only confirm d1.
+    r = client.post(f"/api/v1/groups/{gid}/bulk-confirm-payments", headers=auth_headers("creditor-b"))
+    assert r.status_code == 200, r.text
+    confirmed = r.json()
+    assert len(confirmed) == 1
+    assert confirmed[0]["id"] == d1
+    assert confirmed[0]["status"] == "paid"
+
+    # d2 stays active, d3 stays active (outsider-c is creditor, not creditor-b).
+    listed = client.get(f"/api/v1/groups/{gid}/debts", headers=auth_headers("creditor-b")).json()
+    by_id = {d["id"]: d for d in listed}
+    assert by_id[d2]["status"] == "active"
+    # d3 may not be visible to creditor-b at all if they aren't a party — that's fine.
+    if d3 in by_id:
+        assert by_id[d3]["status"] == "active"
+
+
+def test_group_debts_only_show_debts_tagged_to_this_group(client: TestClient) -> None:
+    """Untagged debts and debts tagged to a different group must NOT appear in
+    a group's debts list, even when the parties are accepted members."""
+    _ensure_profiles(client, "owner-x", "member-x")
+    gid_a = _create_group(client, "owner-x", name="A")
+    gid_b = _create_group(client, "owner-x", name="B")
+    for gid in (gid_a, gid_b):
+        client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-x"), json={"user_id": "member-x"})
+        client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers("member-x"))
+
+    untagged = _create_group_debt
+    # Debt tagged to B only.
+    debt_b = client.post(
+        "/api/v1/debts",
+        headers=auth_headers("owner-x"),
+        json={
+            "debtor_name": "M",
+            "debtor_id": "member-x",
+            "amount": "1.00",
+            "currency": "SAR",
+            "description": "B-only",
+            "due_date": str(date.today() + timedelta(days=3)),
+            "group_id": gid_b,
+        },
+    ).json()["id"]
+
+    # Untagged debt — same parties, no group.
+    debt_untagged = client.post(
+        "/api/v1/debts",
+        headers=auth_headers("owner-x"),
+        json={
+            "debtor_name": "M",
+            "debtor_id": "member-x",
+            "amount": "2.00",
+            "currency": "SAR",
+            "description": "Untagged",
+            "due_date": str(date.today() + timedelta(days=3)),
+        },
+    ).json()["id"]
+    _ = untagged  # silence unused
+
+    listed_a = client.get(f"/api/v1/groups/{gid_a}/debts", headers=auth_headers("member-x")).json()
+    listed_a_ids = {d["id"] for d in listed_a}
+    assert debt_b not in listed_a_ids, "Group A must not show debts tagged to group B"
+    assert debt_untagged not in listed_a_ids, "Group A must not show untagged debts"
+
+
+def test_group_debts_hides_pre_join_debts_from_late_joiner(client: TestClient) -> None:
+    """A member who joins after a debt was created cannot see that debt unless
+    they are a direct party (creditor or debtor)."""
+    _ensure_profiles(client, "owner-y", "early-y", "late-y", "outside-y")
+    gid = _create_group(client, "owner-y", name="Family")
+    # early-y joins immediately.
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-y"), json={"user_id": "early-y"})
+    client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers("early-y"))
+
+    # owner-y creates a group-tagged debt against early-y BEFORE late-y joins.
+    pre_join = client.post(
+        "/api/v1/debts",
+        headers=auth_headers("owner-y"),
+        json={
+            "debtor_name": "Early",
+            "debtor_id": "early-y",
+            "amount": "10.00",
+            "currency": "SAR",
+            "description": "Pre-join debt",
+            "due_date": str(date.today() + timedelta(days=3)),
+            "group_id": gid,
+        },
+    ).json()["id"]
+
+    # Now late-y joins.
+    client.post(f"/api/v1/groups/{gid}/invite", headers=auth_headers("owner-y"), json={"user_id": "late-y"})
+    client.post(f"/api/v1/groups/{gid}/accept", headers=auth_headers("late-y"))
+
+    # owner-y creates a second debt AFTER late-y joined.
+    post_join = client.post(
+        "/api/v1/debts",
+        headers=auth_headers("owner-y"),
+        json={
+            "debtor_name": "Early",
+            "debtor_id": "early-y",
+            "amount": "20.00",
+            "currency": "SAR",
+            "description": "Post-join debt",
+            "due_date": str(date.today() + timedelta(days=3)),
+            "group_id": gid,
+        },
+    ).json()["id"]
+
+    # late-y is not a party to either debt — should see only the post-join debt.
+    listed = client.get(f"/api/v1/groups/{gid}/debts", headers=auth_headers("late-y")).json()
+    ids = {d["id"] for d in listed}
+    assert post_join in ids
+    assert pre_join not in ids, "Late joiner must not see debts created before they joined"
+
+    # owner-y (party as creditor) sees both.
+    owner_listed = {d["id"] for d in client.get(f"/api/v1/groups/{gid}/debts", headers=auth_headers("owner-y")).json()}
+    assert pre_join in owner_listed and post_join in owner_listed
+
+    # early-y (party as debtor) also sees both (party fallback).
+    early_listed = {d["id"] for d in client.get(f"/api/v1/groups/{gid}/debts", headers=auth_headers("early-y")).json()}
+    assert pre_join in early_listed and post_join in early_listed
+
+
+def test_bulk_confirm_group_payments_empty_when_nothing_to_confirm(client: TestClient) -> None:
+    _ensure_profiles(client, "creditor-e")
+    gid = _create_group(client, "creditor-e", name="Empty")
+    r = client.post(f"/api/v1/groups/{gid}/bulk-confirm-payments", headers=auth_headers("creditor-e"))
+    assert r.status_code == 200
+    assert r.json() == []

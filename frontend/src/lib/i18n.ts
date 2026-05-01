@@ -320,6 +320,13 @@ export type TranslationKey =
   | 'errorProposalNotOpen'
   | 'errorStaleSnapshot'
   | 'errorLeaveBlockedByOpenProposal'
+  | 'groupsBulkConfirmPayments'
+  | 'groupsBulkConfirmedCount'
+  | 'settlementHistoryHeading'
+  | 'settlementYourRole'
+  | 'settlementConfirmationsHeading'
+  | 'settlementNoOpenProposal'
+  | 'settlementProposedBy'
   | 'fab_create_debt'
   | 'scan_qr_camera_label'
   | 'scan_qr_manual_token_label'
@@ -700,6 +707,13 @@ const ar: Translations = {
   errorProposalNotOpen: 'الاقتراح لم يعد مفتوحًا.',
   errorStaleSnapshot: 'تغيرت حالة أحد الديون، يرجى إعادة المحاولة.',
   errorLeaveBlockedByOpenProposal: 'لا يمكنك مغادرة المجموعة وأنت طرف في اقتراح تسوية مفتوح.',
+  groupsBulkConfirmPayments: 'تأكيد كل المدفوعات في هذه المجموعة',
+  groupsBulkConfirmedCount: 'تم تأكيد {count} دين',
+  settlementHistoryHeading: 'سجل التسويات',
+  settlementYourRole: 'دورك',
+  settlementConfirmationsHeading: 'تأكيدات الأطراف',
+  settlementNoOpenProposal: 'لا يوجد اقتراح تسوية مفتوح حاليًا.',
+  settlementProposedBy: 'اقترحه',
   fab_create_debt: 'تسجيل دين جديد',
   scan_qr_camera_label: 'مسح رمز QR بالكاميرا',
   scan_qr_manual_token_label: 'إدخال رمز QR يدويًا',
@@ -1079,6 +1093,13 @@ const en: Translations = {
   errorProposalNotOpen: 'The proposal is no longer open.',
   errorStaleSnapshot: 'A debt in the snapshot changed state — please retry.',
   errorLeaveBlockedByOpenProposal: 'You cannot leave while you are part of an open settlement proposal.',
+  groupsBulkConfirmPayments: 'Confirm all payments in this group',
+  groupsBulkConfirmedCount: '{count} debt(s) confirmed',
+  settlementHistoryHeading: 'Settlement history',
+  settlementYourRole: 'Your role',
+  settlementConfirmationsHeading: 'Party confirmations',
+  settlementNoOpenProposal: 'No open settlement proposal.',
+  settlementProposedBy: 'Proposed by',
   fab_create_debt: 'New debt',
   scan_qr_camera_label: 'Scan QR with camera',
   scan_qr_manual_token_label: 'Enter QR token manually',

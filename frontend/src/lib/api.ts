@@ -102,6 +102,9 @@ export const groups = {
   debts: (id: string) => apiRequest<Debt[]>(`/groups/${id}/debts`),
   shared: (withUserId: string) =>
     apiRequest<Group[]>(`/groups/shared?with_user_id=${encodeURIComponent(withUserId)}`),
+  /** Creditor confirms receipt for every payment_pending_confirmation debt they're owed in this group. */
+  bulkConfirmPayments: (id: string) =>
+    apiRequest<Debt[]>(`/groups/${id}/bulk-confirm-payments`, { method: 'POST' }),
 };
 
 export const settlements = {

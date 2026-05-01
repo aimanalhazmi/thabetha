@@ -829,10 +829,25 @@ class InMemoryRepository(Repository):
         group = self.groups.get(group_id)
         if group is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotAGroupMember", "message": "Group not found."})
-        is_member = any(m.group_id == group_id and m.user_id == user_id and m.status == GroupMemberStatus.accepted for m in self.group_members)
-        if not is_member:
+        viewer_member = next(
+            (m for m in self.group_members if m.group_id == group_id and m.user_id == user_id and m.status == GroupMemberStatus.accepted),
+            None,
+        )
+        if viewer_member is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "NotAGroupMember", "message": "You are not an accepted group member"})
-        return [debt for debt in self.debts.values() if debt.group_id == group_id]
+        # Strict visibility: only debts tagged to THIS group, AND either created
+        # at-or-after the viewer's accepted_at OR where the viewer is a direct
+        # party (party fallback).
+        accepted_at = viewer_member.accepted_at
+        return [
+            d for d in self.debts.values()
+            if d.group_id == group_id
+            and (
+                d.creditor_id == user_id
+                or d.debtor_id == user_id
+                or (accepted_at is not None and d.created_at >= accepted_at)
+            )
+        ]
 
     def create_settlement(self, payer_id: str, group_id: str, payload: SettlementCreate) -> SettlementOut:
         with self._lock:

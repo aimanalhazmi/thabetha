@@ -1369,20 +1369,27 @@ class PostgresRepository(Repository):
         with self._connection() as conn:
             conn.row_factory = dict_row
             member = conn.execute(
-                "SELECT 1 FROM group_members WHERE group_id = %s AND user_id = %s AND status = 'accepted'",
+                "SELECT accepted_at FROM group_members WHERE group_id = %s AND user_id = %s AND status = 'accepted'",
                 (group_id, user_id),
             ).fetchone()
             if not member:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not an accepted group member")
+            accepted_at = member["accepted_at"]
+            # Strict visibility: only debts tagged to THIS group, AND either created
+            # at-or-after the viewer's accepted_at OR where the viewer is a direct
+            # party (party fallback — a user always sees their own debts).
             rows = conn.execute(
                 """
                 SELECT d.* FROM debts d
                 WHERE d.group_id = %s
-                   OR d.creditor_id IN (SELECT gm.user_id FROM group_members gm WHERE gm.group_id = %s AND gm.status = 'accepted')
-                   OR d.debtor_id IN (SELECT gm.user_id FROM group_members gm WHERE gm.group_id = %s AND gm.status = 'accepted')
+                  AND (
+                    d.creditor_id = %s
+                    OR d.debtor_id = %s
+                    OR d.created_at >= %s
+                  )
                 ORDER BY d.created_at DESC
                 """,
-                (group_id, group_id, group_id),
+                (group_id, user_id, user_id, accepted_at),
             ).fetchall()
             return [_debt_from_row(r) for r in rows]
 

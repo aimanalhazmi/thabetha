@@ -1,8 +1,9 @@
-import { Crown, Edit2, Mail, Phone, Trash2, UserPlus, Users, X } from "lucide-react";
+import { Check, Crown, Edit2, Mail, Phone, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { Input, Panel } from "../components/Layout";
+import { SettlementProposalPanel } from "../components/SettlementProposalPanel";
 import { errorCode, groups as groupsApi } from "../lib/api";
 import { t, type TranslationKey } from "../lib/i18n";
 import type { Debt, GroupDetail, Language } from "../lib/types";
@@ -23,6 +24,14 @@ const ERROR_KEY: Record<string, TranslationKey> = {
   SameOwner: "errorSameOwner",
   NoPendingInvite: "errorNoPendingInvite",
   IdentifierAmbiguous: "errorIdentifierAmbiguous",
+  OpenProposalExists: "errorOpenProposalExists",
+  MixedCurrency: "errorMixedCurrency",
+  NothingToSettle: "errorNothingToSettle",
+  NotARequiredParty: "errorNotARequiredParty",
+  AlreadyResponded: "errorAlreadyResponded",
+  ProposalNotOpen: "errorProposalNotOpen",
+  StaleSnapshot: "errorStaleSnapshot",
+  LeaveBlockedByOpenProposal: "errorLeaveBlockedByOpenProposal",
 };
 
 function translateError(language: Language, err: unknown): string {
@@ -51,11 +60,14 @@ export function GroupDetailPage({ language }: Props) {
   const [transferTarget, setTransferTarget] = useState("");
   const [showTransfer, setShowTransfer] = useState(false);
 
-  // ── Data fetching — untouched ─────────────────────────────────
+  // ── Data fetching ────────────────────────────────────────────
   async function load() {
     if (!id) return;
     try {
-      const [d, dbts] = await Promise.all([groupsApi.get(id), groupsApi.debts(id).catch(() => [] as Debt[])]);
+      const [d, dbts] = await Promise.all([
+        groupsApi.get(id),
+        groupsApi.debts(id).catch(() => [] as Debt[]),
+      ]);
       setDetail(d);
       setDebts(dbts);
     } catch (err) {
@@ -136,6 +148,24 @@ export function GroupDetailPage({ language }: Props) {
       setShowTransfer(false);
     });
   }
+
+  async function handleBulkConfirm() {
+    await run(async () => {
+      const confirmed = await groupsApi.bulkConfirmPayments(id!);
+      const text = tr("groupsBulkConfirmedCount").replace("{count}", String(confirmed.length));
+      setMessage(text);
+    });
+  }
+
+  // Is current user the creditor of any debt in this group awaiting payment confirmation?
+  const hasPendingPayments = debts.some(
+    (d) => d.creditor_id === user?.id && d.status === "payment_pending_confirmation",
+  );
+
+  // Are there any settleable (active/overdue) debts in this group?
+  const hasSettleableDebts = debts.some(
+    (d) => d.status === "active" || d.status === "overdue",
+  );
 
   return (
     <section className="split">
@@ -297,6 +327,16 @@ export function GroupDetailPage({ language }: Props) {
 
       {/* Group debts */}
       <Panel title={tr("groupsDebts")}>
+        {hasPendingPayments && (
+          <button
+            className="primary-button"
+            style={{ width: "100%", justifyContent: "center", marginBottom: 10 }}
+            disabled={busy}
+            onClick={() => void handleBulkConfirm()}
+          >
+            <Check size={16} /><span>{tr("groupsBulkConfirmPayments")}</span>
+          </button>
+        )}
         {debts.length === 0
           ? <p className="empty">{tr("noData")}</p>
           : (
@@ -320,6 +360,13 @@ export function GroupDetailPage({ language }: Props) {
           )
         }
       </Panel>
+
+      {/* Settlement proposal */}
+      <SettlementProposalPanel
+        groupId={id}
+        language={language}
+        hasSettleableDebts={hasSettleableDebts}
+      />
 
     </section>
   );
