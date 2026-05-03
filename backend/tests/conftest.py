@@ -9,6 +9,7 @@ os.environ.setdefault("REPOSITORY_TYPE", "memory")
 os.environ.setdefault("WHATSAPP_PROVIDER", "mock")
 os.environ.setdefault("MERCHANT_CHAT_PROVIDER", "mock")
 os.environ.setdefault("AI_EXTRACTION_PROVIDER", "regex")
+os.environ.setdefault("AI_TRANSCRIPTION_PROVIDER", "mock")
 
 from app.main import create_app  # noqa: E402
 from app.repositories import get_repository  # noqa: E402
