@@ -149,6 +149,7 @@ export type TranslationKey =
   | 'chatLocaleHint'
   | 'merchantChatTitle'
   | 'merchantChatSubtitle'
+  | 'aiDisclaimer'
   | 'voiceDraftTitle'
   | 'voiceDraftRecord'
   | 'voiceDraftStop'
@@ -548,6 +549,7 @@ const ar: Translations = {
   chatLocaleHint: 'سيرد المساعد بنفس لغة سؤالك.',
   merchantChatTitle: 'محادثة مرتكزة على دفترك',
   merchantChatSubtitle: 'إجابات مبنية على بيانات دفترك أنت فقط.',
+  aiDisclaimer: 'قد يرتكب مساعد ثبتها أخطاء. يُرجى التحقق من المعلومات المالية المهمة.',
   voiceDraftTitle: 'مسودة دين بالصوت',
   voiceDraftRecord: 'بدء التسجيل',
   voiceDraftStop: 'إيقاف ومعالجة',
@@ -946,6 +948,7 @@ const en: Translations = {
   chatLocaleHint: 'The assistant replies in the language of your question.',
   merchantChatTitle: 'Grounded merchant chat',
   merchantChatSubtitle: 'Answers grounded in your own ledger only.',
+  aiDisclaimer: 'Thabetha AI can make mistakes. Please verify important financial information.',
   voiceDraftTitle: 'Voice debt draft',
   voiceDraftRecord: 'Start recording',
   voiceDraftStop: 'Stop & process',

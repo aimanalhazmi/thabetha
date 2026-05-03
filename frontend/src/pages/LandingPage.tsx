@@ -92,7 +92,7 @@ export function LandingPage({ language, onToggleLanguage }: Props) {
                 </div>
                 <div className="lp-mock-score">
                   <TrendingUp size={13} />
-                  <span>87</span>
+                  <span>{87}</span>
                 </div>
               </div>
               <div className="lp-mock-body">
@@ -118,7 +118,7 @@ export function LandingPage({ language, onToggleLanguage }: Props) {
               </div>
               <div>
                 <p className="lp-stat-label">{tr('commitmentIndicator')}</p>
-                <p className="lp-stat-value">87 / 100</p>
+                <p className="lp-stat-value">{87} / 100</p>
               </div>
             </div>
           </div>

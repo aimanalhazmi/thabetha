@@ -155,7 +155,7 @@ export function AIPage({ language }: Props) {
             </button>
           </div>
           <div className="ai-input-footer">
-            Thabetha AI can make mistakes. Please verify important financial information.
+            {tr('aiDisclaimer')}
           </div>
         </div>
       </main>
