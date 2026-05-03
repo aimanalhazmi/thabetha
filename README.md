@@ -59,9 +59,7 @@ Thabetha is a bilingual (Arabic, English) fintech web application that turns the
 backend/             FastAPI app, repositories (memory + postgres), schemas, tests
 frontend/            React/Vite SPA, pages, components, i18n
 supabase/            SQL migrations, seed data, CLI config
-docs/                Product and developer documentation
 scripts/             Operational helpers (e.g. dummy data)
-specs/               Feature specifications and quickstart playbooks
 Dockerfile           Multi-stage build: bundles frontend dist into the FastAPI image
 docker-compose.yml   Single-container `web` service on :8000
 LICENSE              MIT license
