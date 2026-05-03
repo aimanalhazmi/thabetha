@@ -46,7 +46,7 @@ Supabase Studio is at http://127.0.0.1:55323. Inbucket (sees signup confirmation
 supabase db reset
 ```
 
-This wipes the local database and re-applies every file in `supabase/migrations/` (currently `001_initial_schema.sql`, `002_commitment_and_lifecycle.sql`, `003_storage_policies.sql`) followed by `supabase/seed.sql`.
+This wipes the local database and re-applies every file in `supabase/migrations/` (in lexicographic order, `001_*.sql` through the latest) followed by `supabase/seed.sql`.
 
 The backend can also apply migrations on its own startup if you set `REPOSITORY_TYPE=postgres` — that path is intended for the Docker build, not day-to-day dev.
 
