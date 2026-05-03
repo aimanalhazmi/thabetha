@@ -339,7 +339,7 @@ export function CreateDebtPage({ language }: Props) {
           </div>
           <div className="create-debt-steps__line" />
           <div className={`create-debt-steps__item${step === 3 ? ' create-debt-steps__item--active' : ''}`}>
-            <div className="create-debt-steps__dot">3</div>
+            <div className="create-debt-steps__dot">{3}</div>
             <span>{tr('createDebt')}</span>
           </div>
         </div>

@@ -10,6 +10,7 @@ import typescriptParser from '@typescript-eslint/parser';
 import typescriptPlugin from '@typescript-eslint/eslint-plugin';
 import reactPlugin from 'eslint-plugin-react';
 import jsxA11yPlugin from 'eslint-plugin-jsx-a11y';
+import reactHooksPlugin from 'eslint-plugin-react-hooks';
 import noUntranslatedJsxRule from './eslint-rules/no-untranslated-jsx.js';
 
 export default [
@@ -47,6 +48,7 @@ export default [
       '@typescript-eslint': typescriptPlugin,
       react: reactPlugin,
       'jsx-a11y': jsxA11yPlugin,
+      'react-hooks': reactHooksPlugin,
       local: {
         rules: {
           'no-untranslated-jsx': noUntranslatedJsxRule,
@@ -62,6 +64,8 @@ export default [
       '@typescript-eslint/no-require-imports': 'off',
       'react/react-in-jsx-scope': 'off',
       'react/prop-types': 'off',
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
       'local/no-untranslated-jsx': 'error',
     },
   },
@@ -77,7 +81,7 @@ export default [
         'error',
         {
           noStrings: true,
-          allowedStrings: [' ', ' / ', ' · ', ':', '—', '…', '(', ')', '{', '}', '→', '✓', '✕', '⚠️', '····', '/100', '/ 100', '/200'],
+          allowedStrings: [' ', ' / ', ' · ', ':', '—', '…', '(', ')', '{', '}', '→', '✓', '✕', '⚠️', '····', '/100', '/ 100', ' / 100', '/200', 'SAR', 'ر.س', '©', '✨', '🤖', 'أ'],
           ignoreProps: true,
         },
       ],

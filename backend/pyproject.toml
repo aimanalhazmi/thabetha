@@ -1,7 +1,7 @@
 [project]
 name = "backend"
 version = "0.1.0"
-description = "Smart debt tracking with two‑party confirmation, reminders, Trust Score and QR profiles"
+description = "Mutually-confirmed debt tracking for shops, freelancers, and friends. Built at SalamHack 2026."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
