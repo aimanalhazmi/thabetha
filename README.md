@@ -9,7 +9,7 @@ Thabetha is a bilingual (Arabic, English) fintech web application that turns the
 
 > **Why "bilateral"?** A debt is binding only after the debtor accepts. A debt is `paid` only after the creditor confirms receipt. This single rule eliminates most of the disputes that plague paper ledgers and one-sided debt-tracking apps.
 
-> 🏆 **Built at [SalamHack 2026](https://salamhack.com/)** (27 April – 1 May 2026) by team Thabetha.
+> **Built at [SalamHack 2026](https://salamhack.com/)** (27 April – 1 May 2026) by team Thabetha.
 
 ---
 
