@@ -552,18 +552,6 @@ export function DebtsPage({ language }: Props) {
     // Guard: submit should never be reachable from error/resolving/self states (defense-in-depth)
     if (debtorSource === 'qr-resolving' || debtorSource === 'qr-self' || debtorSource === 'qr-expired' || debtorSource === 'qr-error') return;
 
-    // T012: re-resolve token at submit time when QR-prefilled
-    if (debtorSource === 'qr-resolved' && qrToken) {
-      try {
-        const recheck = await apiRequest<Profile>(`/qr/resolve/${encodeURIComponent(qrToken)}`);
-        if (recheck.id === user?.id) { setDebtorSource('qr-self'); return; }
-        if (recheck.id !== prefilled?.debtor_id) { setDebtorSource('qr-error'); return; }
-      } catch {
-        setDebtorSource('qr-expired');
-        return;
-      }
-    }
-
     try {
       const created = await apiRequest<Debt>('/debts', {
         method: 'POST',
@@ -675,9 +663,7 @@ export function DebtsPage({ language }: Props) {
           debtCount: 0,
         };
       }
-      if (['active', 'overdue', 'payment_pending_confirmation'].includes(d.status)) {
-        groups[key].totalAmount += parseFloat(d.amount) || 0;
-      }
+      groups[key].totalAmount += parseFloat(d.amount) || 0;
       groups[key].debtCount += 1;
     });
     return Object.values(groups).sort((a, b) => b.totalAmount - a.totalAmount);

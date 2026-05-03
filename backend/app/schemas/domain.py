@@ -407,12 +407,54 @@ class GroupMemberOut(BaseModel):
     created_at: datetime
     accepted_at: datetime | None = None
     name: str | None = None
+    email: str | None = None
+    phone: str | None = None
     commitment_score: int | None = None
+
+
+class GroupMemberDebtSummaryOut(BaseModel):
+    user_id: str
+    name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    total_owed: Decimal = Decimal("0")
+    status_totals: dict[DebtStatus, Decimal] = Field(default_factory=dict)
+    debts: list[DebtOut] = Field(default_factory=list)
+
+
+class GroupDebtOverviewOut(BaseModel):
+    total_current_owed: Decimal = Decimal("0")
+    status_totals: dict[DebtStatus, Decimal] = Field(default_factory=dict)
+    member_debts: list[GroupMemberDebtSummaryOut] = Field(default_factory=list)
 
 
 class GroupDetailOut(GroupOut):
     members: list[GroupMemberOut] = Field(default_factory=list)
     pending_invites: list[GroupMemberOut] | None = None
+    debt_overview: GroupDebtOverviewOut | None = None
+
+
+class GroupInviteByContactIn(BaseModel):
+    email: str | None = None
+    phone: str | None = None
+
+    @field_validator("email", "phone", mode="before")
+    @classmethod
+    def _empty_to_none(cls, value: str | None) -> str | None:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def _exactly_one_contact(self) -> "GroupInviteByContactIn":
+        present = sum(x is not None for x in (self.email, self.phone))
+        if present != 1:
+            raise ValueError("Provide exactly one of email or phone.")
+        if self.email is not None and "@" not in self.email:
+            raise ValueError("Enter a valid email address.")
+        if self.phone is not None and len(self.phone.strip()) < 5:
+            raise ValueError("Enter a valid phone number.")
+        return self
 
 
 class GroupInviteIn(BaseModel):
@@ -432,6 +474,10 @@ class GroupInviteIn(BaseModel):
         present = sum(x is not None for x in (self.user_id, self.email, self.phone))
         if present != 1:
             raise ValueError("Provide exactly one of user_id, email, phone.")
+        if self.email is not None and "@" not in self.email:
+            raise ValueError("Enter a valid email address.")
+        if self.phone is not None and len(self.phone.strip()) < 5:
+            raise ValueError("Enter a valid phone number.")
         return self
 
 

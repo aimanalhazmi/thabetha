@@ -32,11 +32,48 @@ def test_profile_business_and_qr_resolution(client: TestClient) -> None:
     assert resolved.json()["id"] == "customer-1"
 
 
+def test_qr_scan_rotates_current_token_and_expires_quickly(client: TestClient, reset_repository) -> None:
+    merchant_headers = auth_headers("merchant-qr-rotation", "Merchant")
+    customer_headers = auth_headers("customer-qr-rotation", "Customer")
+
+    client.get("/api/v1/profiles/me", headers=merchant_headers)
+    client.get("/api/v1/profiles/me", headers=customer_headers)
+
+    qr = client.get("/api/v1/qr/current", headers=customer_headers)
+    assert qr.status_code == 200
+    token = qr.json()["token"]
+    token_record = reset_repository.qr_tokens[token]
+    assert token_record["expires_at"] - token_record["created_at"] == timedelta(minutes=1)
+
+    resolved = client.get(f"/api/v1/qr/resolve/{token}", headers=merchant_headers)
+    assert resolved.status_code == 200
+    assert resolved.json()["id"] == "customer-qr-rotation"
+
+    rotated = client.get("/api/v1/qr/current", headers=customer_headers)
+    assert rotated.status_code == 200
+    assert rotated.json()["token"] != token
+
+    still_valid_for_submit_recheck = client.get(f"/api/v1/qr/resolve/{token}", headers=merchant_headers)
+    assert still_valid_for_submit_recheck.status_code == 200
+
+
+def test_expired_qr_token_cannot_be_resolved(client: TestClient, reset_repository) -> None:
+    merchant_headers = auth_headers("merchant-expired-qr", "Merchant")
+    customer_headers = auth_headers("customer-expired-qr", "Customer")
+
+    client.get("/api/v1/profiles/me", headers=merchant_headers)
+    client.get("/api/v1/profiles/me", headers=customer_headers)
+    expired = reset_repository.rotate_qr_token("customer-expired-qr", ttl_minutes=0)
+
+    resolved = client.get(f"/api/v1/qr/resolve/{expired['token']}", headers=merchant_headers)
+    assert resolved.status_code == 404
+
+
 def test_group_visibility_requires_acceptance(client: TestClient) -> None:
     owner_headers = auth_headers("owner-1")
     friend_headers = auth_headers("friend-1")
 
-    client.get("/api/v1/profiles/me", headers=owner_headers)
+    client.patch("/api/v1/profiles/me", headers=owner_headers, json={"account_type": "creditor"})
     client.get("/api/v1/profiles/me", headers=friend_headers)
     group = client.post("/api/v1/groups", headers=owner_headers, json={"name": "Family"})
     group_id = group.json()["id"]

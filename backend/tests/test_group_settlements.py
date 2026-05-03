@@ -19,6 +19,7 @@ def _ensure_profiles(client: TestClient, *user_ids: str) -> None:
 
 
 def _create_group(client: TestClient, owner: str, name: str = "TestGroup") -> str:
+    client.patch("/api/v1/profiles/me", headers=auth_headers(owner), json={"account_type": "creditor"})
     r = client.post("/api/v1/groups", headers=auth_headers(owner), json={"name": name})
     assert r.status_code == 201, r.text
     return r.json()["id"]

@@ -32,6 +32,21 @@ vi.mock('../src/contexts/AuthContext', () => ({
 vi.mock('../src/lib/api', () => ({
   apiRequest: vi.fn().mockResolvedValue({ debts: [], alerts: [], total_receivable: '0', total_current_debt: '0', debtors: [], creditors: [], commitment_score: 50, overdue_count: 0, due_soon_count: 0, active_count: 0, debtor_count: 0, paid_count: 0, best_customers: [] }),
   errorCode: vi.fn().mockReturnValue(''),
+  groups: {
+    list: vi.fn().mockResolvedValue([]),
+    create: vi.fn(),
+    get: vi.fn(),
+    debts: vi.fn().mockResolvedValue([]),
+    accept: vi.fn(),
+    decline: vi.fn(),
+  },
+  settlements: {
+    list: vi.fn().mockResolvedValue([]),
+    create: vi.fn(),
+    get: vi.fn(),
+    confirm: vi.fn(),
+    reject: vi.fn(),
+  },
 }));
 
 // Minimal mock for supabaseClient

@@ -66,10 +66,8 @@ export function NotificationsPage({ language }: Props) {
     } catch { return iso; }
   }
 
-  const markAllLabel = language === 'ar' ? 'تحديد الكل كمقروء' : 'Mark all read';
-
   return (
-    <section className="notif-page">
+    <section className="notif-page" dir={language === "ar" ? "rtl" : "ltr"}>
       {message && <div className="message">{message}</div>}
 
       {/* Page header */}
@@ -88,7 +86,7 @@ export function NotificationsPage({ language }: Props) {
             onClick={() => void markAllRead()}
           >
             <Check size={14} />
-            <span>{markingRead ? '…' : markAllLabel}</span>
+            <span>{markingRead ? '…' : tr("markAllRead")}</span>
           </button>
         )}
       </div>

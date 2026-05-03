@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AttachmentUploader } from '../components/AttachmentUploader';
 import { DebtorConfirmCard } from '../components/DebtorConfirmCard';
+import { GroupSelector } from '../components/GroupSelector';
 import { Input, Panel } from '../components/Layout';
 import { QRScanner } from '../components/QRScanner';
 import { useAuth } from '../contexts/AuthContext';
@@ -54,6 +55,7 @@ export function CreateDebtPage({ language }: Props) {
   const [identifyError, setIdentifyError] = useState<string | null>(null);
 
   const [resolved, setResolved] = useState<ResolvedDebtor | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [debtForm, setDebtForm] = useState({
@@ -135,6 +137,7 @@ export function CreateDebtPage({ language }: Props) {
         setIdentifyError(tr('cannotBillSelf'));
         return;
       }
+      setSelectedGroupId(null);
       setResolved({
         id: p.id,
         name: p.name,
@@ -164,6 +167,7 @@ export function CreateDebtPage({ language }: Props) {
         setIdentifyError(tr('cannotBillSelf'));
         return;
       }
+      setSelectedGroupId(null);
       setResolved({ ...p, source: 'manual_userid' });
       setStep(2);
     } catch (err) {
@@ -267,22 +271,6 @@ export function CreateDebtPage({ language }: Props) {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      // If the debtor came from a QR token, re-resolve to confirm the same identity.
-      if (resolved.source !== 'manual_userid' && resolved.token) {
-        try {
-          const recheck = await apiRequest<Profile>(`/qr/resolve/${encodeURIComponent(resolved.token)}`);
-          if (recheck.id !== resolved.id) {
-            setSubmitError(tr('scan_qr_error_expired'));
-            setSubmitting(false);
-            return;
-          }
-        } catch {
-          setSubmitError(tr('scan_qr_error_expired'));
-          setSubmitting(false);
-          return;
-        }
-      }
-
       const created = await apiRequest<Debt>('/debts', {
         method: 'POST',
         body: JSON.stringify({
@@ -294,6 +282,7 @@ export function CreateDebtPage({ language }: Props) {
           due_date: debtForm.due_date,
           notes: debtForm.notes,
           reminder_dates: reminderDates,
+          ...(selectedGroupId ? { group_id: selectedGroupId } : {}),
         }),
       });
 
@@ -433,7 +422,7 @@ export function CreateDebtPage({ language }: Props) {
           <DebtorConfirmCard
             profile={resolved}
             language={language}
-            onBack={() => { setStep(1); setResolved(null); }}
+            onBack={() => { setStep(1); setResolved(null); setSelectedGroupId(null); }}
             onConfirm={confirmDebtor}
           />
         )}
@@ -449,6 +438,12 @@ export function CreateDebtPage({ language }: Props) {
                 <LockedField label={tr('debtorName')} value={resolved.name} hint={tr('create_debt_locked_field_hint')} />
                 <LockedField label={tr('debtorId')} value={resolved.id} hint={tr('create_debt_locked_field_hint')} />
               </div>
+              <GroupSelector
+                debtorId={resolved.id}
+                value={selectedGroupId}
+                onChange={setSelectedGroupId}
+                language={language}
+              />
             </div>
 
             {/* Amount, currency, description, due date */}

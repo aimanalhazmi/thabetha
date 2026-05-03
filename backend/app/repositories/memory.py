@@ -27,9 +27,12 @@ from app.schemas.domain import (
     DebtOut,
     DebtStatus,
     GroupCreate,
+    GroupDebtOverviewOut,
     GroupDetailOut,
+    GroupInviteByContactIn,
     GroupInviteIn,
     GroupMemberOut,
+    GroupMemberDebtSummaryOut,
     GroupMemberStatus,
     GroupOut,
     GroupOwnershipTransferIn,
@@ -186,7 +189,7 @@ class InMemoryRepository(Repository):
     def current_business_profile(self, owner_id: str) -> BusinessProfileOut | None:
         return self.business_profiles.get(owner_id)
 
-    def rotate_qr_token(self, user_id: str, ttl_minutes: int = 10) -> dict[str, object]:
+    def rotate_qr_token(self, user_id: str, ttl_minutes: int = 1) -> dict[str, object]:
         with self._lock:
             token = str(uuid4())
             now = utcnow()
@@ -211,7 +214,11 @@ class InMemoryRepository(Repository):
         record = self.qr_tokens.get(token)
         if not record or record["expires_at"] <= utcnow():
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="QR token is invalid or expired")
-        return self.get_profile(str(record["user_id"]))
+        profile = self.get_profile(str(record["user_id"]))
+        # A successful scan should make the displayed debtor QR change, while the
+        # scanned token remains valid until its short expiry for submit-time checks.
+        self.rotate_qr_token(profile.id)
+        return profile
 
     def create_debt(self, creditor_id: str, payload: DebtCreate) -> DebtOut:
         with self._lock:
@@ -256,13 +263,12 @@ class InMemoryRepository(Repository):
     def list_debts_for_user(self, user_id: str) -> list[DebtOut]:
         self._refresh_overdue()
         group_ids = self._accepted_group_ids(user_id)
-        member_ids = self._accepted_group_member_ids(group_ids)
         return [
             debt
             for debt in self.debts.values()
             if debt.creditor_id == user_id
             or debt.debtor_id == user_id
-            or (debt.group_id in group_ids and (debt.creditor_id in member_ids or debt.debtor_id in member_ids))
+            or self._can_view_shared_group_debt(user_id, debt, group_ids)
         ]
 
     def get_authorized_debt(self, user_id: str, debt_id: str) -> DebtOut:
@@ -607,7 +613,22 @@ class InMemoryRepository(Repository):
         profile = self.profiles.get(member.user_id)
         if profile is None:
             return member
-        return member.model_copy(update={"name": profile.name, "commitment_score": profile.commitment_score})
+        return member.model_copy(
+            update={
+                "name": profile.name,
+                "email": profile.email,
+                "phone": profile.phone,
+                "commitment_score": profile.commitment_score,
+            }
+        )
+
+    def _require_creditor_role(self, user_id: str) -> None:
+        profile = self.get_profile(user_id)
+        if profile.account_type not in {AccountType.creditor, AccountType.both, AccountType.business}:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "CreditorRoleRequired", "message": "Only creditors can create groups."},
+            )
 
     def _group_member_count(self, group_id: str, *, statuses: tuple[GroupMemberStatus, ...] = (GroupMemberStatus.accepted,)) -> int:
         return sum(1 for m in self.group_members if m.group_id == group_id and m.status in statuses)
@@ -628,18 +649,19 @@ class InMemoryRepository(Repository):
                     return p
         return None
 
-    def _resolve_invite_target(self, payload: GroupInviteIn) -> str:
-        if payload.user_id is not None:
+    def _resolve_invite_target(self, payload: GroupInviteByContactIn | GroupInviteIn) -> str:
+        if isinstance(payload, GroupInviteIn) and payload.user_id is not None:
             if payload.user_id not in self.profiles:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotPlatformUser", "message": "Recipient is not a platform user."})
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotPlatformUser", "message": "No user found with this email or phone number"})
             return payload.user_id
         profile = self.find_profile_by_email_or_phone(email=payload.email, phone=payload.phone)
         if profile is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotPlatformUser", "message": "Recipient is not a platform user."})
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "NotPlatformUser", "message": "No user found with this email or phone number"})
         return profile.id
 
     def create_group(self, owner_id: str, payload: GroupCreate) -> GroupOut:
         with self._lock:
+            self._require_creditor_role(owner_id)
             now = utcnow()
             group = GroupOut(id=str(uuid4()), owner_id=owner_id, name=payload.name, description=payload.description, created_at=now, updated_at=now, member_count=1)
             self.groups[group.id] = group
@@ -664,7 +686,7 @@ class InMemoryRepository(Repository):
         my_groups.sort(key=lambda pair: (0 if pair[0] == GroupMemberStatus.accepted else 1, -(pair[1].updated_at or pair[1].created_at).timestamp()))
         return [g for _, g in my_groups]
 
-    def invite_group_member(self, actor_id: str, group_id: str, payload: GroupInviteIn) -> GroupMemberOut:
+    def invite_group_member(self, actor_id: str, group_id: str, payload: GroupInviteByContactIn | GroupInviteIn) -> GroupMemberOut:
         with self._lock:
             group = self._require_group_owner(actor_id, group_id)
             target_id = self._resolve_invite_target(payload)
@@ -798,7 +820,72 @@ class InMemoryRepository(Repository):
         if group.owner_id == viewer_id:
             pending = [self._enrich_member(m) for m in self.group_members if m.group_id == group_id and m.status == GroupMemberStatus.pending]
         enriched = self._group_with_count(group)
-        return GroupDetailOut(**enriched.model_dump(), members=members, pending_invites=pending)
+        return GroupDetailOut(
+            **enriched.model_dump(),
+            members=members,
+            pending_invites=pending,
+            debt_overview=self._group_debt_overview(group_id),
+        )
+
+    CURRENT_OWED_STATUSES = {
+        DebtStatus.pending_confirmation,
+        DebtStatus.edit_requested,
+        DebtStatus.active,
+        DebtStatus.overdue,
+        DebtStatus.payment_pending_confirmation,
+    }
+
+    def _group_owner_debts(self, group_id: str) -> list[DebtOut]:
+        group = self.groups.get(group_id)
+        if group is None:
+            return []
+        accepted_member_ids = self._accepted_group_member_ids({group_id})
+        return [
+            d for d in self.debts.values()
+            if d.group_id == group_id
+            and d.creditor_id == group.owner_id
+            and d.debtor_id in accepted_member_ids
+        ]
+
+    def _group_debt_overview(self, group_id: str) -> GroupDebtOverviewOut:
+        debts = self._group_owner_debts(group_id)
+        status_totals: dict[DebtStatus, Decimal] = {}
+        total_current_owed = Decimal("0")
+        for debt in debts:
+            status_totals[debt.status] = status_totals.get(debt.status, Decimal("0")) + debt.amount
+            if debt.status in self.CURRENT_OWED_STATUSES:
+                total_current_owed += debt.amount
+
+        accepted_members = [
+            self._enrich_member(m)
+            for m in self.group_members
+            if m.group_id == group_id and m.status == GroupMemberStatus.accepted
+        ]
+        member_debts: list[GroupMemberDebtSummaryOut] = []
+        for member in accepted_members:
+            debts_for_member = [d for d in debts if d.debtor_id == member.user_id]
+            member_status_totals: dict[DebtStatus, Decimal] = {}
+            member_total = Decimal("0")
+            for debt in debts_for_member:
+                member_status_totals[debt.status] = member_status_totals.get(debt.status, Decimal("0")) + debt.amount
+                if debt.status in self.CURRENT_OWED_STATUSES:
+                    member_total += debt.amount
+            member_debts.append(
+                GroupMemberDebtSummaryOut(
+                    user_id=member.user_id,
+                    name=member.name,
+                    email=member.email,
+                    phone=member.phone,
+                    total_owed=member_total,
+                    status_totals=member_status_totals,
+                    debts=sorted(debts_for_member, key=lambda d: d.created_at, reverse=True),
+                )
+            )
+        return GroupDebtOverviewOut(
+            total_current_owed=total_current_owed,
+            status_totals=status_totals,
+            member_debts=member_debts,
+        )
 
     def shared_accepted_groups(self, user_a: str, user_b: str) -> list[GroupOut]:
         a_groups = {m.group_id for m in self.group_members if m.user_id == user_a and m.status == GroupMemberStatus.accepted}
@@ -832,7 +919,7 @@ class InMemoryRepository(Repository):
         is_member = any(m.group_id == group_id and m.user_id == user_id and m.status == GroupMemberStatus.accepted for m in self.group_members)
         if not is_member:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "NotAGroupMember", "message": "You are not an accepted group member"})
-        return [debt for debt in self.debts.values() if debt.group_id == group_id]
+        return sorted(self._group_owner_debts(group_id), key=lambda d: d.created_at, reverse=True)
 
     def create_settlement(self, payer_id: str, group_id: str, payload: SettlementCreate) -> SettlementOut:
         with self._lock:
@@ -1495,7 +1582,18 @@ class InMemoryRepository(Repository):
             return True
         if not debt.group_id:
             return False
-        return debt.group_id in self._accepted_group_ids(user_id)
+        return self._can_view_shared_group_debt(user_id, debt, self._accepted_group_ids(user_id))
+
+    def _can_view_shared_group_debt(self, user_id: str, debt: DebtOut, group_ids: set[str] | None = None) -> bool:
+        if not debt.group_id:
+            return False
+        visible_group_ids = group_ids if group_ids is not None else self._accepted_group_ids(user_id)
+        if debt.group_id not in visible_group_ids:
+            return False
+        group = self.groups.get(debt.group_id)
+        if group is None or debt.creditor_id != group.owner_id or debt.debtor_id is None:
+            return False
+        return debt.debtor_id in self._accepted_group_member_ids({debt.group_id})
 
     def _accepted_group_ids(self, user_id: str) -> set[str]:
         return {member.group_id for member in self.group_members if member.user_id == user_id and member.status == GroupMemberStatus.accepted}

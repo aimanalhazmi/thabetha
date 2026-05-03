@@ -41,7 +41,8 @@
       "Bash(grep -n \"F2: Create form moved\\\\|^      \\)}$\" src/pages/DebtsPage.tsx)",
       "Bash(sed -i.bak '647,824d' src/pages/DebtsPage.tsx)",
       "Bash(sed -n '645,650p' src/pages/DebtsPage.tsx)",
-      "Bash(chmod +x /Users/aiman/Projects/salamHack/thabetha/scripts/seed_dummy_data.py)"
+      "Bash(chmod +x /Users/aiman/Projects/salamHack/thabetha/scripts/seed_dummy_data.py)",
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")"
     ]
   }
 }

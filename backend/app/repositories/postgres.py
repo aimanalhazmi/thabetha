@@ -22,6 +22,7 @@ from app.repositories.attachment_retention import apply_attachment_access_metada
 from app.repositories.base import Repository
 from app.repositories.local_receipt_store import create_local_receipt_url, has_local_receipt, save_local_receipt
 from app.schemas.domain import (
+    AccountType,
     AttachmentOut,
     AttachmentType,
     BusinessProfileIn,
@@ -34,9 +35,13 @@ from app.schemas.domain import (
     DebtEventOut,
     DebtorDashboardOut,
     DebtOut,
+    DebtStatus,
     GroupCreate,
+    GroupDebtOverviewOut,
     GroupDetailOut,
+    GroupInviteByContactIn,
     GroupInviteIn,
+    GroupMemberDebtSummaryOut,
     GroupMemberOut,
     GroupOut,
     GroupOwnershipTransferIn,
@@ -344,12 +349,21 @@ class PostgresRepository(Repository):
         row = conn.execute(
             """
             SELECT d.* FROM debts d
+            LEFT JOIN groups g ON g.id = d.group_id
             WHERE d.id = %s AND (
                 d.creditor_id = %s
                 OR d.debtor_id = %s
                 OR EXISTS (
                     SELECT 1 FROM group_members gm
-                    WHERE gm.group_id = d.group_id AND gm.user_id = %s AND gm.status = 'accepted'
+                    JOIN group_members debtor_gm
+                      ON debtor_gm.group_id = d.group_id
+                     AND debtor_gm.user_id = d.debtor_id
+                     AND debtor_gm.status = 'accepted'
+                    WHERE gm.group_id = d.group_id
+                      AND gm.user_id = %s
+                      AND gm.status = 'accepted'
+                      AND d.group_id IS NOT NULL
+                      AND d.creditor_id = g.owner_id
                 )
             )
             """,
@@ -485,7 +499,7 @@ class PostgresRepository(Repository):
 
     # ── QR tokens ─────────────────────────────────────────────────────
 
-    def rotate_qr_token(self, user_id: str, ttl_minutes: int = 10) -> dict[str, object]:
+    def rotate_qr_token(self, user_id: str, ttl_minutes: int = 1) -> dict[str, object]:
         with self._connection() as conn:
             conn.row_factory = dict_row
             token = str(uuid4())
@@ -515,7 +529,14 @@ class PostgresRepository(Repository):
             row = conn.execute("SELECT user_id FROM qr_tokens WHERE token = %s AND expires_at > now()", (token,)).fetchone()
             if not row:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="QR token is invalid or expired")
-        return self.get_profile(str(row["user_id"]))
+            user_id = str(row["user_id"])
+            now = utcnow()
+            conn.execute(
+                "INSERT INTO qr_tokens (token, user_id, expires_at, created_at) VALUES (%s, %s, %s, %s)",
+                (str(uuid4()), user_id, now + timedelta(minutes=1), now),
+            )
+            conn.commit()
+        return self.get_profile(user_id)
 
     # ── Debts ─────────────────────────────────────────────────────────
 
@@ -524,6 +545,30 @@ class PostgresRepository(Repository):
             conn.row_factory = dict_row
             self._refresh_overdue(conn)
             debt_id = str(uuid4())
+            if payload.group_id:
+                if not payload.debtor_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail={"code": "DebtorRequired", "message": "Group tag requires a registered debtor."},
+                    )
+                shared = conn.execute(
+                    """
+                    SELECT 1 FROM group_members ga
+                    JOIN group_members gb ON gb.group_id = ga.group_id
+                    WHERE ga.group_id = %s
+                      AND ga.user_id = %s
+                      AND ga.status = 'accepted'
+                      AND gb.user_id = %s
+                      AND gb.status = 'accepted'
+                    LIMIT 1
+                    """,
+                    (payload.group_id, creditor_id, payload.debtor_id),
+                ).fetchone()
+                if not shared:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={"code": "NotInSharedGroup", "message": "Both parties must be accepted members of the group."},
+                    )
             if self._has_reminder_dates(conn):
                 conn.execute(
                     """
@@ -590,11 +635,20 @@ class PostgresRepository(Repository):
             rows = conn.execute(
                 """
                 SELECT d.* FROM debts d
+                LEFT JOIN groups g ON g.id = d.group_id
                 WHERE d.creditor_id = %s
                    OR d.debtor_id = %s
                    OR EXISTS (
                        SELECT 1 FROM group_members gm
-                       WHERE gm.group_id = d.group_id AND gm.user_id = %s AND gm.status = 'accepted'
+                       JOIN group_members debtor_gm
+                         ON debtor_gm.group_id = d.group_id
+                        AND debtor_gm.user_id = d.debtor_id
+                        AND debtor_gm.status = 'accepted'
+                       WHERE gm.group_id = d.group_id
+                         AND gm.user_id = %s
+                         AND gm.status = 'accepted'
+                         AND d.group_id IS NOT NULL
+                         AND d.creditor_id = g.owner_id
                    )
                 ORDER BY d.created_at DESC
                 """,
@@ -1234,10 +1288,20 @@ class PostgresRepository(Repository):
 
     # ── Groups ────────────────────────────────────────────────────────
 
+    def _require_creditor_role_pg(self, conn, user_id: str) -> None:
+        row = conn.execute("SELECT account_type FROM profiles WHERE id = %s", (user_id,)).fetchone()
+        account_type = row["account_type"] if row else None
+        if account_type not in {AccountType.creditor.value, AccountType.both.value, AccountType.business.value}:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "CreditorRoleRequired", "message": "Only creditors can create groups."},
+            )
+
     def create_group(self, owner_id: str, payload: GroupCreate) -> GroupOut:
         group_id = str(uuid4())
         with self._connection() as conn:
             conn.row_factory = dict_row
+            self._require_creditor_role_pg(conn, owner_id)
             conn.execute(
                 "INSERT INTO groups (id, owner_id, name, description, created_at) VALUES (%s, %s, %s, %s, now())",
                 (group_id, owner_id, payload.name, payload.description),
@@ -1283,13 +1347,13 @@ class PostgresRepository(Repository):
                 for r in rows
             ]
 
-    def _resolve_invite_target_pg(self, conn, payload: GroupInviteIn) -> str:
-        if payload.user_id is not None:
+    def _resolve_invite_target_pg(self, conn, payload: GroupInviteByContactIn | GroupInviteIn) -> str:
+        if isinstance(payload, GroupInviteIn) and payload.user_id is not None:
             row = conn.execute("SELECT 1 FROM profiles WHERE id = %s", (payload.user_id,)).fetchone()
             if not row:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail={"code": "NotPlatformUser", "message": "Recipient is not a platform user."},
+                    detail={"code": "NotPlatformUser", "message": "No user found with this email or phone number"},
                 )
             return payload.user_id
         if payload.email:
@@ -1308,10 +1372,10 @@ class PostgresRepository(Repository):
                 return str(row["id"])
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "NotPlatformUser", "message": "Recipient is not a platform user."},
+            detail={"code": "NotPlatformUser", "message": "No user found with this email or phone number"},
         )
 
-    def invite_group_member(self, actor_id: str, group_id: str, payload: GroupInviteIn) -> GroupMemberOut:
+    def invite_group_member(self, actor_id: str, group_id: str, payload: GroupInviteByContactIn | GroupInviteIn) -> GroupMemberOut:
         with self._connection() as conn:
             conn.row_factory = dict_row
             group = conn.execute("SELECT * FROM groups WHERE id = %s", (group_id,)).fetchone()
@@ -1373,16 +1437,20 @@ class PostgresRepository(Repository):
                 (group_id, user_id),
             ).fetchone()
             if not member:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not an accepted group member")
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "NotAGroupMember", "message": "You are not an accepted group member"})
             rows = conn.execute(
                 """
                 SELECT d.* FROM debts d
+                JOIN groups g ON g.id = d.group_id
+                JOIN group_members debtor_gm
+                  ON debtor_gm.group_id = d.group_id
+                 AND debtor_gm.user_id = d.debtor_id
+                 AND debtor_gm.status = 'accepted'
                 WHERE d.group_id = %s
-                   OR d.creditor_id IN (SELECT gm.user_id FROM group_members gm WHERE gm.group_id = %s AND gm.status = 'accepted')
-                   OR d.debtor_id IN (SELECT gm.user_id FROM group_members gm WHERE gm.group_id = %s AND gm.status = 'accepted')
+                  AND d.creditor_id = g.owner_id
                 ORDER BY d.created_at DESC
                 """,
-                (group_id, group_id, group_id),
+                (group_id,),
             ).fetchall()
             return [_debt_from_row(r) for r in rows]
 
@@ -1398,6 +1466,8 @@ class PostgresRepository(Repository):
             created_at=row["created_at"],
             accepted_at=row.get("accepted_at"),
             name=row.get("profile_name"),
+            email=row.get("profile_email"),
+            phone=row.get("profile_phone"),
             commitment_score=row.get("profile_commitment_score"),
         )
 
@@ -1437,7 +1507,7 @@ class PostgresRepository(Repository):
         )
 
     _MEMBER_SELECT = (
-        "SELECT gm.*, p.name AS profile_name, p.commitment_score AS profile_commitment_score "
+        "SELECT gm.*, p.name AS profile_name, p.email AS profile_email, p.phone AS profile_phone, p.commitment_score AS profile_commitment_score "
         "FROM group_members gm LEFT JOIN profiles p ON p.id = gm.user_id "
     )
 
@@ -1645,7 +1715,80 @@ class PostgresRepository(Repository):
                 ).fetchall()
                 pending = [self._member_from_row(r) for r in pending_rows]
             base = self._group_from_row(group, len(members))
-            return GroupDetailOut(**base.model_dump(), members=members, pending_invites=pending)
+            return GroupDetailOut(
+                **base.model_dump(),
+                members=members,
+                pending_invites=pending,
+                debt_overview=self._group_debt_overview_pg(conn, group_id, members),
+            )
+
+    CURRENT_OWED_STATUSES = {
+        DebtStatus.pending_confirmation,
+        DebtStatus.edit_requested,
+        DebtStatus.active,
+        DebtStatus.overdue,
+        DebtStatus.payment_pending_confirmation,
+    }
+
+    def _group_debt_overview_pg(
+        self,
+        conn,
+        group_id: str,
+        members: list[GroupMemberOut] | None = None,
+    ) -> GroupDebtOverviewOut:
+        if members is None:
+            rows = conn.execute(
+                self._MEMBER_SELECT + "WHERE gm.group_id = %s AND gm.status = 'accepted' ORDER BY gm.created_at",
+                (group_id,),
+            ).fetchall()
+            members = [self._member_from_row(r) for r in rows]
+        debt_rows = conn.execute(
+            """
+            SELECT d.* FROM debts d
+            JOIN groups g ON g.id = d.group_id
+            JOIN group_members debtor_gm
+              ON debtor_gm.group_id = d.group_id
+             AND debtor_gm.user_id = d.debtor_id
+             AND debtor_gm.status = 'accepted'
+            WHERE d.group_id = %s
+              AND d.creditor_id = g.owner_id
+            ORDER BY d.created_at DESC
+            """,
+            (group_id,),
+        ).fetchall()
+        debts = [_debt_from_row(r) for r in debt_rows]
+        status_totals: dict[DebtStatus, Decimal] = {}
+        total_current_owed = Decimal("0")
+        for debt in debts:
+            status_totals[debt.status] = status_totals.get(debt.status, Decimal("0")) + debt.amount
+            if debt.status in self.CURRENT_OWED_STATUSES:
+                total_current_owed += debt.amount
+
+        member_debts: list[GroupMemberDebtSummaryOut] = []
+        for member in members:
+            debts_for_member = [d for d in debts if d.debtor_id == member.user_id]
+            member_status_totals: dict[DebtStatus, Decimal] = {}
+            member_total = Decimal("0")
+            for debt in debts_for_member:
+                member_status_totals[debt.status] = member_status_totals.get(debt.status, Decimal("0")) + debt.amount
+                if debt.status in self.CURRENT_OWED_STATUSES:
+                    member_total += debt.amount
+            member_debts.append(
+                GroupMemberDebtSummaryOut(
+                    user_id=member.user_id,
+                    name=member.name,
+                    email=member.email,
+                    phone=member.phone,
+                    total_owed=member_total,
+                    status_totals=member_status_totals,
+                    debts=debts_for_member,
+                )
+            )
+        return GroupDebtOverviewOut(
+            total_current_owed=total_current_owed,
+            status_totals=status_totals,
+            member_debts=member_debts,
+        )
 
     def shared_accepted_groups(self, user_a: str, user_b: str) -> list[GroupOut]:  # type: ignore[override]
         with self._connection() as conn:

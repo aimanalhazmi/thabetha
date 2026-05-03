@@ -27,8 +27,10 @@ from app.schemas.domain import (
     DebtEventOut,
     DebtorDashboardOut,
     DebtOut,
+    DebtStatus,
     GroupCreate,
     GroupDetailOut,
+    GroupInviteByContactIn,
     GroupInviteIn,
     GroupMemberOut,
     GroupOut,
@@ -71,7 +73,7 @@ class Repository(ABC):
     # ── QR tokens ─────────────────────────────────────────────────────
 
     @abstractmethod
-    def rotate_qr_token(self, user_id: str, ttl_minutes: int = 10) -> dict[str, object]: ...
+    def rotate_qr_token(self, user_id: str, ttl_minutes: int = 1) -> dict[str, object]: ...
 
     @abstractmethod
     def current_qr_token(self, user_id: str) -> dict[str, object]: ...
@@ -175,7 +177,7 @@ class Repository(ABC):
     def list_groups(self, user_id: str) -> list[GroupOut]: ...
 
     @abstractmethod
-    def invite_group_member(self, actor_id: str, group_id: str, payload: GroupInviteIn) -> GroupMemberOut: ...
+    def invite_group_member(self, actor_id: str, group_id: str, payload: GroupInviteByContactIn | GroupInviteIn) -> GroupMemberOut: ...
 
     @abstractmethod
     def accept_group_invite(self, user_id: str, group_id: str) -> GroupMemberOut: ...
@@ -221,6 +223,23 @@ class Repository(ABC):
 
     @abstractmethod
     def create_settlement(self, payer_id: str, group_id: str, payload: SettlementCreate) -> SettlementOut: ...
+
+    def bulk_confirm_group_payments(self, user_id: str, group_id: str) -> list[DebtOut]:
+        """Creditor-side bulk action: confirm receipt for every debt in this group
+        that the caller is the creditor of and that is currently
+        payment_pending_confirmation. Reuses confirm_payment per debt so the
+        commitment-score side-effects and debt_events stay identical to the
+        single-debt path. Returns the list of transitioned debts (skipped debts
+        are silently dropped — they are either not the caller's or in a state
+        that can't be confirmed)."""
+        confirmed: list[DebtOut] = []
+        for debt in self.group_debts(user_id, group_id):
+            if debt.creditor_id != user_id:
+                continue
+            if debt.status != DebtStatus.payment_pending_confirmation:
+                continue
+            confirmed.append(self.confirm_payment(user_id, debt.id))
+        return confirmed
 
     # ── Group settlement proposals (UC9 part 2) ───────────────────────
     # Auto-netting flow: any accepted member proposes a settlement, the

@@ -176,6 +176,17 @@ def group_debts(
     return repo.group_debts(user.id, group_id)
 
 
+@router.post("/{group_id}/bulk-confirm-payments", response_model=list[DebtOut])
+def bulk_confirm_group_payments(
+    group_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    repo: Annotated[Repository, Depends(get_repository)],
+) -> list[DebtOut]:
+    """Creditor confirms receipt for every payment-pending debt they are owed in this group."""
+    repo.ensure_profile(user)
+    return repo.bulk_confirm_group_payments(user.id, group_id)
+
+
 @router.post("/{group_id}/settlements", response_model=SettlementOut, status_code=status.HTTP_201_CREATED)
 def create_settlement(
     group_id: str,

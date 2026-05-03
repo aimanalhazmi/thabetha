@@ -1,10 +1,11 @@
 import { Check, ChevronRight, Plus, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 import { Input } from "../components/Layout";
-import { errorCode, groups as groupsApi } from "../lib/api";
+import { apiRequest, errorCode, groups as groupsApi } from "../lib/api";
 import { t, type TranslationKey } from "../lib/i18n";
-import type { Group, Language } from "../lib/types";
+import type { AccountType, Group, Language, Profile } from "../lib/types";
 
 interface Props { language: Language }
 
@@ -22,6 +23,7 @@ const ERROR_KEY: Record<string, TranslationKey> = {
   SameOwner: "errorSameOwner",
   NoPendingInvite: "errorNoPendingInvite",
   IdentifierAmbiguous: "errorIdentifierAmbiguous",
+  CreditorRoleRequired: "errorCreditorRoleRequired",
 };
 
 function translateError(language: Language, err: unknown): string {
@@ -30,9 +32,15 @@ function translateError(language: Language, err: unknown): string {
   return err instanceof Error ? err.message : "Action failed";
 }
 
+function isCreditorRole(role: AccountType | undefined): boolean {
+  return role === "creditor" || role === "both" || role === "business";
+}
+
 export function GroupsPage({ language }: Props) {
   const tr = (key: TranslationKey) => t(language, key);
+  const { user } = useAuth();
   const [groups, setGroups] = useState<Group[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [groupName, setGroupName] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -40,7 +48,12 @@ export function GroupsPage({ language }: Props) {
   // ── Data fetching — untouched ─────────────────────────────────
   async function load() {
     try {
-      setGroups(await groupsApi.list());
+      const [loadedGroups, loadedProfile] = await Promise.all([
+        groupsApi.list(),
+        apiRequest<Profile>("/profiles/me").catch(() => null),
+      ]);
+      setGroups(Array.isArray(loadedGroups) ? loadedGroups : []);
+      setProfile(loadedProfile);
     } catch (err) {
       setMessage(translateError(language, err));
     }
@@ -77,6 +90,8 @@ export function GroupsPage({ language }: Props) {
 
   const accepted = groups.filter((g) => g.member_status === "accepted" || g.member_status == null);
   const pending = groups.filter((g) => g.member_status === "pending");
+  const role = profile?.account_type ?? user?.account_type;
+  const canCreateGroup = isCreditorRole(role);
 
   return (
     <section className="groups-page">
@@ -110,18 +125,19 @@ export function GroupsPage({ language }: Props) {
 
       {/* Sidebar — create + pending */}
       <div className="groups-sidebar">
-        {/* Create group */}
-        <div className="create-debt-section">
-          <div className="create-debt-section__label">{tr("groupsCreateGroup")}</div>
-          <Input label={tr("groupName")} value={groupName} onChange={setGroupName} />
-          <button
-            className="primary-button"
-            style={{ width: '100%', justifyContent: 'center' }}
-            onClick={() => void handleCreate()}
-          >
-            <Plus size={16} /><span>{tr("groupsCreate")}</span>
-          </button>
-        </div>
+        {canCreateGroup && (
+          <div className="create-debt-section">
+            <div className="create-debt-section__label">{tr("groupsCreateGroup")}</div>
+            <Input label={tr("groupName")} value={groupName} onChange={setGroupName} />
+            <button
+              className="primary-button"
+              style={{ width: '100%', justifyContent: 'center' }}
+              onClick={() => void handleCreate()}
+            >
+              <Plus size={16} /><span>{tr("groupsCreate")}</span>
+            </button>
+          </div>
+        )}
 
         {/* Pending invitations */}
         {pending.length > 0 && (
