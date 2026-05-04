@@ -86,6 +86,8 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+html, body { overflow-x: hidden; }
+
 :root,
 body,
 button,
@@ -112,9 +114,31 @@ a { text-decoration: none; color: inherit; }
 /* ── App Shell ──────────────────────────────────────────────── */
 .app-shell {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 260px minmax(0, 1fr);
   min-height: 100vh;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
+
+/* Mobile drawer backdrop — hidden on desktop, fades in when sidebar is open */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  border: 0;
+  padding: 0;
+  z-index: 40;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+/* Hamburger toggle — hidden on desktop (specificity beats .icon-button) */
+.icon-button.menu-toggle { display: none; }
+
+.topbar-titles { min-width: 0; flex: 1; }
+.topbar-titles h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ── Sidebar ────────────────────────────────────────────────── */
 .sidebar {
@@ -319,6 +343,7 @@ a { text-decoration: none; color: inherit; }
 /* ── Workspace ──────────────────────────────────────────────── */
 .workspace {
   min-width: 0;
+  max-width: 100%;
   padding: 28px 32px;
   overflow-y: auto;
 }
@@ -1202,6 +1227,8 @@ pre, .answer {
   padding: 4px;
   border-radius: var(--radius-sm);
   overflow-x: auto;
+  scroll-snap-type: inline mandatory;
+  -webkit-overflow-scrolling: touch;
 }
 
 .filter-tab {
@@ -1399,48 +1426,61 @@ pre, .answer {
 
 /* ── Responsive ─────────────────────────────────────────────── */
 @media (max-width: 980px) {
-  .app-shell { grid-template-columns: 1fr; }
+  /* Single-column shell — workspace takes full width */
+  .app-shell { grid-template-columns: minmax(0, 1fr); }
+
+  /* Sidebar becomes an off-canvas drawer */
   .sidebar {
     position: fixed;
+    top: 0;
     bottom: 0;
-    left: 0;
-    right: 0;
-    height: auto;
-    flex-direction: row;
+    inset-inline-start: 0;        /* RTL-aware: right in RTL, left in LTR */
+    width: min(82vw, 320px);
+    height: 100dvh;
+    flex-direction: column;        /* keep vertical layout in mobile drawer */
+    overflow-y: auto;
+    overflow-x: hidden;
     z-index: 50;
-    overflow-x: auto;
-    overflow-y: hidden;
+    transform: translateX(-100%);  /* hidden off-canvas by default */
+    transition: transform 240ms ease;
+    box-shadow: 0 0 0 0 rgba(0,0,0,0);
   }
-  .sidebar-header, .user-card, .sidebar-footer, .nav-label { display: none; }
-  .nav-section {
-    flex: none;
-    padding: 8px 12px;
-    display: flex;
-    align-items: center;
+  /* RTL: drawer slides in from the right, so off-screen is +100% */
+  [dir="rtl"] .sidebar { transform: translateX(100%); }
+
+  .app-shell[data-sidebar-open="true"] .sidebar {
+    transform: translateX(0);
+    box-shadow: 0 24px 60px rgba(0,0,0,0.35);
   }
-  .nav-list {
-    flex-direction: row;
-    gap: 4px;
+  .app-shell[data-sidebar-open="true"] .sidebar-backdrop {
+    display: block;
+    opacity: 1;
   }
-  .nav-item {
-    flex-direction: column;
-    gap: 4px;
-    padding: 8px 12px;
-    font-size: 0.7rem;
-  }
-  .nav-item.active::before { display: none; }
-  .workspace { padding: 16px; padding-bottom: 80px; }
-  .content-grid { grid-template-columns: repeat(2, 1fr); }
-  .wide-panel { grid-column: span 2; }
+
+  /* Show hamburger; tighten topbar */
+  .icon-button.menu-toggle { display: inline-flex; }
+  .topbar { gap: 12px; }
+
+  /* Workspace: full-width, no sidebar reservation */
+  .workspace { padding: 16px; padding-bottom: 24px; max-width: 100%; }
+
+  /* Grids reflow */
+  .content-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .wide-panel { grid-column: 1 / -1; }
   .split { grid-template-columns: 1fr; }
   .debt-item { grid-template-columns: 1fr; }
   .account-type-grid { grid-template-columns: 1fr; }
   .ai-upgrade-card { flex-direction: column; align-items: flex-start; }
+
+  /* FAB stays clear of nothing now (no bottom nav), keep its own offsets */
 }
 
 @media (max-width: 600px) {
-  .content-grid { grid-template-columns: 1fr; }
   .wide-panel { grid-column: auto; }
+}
+
+@media (max-width: 480px) {
+  .workspace { padding: 12px; padding-bottom: 80px; }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -2793,7 +2833,7 @@ pre, .answer {
   flex-direction: column;
   gap: 4px;
   font-size: 0.84rem;
-  min-width: 160px;
+  min-width: 0;
 }
 
 .pay-online-amounts > div {
@@ -3156,7 +3196,7 @@ pre, .answer {
 }
 
 .profile-hero__score {
-  min-width: 200px;
+  min-width: 0;
 }
 
 /* Toggle switch row */
@@ -3852,7 +3892,10 @@ pre, .answer {
   font-size: 1.1rem;
   color: var(--primary-dark);
   text-align: right;
-  min-width: 100px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .user-summary-chevron {
   color: var(--text-muted);

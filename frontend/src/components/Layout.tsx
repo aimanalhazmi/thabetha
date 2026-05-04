@@ -1,7 +1,7 @@
-import { Bell, Bot, CreditCard, Languages, LayoutDashboard, LogOut, QrCode, RefreshCw, Settings, Store, UserRound, Users } from 'lucide-react';
+import { Bell, Bot, CreditCard, Languages, LayoutDashboard, LogOut, Menu, QrCode, RefreshCw, Settings, Store, UserRound, Users, X } from 'lucide-react';
 import { FAB } from './FAB';
-import type { ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useEffect, useState, type ReactNode } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { t, type TranslationKey } from '../lib/i18n';
 import type { AccountType, Language } from '../lib/types';
@@ -37,7 +37,20 @@ interface Props {
 export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel, children }: Props) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const tr = (key: TranslationKey) => t(language, key);
+
+  // Close drawer on route change
+  useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
+
+  // Lock body scroll while the mobile drawer is open
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [sidebarOpen]);
 
   async function handleSignOut() {
     await signOut();
@@ -55,7 +68,14 @@ export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel
       : tr('debtor');
 
   return (
-    <main className="app-shell">
+    <main className="app-shell" data-sidebar-open={sidebarOpen ? 'true' : 'false'}>
+      <button
+        type="button"
+        className="sidebar-backdrop"
+        aria-hidden={!sidebarOpen}
+        tabIndex={sidebarOpen ? 0 : -1}
+        onClick={() => setSidebarOpen(false)}
+      />
       <aside className="sidebar">
         <div className="sidebar-header">
           <div className="brand">
@@ -118,7 +138,16 @@ export function Layout({ language, onToggleLanguage, onRefresh, currentPageLabel
 
       <section className="workspace">
         <header className="topbar">
-          <div>
+          <button
+            className="icon-button menu-toggle"
+            title={tr('navMenu')}
+            aria-label={tr('navMenu')}
+            aria-expanded={sidebarOpen}
+            onClick={() => setSidebarOpen((v) => !v)}
+          >
+            {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
+          <div className="topbar-titles">
             <span className="eyebrow">{user?.email ?? ''}</span>
             <h1>{tr(currentPageLabel)}</h1>
           </div>
